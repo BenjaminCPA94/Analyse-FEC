@@ -130,6 +130,9 @@ function buildSandbox() {
       readAsText(file) {
         setTimeout(() => this.onload && this.onload({ target: { result: file.__content || '' } }), 0);
       }
+      readAsArrayBuffer(file) {
+        setTimeout(() => this.onload && this.onload({ target: { result: file.__buffer || new ArrayBuffer(0) } }), 0);
+      }
     },
     Intl,
     TextDecoder,

@@ -2930,16 +2930,44 @@ function decodeFecBuffer(buffer) {
     return new TextDecoder('windows-1252').decode(bytes);
   }
 }
+/**
+ * Délai (ms) avant de lancer le parsing lourd d'un FEC, après affichage
+ * du message "Analyse en cours…". Sans ce délai, le navigateur peut
+ * geler avant même d'avoir peint le retour visuel, donnant l'impression
+ * que l'application ne répond plus (cf. AUDIT.md §(k) — un FEC de
+ * 500 000 lignes prend ~2 s de traitement synchrone).
+ */
+const PARSE_UI_YIELD_MS = 30;
+
 function npConfirm(){
   if(!_npFile)return;
-  const btn=document.getElementById('np-confirm-btn');if(btn){btn.disabled=true;btn.textContent='Analyse en cours…';}
+  const btn=document.getElementById('np-confirm-btn');
+  if(btn){btn.disabled=true;btn.textContent=`Analyse en cours… (${(_npFile.size/1e6).toFixed(1)} Mo)`;}
   const reader=new FileReader();
   reader.onload=e=>{
-    let text;
-    try { text = decodeFecBuffer(e.target.result); }
-    catch(err) { toast('Impossible de déterminer l’encodage du fichier',true); if(btn){btn.disabled=false;btn.textContent='Analyser';} return; }
-    const parsed=parseFECFile(text);
-    if(!parsed){toast('FEC invalide — vérifiez le format',true);if(btn){btn.disabled=false;btn.textContent='Analyser';}return;}
+    const buffer = e.target.result;
+    // Laisse le navigateur peindre le message "Analyse en cours…" avant de
+    // lancer le décodage/parsing synchrone (potentiellement long sur un
+    // gros FEC) — évite l'impression d'un gel instantané au clic.
+    setTimeout(() => {
+      let parsed;
+      try {
+        const text = decodeFecBuffer(buffer);
+        parsed = parseFECFile(text);
+      } catch(err) {
+        console.error('[FEC Analyse] Échec du parsing FEC :', err);
+        toast('Erreur lors de l’analyse du fichier : ' + (err && err.message ? err.message : 'format non reconnu'), true);
+        if(btn){btn.disabled=false;btn.textContent='Analyser';}
+        return;
+      }
+      if(!parsed){toast('FEC invalide — colonnes CompteNum/Débit/Crédit introuvables dans l’en-tête',true);if(btn){btn.disabled=false;btn.textContent='Analyser';}return;}
+      finishNpConfirm(parsed);
+    }, PARSE_UI_YIELD_MS);
+  };
+  reader.onerror=()=>{toast('Erreur de lecture du fichier',true); if(btn){btn.disabled=false;btn.textContent='Analyser';}};
+  reader.readAsArrayBuffer(_npFile);
+}
+function finishNpConfirm(parsed){
     const id='dossier-'+Date.now();
     const year=parsed.periodEnd?parsed.periodEnd.slice(0,4):new Date().getFullYear();
     const store=loadStore();
@@ -2957,9 +2985,6 @@ function npConfirm(){
         if(ACTIVE.id===id) autoAffectOrphans();
       }, 600);
     }, 400);
-  };
-  reader.onerror=()=>toast('Erreur de lecture',true);
-  reader.readAsArrayBuffer(_npFile);
 }
 function closeNpModal(){const el=document.getElementById('np-overlay');if(el)el.remove();}
 function handleHomeUpload(input){if(input.files[0]){_npFile=input.files[0];_npNewName='Nouveau dossier';showNpStep(2);setTimeout(()=>npSetFile(_npFile),100);}}
