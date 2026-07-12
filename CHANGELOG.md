@@ -4,6 +4,34 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Multi-exercices : import de plusieurs FEC + comparaison N/N-1
+
+- **Nouvel onglet « Suivi des imports »** : liste, pour le dossier
+  ouvert, chaque exercice importé (période, nom de fichier, date
+  d'import), à l'image de l'écran équivalent de Pennylane.
+- **Bouton « + Ajouter un exercice »** : importe un second (ou nième)
+  FEC dans le dossier déjà ouvert (ex : 2024 puis 2025), au lieu de
+  créer un nouveau dossier séparé. Le mapping (affectation des comptes)
+  est **partagé** entre tous les exercices d'un même dossier — un
+  compte classé une fois reste classé pour les exercices suivants ; les
+  comptes nouveaux à un exercice sont classés automatiquement.
+- **Comparaison N/N-1** sur le Compte de résultat et le Bilan : un
+  sélecteur « Comparer avec » ajoute une colonne exercice précédent +
+  une colonne Variation €, sans toucher aux tableaux mono-exercice
+  existants (fonctions de rendu séparées, tests inchangés).
+- **Migration automatique** des dossiers mono-exercice déjà enregistrés
+  (aucune perte de données, aucune action requise de l'utilisateur).
+- Correctif de mise en page découvert en test navigateur réel : les
+  colonnes du Bilan en mode comparaison étaient rognées par
+  `overflow:hidden` de la carte — passage en pleine largeur (Actif/
+  Passif empilés) uniquement quand la comparaison est active.
+- 11 nouveaux tests (`tests/test_multi_exercices.js`) + vérification
+  Playwright/Chromium du parcours complet (import, ajout d'exercice,
+  suivi des imports, comparaison CR et Bilan). Suite complète : 112
+  tests, tous verts.
+- Voir AUDIT.md §(p) pour le détail complet, les choix d'architecture
+  et les limites assumées.
+
 ## v6 — Généralisation de la règle de classement par signe (classe 4)
 
 - **Tous les comptes de tiers (classe 4)** sont désormais classés selon

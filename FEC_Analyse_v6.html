@@ -117,6 +117,7 @@
   .dr-total .pct-lbl{color:rgba(255,255,255,.4);}
 
   .bilan-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .bilan-grid.compare-mode{grid-template-columns:1fr;}
   @media(max-width:900px){.bilan-grid,.chart-row{grid-template-columns:1fr;}}
   ::-webkit-scrollbar{width:6px;height:6px;}
   ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px;}
@@ -917,7 +918,8 @@
             <button class="no-print" onclick="exportCRToCSV()" title="Exporter le CR au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
             <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
           </div>
-          <table class="dt"><thead><tr><th style="width:55%">Poste</th><th class="r">Montant</th><th class="r">% CA</th></tr></thead><tbody id="tbCR"></tbody></table>
+          <div class="no-print" id="cr-exercice-bar" style="display:none;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid rgba(0,0,0,.06);"></div>
+          <table class="dt"><thead id="thead-cr"><tr><th style="width:55%">Poste</th><th class="r">Montant</th><th class="r">% CA</th></tr></thead><tbody id="tbCR"></tbody></table>
         </div>
         <div class="chart-card" style="margin-top:16px;">
           <div class="chart-header"><span class="chart-title">Produits vs charges</span><span class="chart-period-tag" id="tagPC">Mensuel</span></div>
@@ -933,14 +935,15 @@
           <button class="no-print" onclick="exportBilanToCSV()" title="Exporter le Bilan au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">⬇ Export CSV</button>
           <button class="no-print" onclick="window.print()" title="Imprimer / PDF" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">🖶 Imprimer / PDF</button>
         </div>
+        <div class="no-print" id="bilan-exercice-bar" style="display:none;align-items:center;gap:8px;padding:8px 16px;margin-bottom:10px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;"></div>
         <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:12px;" id="bilan-equilibre">
           Chargement du bilan…
         </div>
-        <div class="bilan-grid">
+        <div class="bilan-grid" id="bilan-grid">
           <div class="drill-card"><div class="drill-card-header"><div><h2>Actif</h2><p>Cliquez pour le détail</p></div></div>
-            <table class="dt"><thead><tr><th>Poste</th><th class="r">Montant</th></tr></thead><tbody id="tbActif"></tbody></table></div>
+            <table class="dt"><thead id="thead-actif"><tr><th>Poste</th><th class="r">Montant</th></tr></thead><tbody id="tbActif"></tbody></table></div>
           <div class="drill-card"><div class="drill-card-header"><div><h2>Passif</h2><p>Cliquez pour le détail</p></div></div>
-            <table class="dt"><thead><tr><th>Poste</th><th class="r">Montant</th></tr></thead><tbody id="tbPassif"></tbody></table></div>
+            <table class="dt"><thead id="thead-passif"><tr><th>Poste</th><th class="r">Montant</th></tr></thead><tbody id="tbPassif"></tbody></table></div>
         </div>
         <div class="chart-card"><div class="chart-header"><span class="chart-title">Structure du bilan</span></div><div class="canvas-wrap" style="height:230px"><canvas id="cBilan"></canvas></div></div>
       </div>
@@ -1411,10 +1414,17 @@
 
   <!-- IMPORTS MODULE -->
   <div class="module-screen" id="module-imports">
-    <div style="padding:60px;text-align:center;color:#a09d96;">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px;opacity:.4;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <div style="font-size:14px;font-weight:600;color:#6b6960;margin-bottom:8px;">Suivi des imports</div>
-      <div id="imports-info" style="font-size:12px;"></div>
+    <div style="padding:24px 32px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:700;color:#1a1916;margin:0;">Suivi des imports</h2>
+          <p style="font-size:12px;color:#a09d96;margin:4px 0 0;">Un dossier peut regrouper plusieurs exercices (ex: 2024 et 2025) pour permettre une comparaison N/N-1 sur le Compte de résultat et le Bilan.</p>
+        </div>
+        <button class="params-btn-secondary" onclick="openAjouterExercice()" style="white-space:nowrap;">+ Ajouter un exercice</button>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:10px;overflow:hidden;" id="imports-list">
+        <div style="padding:40px;text-align:center;color:#a09d96;font-size:13px;">Chargement…</div>
+      </div>
     </div>
   </div>
 
@@ -1504,6 +1514,11 @@ let ACTIVE = {
 // Currency: 'eur' | 'keur' | 'meur'
 let CURRENCY = 'eur';
 
+// Comparaison N/N-1 (cf. AUDIT.md §(p)) : id de l'exercice choisi comme
+// point de comparaison, indépendamment pour le CR et pour le Bilan.
+let _compareExIdCR = null;
+let _compareExIdBilan = null;
+
 // Period state
 let PERIOD = 'monthly';
 let RANGE_N = 12;
@@ -1586,9 +1601,68 @@ function saveActiveDossier() {
     mps: ACTIVE.mps, mps_version: MPS_VERSION,
     isRDCompany: ACTIVE.isRDCompany||false,
     revenueTypes: ACTIVE.revenueTypes||{},
+    exercices: ACTIVE.exercices || null,
+    activeExerciceId: ACTIVE.activeExerciceId || null,
     savedAt: Date.now()
   };
   saveStore(store);
+}
+
+/**
+ * exerciceLabelFromPeriod(start, end)
+ * Construit un libellé lisible ("2025" ou "2024-2025") depuis une
+ * période periodStart/periodEnd au format AAAAMM.
+ */
+function exerciceLabelFromPeriod(start, end) {
+  if (!end || end.length < 4) return 'Exercice';
+  const yEnd = end.slice(0, 4);
+  const yStart = start && start.length >= 4 ? start.slice(0, 4) : yEnd;
+  return yStart !== yEnd ? `${yStart}-${yEnd}` : yEnd;
+}
+
+/**
+ * ensureExercices(d)
+ * Garantit la présence d'une structure multi-exercices sur un dossier
+ * brut (tel que lu depuis loadStore()). Migre silencieusement les
+ * dossiers mono-exercice créés avant cette fonctionnalité en les
+ * enveloppant dans un unique exercice, sans perte de données.
+ * @param {object} d Dossier tel que lu depuis loadStore().
+ * @returns {{exercices: object, activeExerciceId: string}}
+ */
+function ensureExercices(d) {
+  if (d.exercices && Object.keys(d.exercices).length && d.activeExerciceId && d.exercices[d.activeExerciceId]) {
+    return { exercices: d.exercices, activeExerciceId: d.activeExerciceId };
+  }
+  const exId = (d.activeExerciceId && d.exercices && d.exercices[d.activeExerciceId]) ? d.activeExerciceId : ('ex-' + (d.periodEnd || Date.now()));
+  const exercices = d.exercices ? { ...d.exercices } : {};
+  if (!exercices[exId]) {
+    exercices[exId] = {
+      id: exId,
+      label: exerciceLabelFromPeriod(d.periodStart, d.periodEnd),
+      bal: d.bal || {}, libs: d.libs || {}, months: d.months || {},
+      nbLines: d.nbLines || 0, periodStart: d.periodStart || '', periodEnd: d.periodEnd || '',
+      filename: d.filename || '', importedAt: d.savedAt || Date.now(),
+    };
+  }
+  return { exercices, activeExerciceId: exId };
+}
+
+/**
+ * switchExercice(exId)
+ * Bascule l'exercice actuellement affiché au sein du dossier ouvert :
+ * recharge ACTIVE.bal/libs/months/... depuis ACTIVE.exercices[exId] et
+ * rafraîchit tout le tableau de bord. Le mapping (ACTIVE.mps) reste
+ * partagé et inchangé entre tous les exercices d'un même dossier.
+ */
+function switchExercice(exId) {
+  const ex = ACTIVE.exercices && ACTIVE.exercices[exId];
+  if (!ex) return;
+  ACTIVE.activeExerciceId = exId;
+  ACTIVE.bal = ex.bal; ACTIVE.libs = ex.libs; ACTIVE.months = ex.months;
+  ACTIVE.nbLines = ex.nbLines; ACTIVE.periodStart = ex.periodStart;
+  ACTIVE.periodEnd = ex.periodEnd; ACTIVE.filename = ex.filename;
+  schedSave();
+  renderDashboard();
 }
 
 // ── DEFAULT DOSSIER (Holdings) ──
@@ -2063,8 +2137,8 @@ function renderDashboard() {
   }
 
   // ── COMPTE DE RÉSULTAT ──
-  buildCRTable();
-  buildBilanTables();
+  if (_compareExIdCR && ACTIVE.exercices && ACTIVE.exercices[_compareExIdCR]) buildCRTableCompare(); else buildCRTable();
+  if (_compareExIdBilan && ACTIVE.exercices && ACTIVE.exercices[_compareExIdBilan]) buildBilanTablesCompare(); else buildBilanTables();
 
   // ── RANGE SLIDER ──
   const mos=Object.keys(ACTIVE.months);
@@ -2087,8 +2161,85 @@ function renderDashboard() {
   const ptitle=document.getElementById('params-dossier-title');if(ptitle)ptitle.textContent=ACTIVE.name||'';
 
   // Imports
-  const ii=document.getElementById('imports-info');
-  if(ii)ii.innerHTML=`<b>${escHtml(ACTIVE.filename||'—')}</b><br>${ACTIVE.nbLines||0} écritures · ${ACTIVE.periodStart||'—'} → ${ACTIVE.periodEnd||'—'}<br>Importé le ${ACTIVE.savedAt?new Date(ACTIVE.savedAt).toLocaleDateString('fr-FR'):'—'}`;
+  renderImportsTracking();
+  renderExerciceSelectors();
+}
+
+/** fmtPeriodDate(p) Formate une période AAAAMM en "MM/AAAA" pour affichage. */
+function fmtPeriodDate(p){ if(!p||p.length<6) return '—'; return `${p.slice(4,6)}/${p.slice(0,4)}`; }
+
+/**
+ * renderImportsTracking()
+ * Affiche la liste des exercices importés dans le dossier ouvert
+ * (onglet "Suivi des imports"), triés du plus récent au plus ancien,
+ * avec date d'import et bascule vers l'exercice choisi.
+ */
+function renderImportsTracking() {
+  const el = document.getElementById('imports-list');
+  if (!el) return;
+  const exercices = Object.values(ACTIVE.exercices || {})
+    .sort((a, b) => (b.periodEnd || '').localeCompare(a.periodEnd || ''));
+  if (!exercices.length) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:#a09d96;font-size:13px;">Aucun exercice importé.</div>`;
+    return;
+  }
+  el.innerHTML = exercices.map(ex => {
+    const isActive = ex.id === ACTIVE.activeExerciceId;
+    const dateStr = ex.importedAt
+      ? new Date(ex.importedAt).toLocaleDateString('fr-FR') + ' à ' + new Date(ex.importedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      : '—';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(0,0,0,.06);${isActive ? 'background:#f0f7ff;' : ''}">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#1a1916;">${escHtml(ex.label)}${isActive ? ' <span style="color:#185FA5;font-size:11px;font-weight:700;">· Affiché</span>' : ''}</div>
+        <div style="font-size:12px;color:#6b6960;margin-top:2px;">Période de ${fmtPeriodDate(ex.periodStart)} à ${fmtPeriodDate(ex.periodEnd)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:12px;color:#1a1916;font-weight:600;">${escHtml(ex.filename || 'FEC importé')}</div>
+        <div style="font-size:11px;color:#a09d96;margin-top:2px;">Importé le ${dateStr}${!isActive ? ` · <span style="color:#185FA5;cursor:pointer;font-weight:600;" onclick="switchExercice('${ex.id}')">Afficher</span>` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * renderExerciceSelectors()
+ * Construit les sélecteurs "Exercice" / "Comparer avec" en haut des
+ * pages Compte de résultat et Bilan — visibles uniquement si le dossier
+ * a plusieurs exercices importés (cf. AUDIT.md §(p)).
+ */
+function renderExerciceSelectors() {
+  const exercices = Object.values(ACTIVE.exercices || {})
+    .sort((a, b) => (b.periodEnd || '').localeCompare(a.periodEnd || ''));
+  [['cr', 'cr-exercice-bar'], ['bilan', 'bilan-exercice-bar']]
+    .forEach(([key, barId]) => {
+      const bar = document.getElementById(barId);
+      if (!bar) return;
+      if (exercices.length < 2) { bar.style.display = 'none'; return; }
+      bar.style.display = 'flex';
+      const activeId = ACTIVE.activeExerciceId;
+      const compareId = key === 'cr' ? _compareExIdCR : _compareExIdBilan;
+      const optActive = exercices.map(ex => `<option value="${ex.id}" ${ex.id === activeId ? 'selected' : ''}>${escHtml(ex.label)}</option>`).join('');
+      const optCompare = '<option value="">Aucune</option>' + exercices.filter(ex => ex.id !== activeId)
+        .map(ex => `<option value="${ex.id}" ${ex.id === compareId ? 'selected' : ''}>${escHtml(ex.label)}</option>`).join('');
+      bar.innerHTML = `
+        <span style="font-size:12px;color:#6b6960;">Exercice</span>
+        <select onchange="switchExercice(this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.14);">${optActive}</select>
+        <span style="font-size:12px;color:#6b6960;margin-left:10px;">Comparer avec</span>
+        <select onchange="onCompareSelectChange('${key}', this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.14);">${optCompare}</select>
+      `;
+    });
+}
+
+/** onCompareSelectChange(key, exId) Choix de l'exercice de comparaison (N-1) pour 'cr' ou 'bilan'. */
+function onCompareSelectChange(key, exId) {
+  if (key === 'cr') {
+    _compareExIdCR = exId || null;
+    if (_compareExIdCR) buildCRTableCompare(); else buildCRTable();
+  } else {
+    _compareExIdBilan = exId || null;
+    if (_compareExIdBilan) buildBilanTablesCompare(); else buildBilanTables();
+  }
+  renderExerciceSelectors();
 }
 
 // ── P&L TABLE ──
@@ -2120,6 +2271,8 @@ function renderDashboard() {
 function buildCRTable() {
   const tb = document.getElementById('tbCR');
   if (!tb) return;
+  const thead = document.getElementById('thead-cr');
+  if (thead) thead.innerHTML = '<tr><th style="width:55%">Poste</th><th class="r">Montant</th><th class="r">% CA</th></tr>';
   const mps = ACTIVE.mps?.cr || [];
 
   /**
@@ -2299,6 +2452,76 @@ function buildCRTable() {
 
 }
 
+/**
+ * buildCRTableCompare()
+ * Variante de buildCRTable() affichant une comparaison entre l'exercice
+ * actif et l'exercice choisi via "Comparer avec" (3 colonnes : exercice
+ * courant, exercice de comparaison, variation en €). Reprend la même
+ * structure SIG (postes/sous-totaux) que buildCRTable(), au niveau
+ * poste uniquement (sans détail compte par compte), à l'image de la
+ * vue comparative Pennylane. Cf. AUDIT.md §(p).
+ */
+function buildCRTableCompare() {
+  const tb = document.getElementById('tbCR');
+  if (!tb) return;
+  const compareEx = ACTIVE.exercices && ACTIVE.exercices[_compareExIdCR];
+  if (!compareEx) { buildCRTable(); return; }
+
+  const thead = document.getElementById('thead-cr');
+  const curLabel = (ACTIVE.exercices && ACTIVE.exercices[ACTIVE.activeExerciceId]?.label) || 'Exercice';
+  const cmpLabel = compareEx.label;
+  if (thead) thead.innerHTML = `<tr><th style="width:40%">Poste</th><th class="r">${escHtml(curLabel)}</th><th class="r">${escHtml(cmpLabel)}</th><th class="r">Variation €</th></tr>`;
+
+  const mps = ACTIVE.mps?.cr || [];
+  const plVFor = (bal, num) => {
+    const v = bal[num] || 0, cl = num[0];
+    if (cl === '7') return v;
+    if (cl === '6') return -v;
+    return 0;
+  };
+  const groupTotalFor = (bal, g) => {
+    let t = 0;
+    (g.accounts || []).forEach(n => { t += plVFor(bal, n); });
+    (g.subs || []).forEach(s => (s.accounts || []).forEach(n => { t += plVFor(bal, n); }));
+    return t;
+  };
+
+  let runningCur = 0, runningCmp = 0, html = '';
+  mps.forEach(g => {
+    const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+    let curTotal, cmpTotal;
+    if (!isSubOrTotal) {
+      curTotal = groupTotalFor(ACTIVE.bal, g);
+      cmpTotal = groupTotalFor(compareEx.bal, g);
+      runningCur += curTotal; runningCmp += cmpTotal;
+    } else {
+      curTotal = runningCur; cmpTotal = runningCmp;
+    }
+    const variance = curTotal - cmpTotal;
+    const bold = isSubOrTotal ? ' dc-bold' : '';
+    html += `<tr class="dr-group">
+      <td colspan="4" style="padding:0">
+        <div class="dc${bold}" style="display:flex;align-items:center;padding:8px 16px;">
+          <span class="lbl" style="flex:1;">${g.label}</span>
+          <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${fmtV(curTotal)}</span>
+          <span class="amt" style="min-width:110px;text-align:right;color:#6b6960;">${fmtV(cmpTotal)}</span>
+          <span class="amt ${variance >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
+        </div>
+      </td></tr>`;
+  });
+  const varianceRN = runningCur - runningCmp;
+  html += `<tr class="dr-total">
+    <td colspan="4" style="padding:0">
+      <div class="dc dc-bold" style="display:flex;align-items:center;padding:8px 16px;">
+        <span class="lbl" style="flex:1;">= Résultat net de l'exercice</span>
+        <span class="amt ${runningCur >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${fmtV(runningCur)}</span>
+        <span class="amt" style="min-width:110px;text-align:right;color:#6b6960;">${fmtV(runningCmp)}</span>
+        <span class="amt ${varianceRN >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${varianceRN >= 0 ? '+' : ''}${fmtV(varianceRN)}</span>
+      </div>
+    </td></tr>`;
+  tb.innerHTML = html;
+}
+
 
 /**
  * buildBilanTables()
@@ -2306,6 +2529,11 @@ function buildCRTable() {
  * Sépare les groupes actif/passif et appelle buildBilanHalf() pour chacun.
  */
 function buildBilanTables() {
+  const theadA = document.getElementById('thead-actif');
+  if (theadA) theadA.innerHTML = '<tr><th>Poste</th><th class="r">Montant</th></tr>';
+  const theadP = document.getElementById('thead-passif');
+  if (theadP) theadP.innerHTML = '<tr><th>Poste</th><th class="r">Montant</th></tr>';
+  document.getElementById('bilan-grid')?.classList.remove('compare-mode');
   const allGroups = ACTIVE.mps?.bilan || [];
 
   // Séparer actif et passif selon le champ side
@@ -2405,6 +2633,69 @@ function buildBilanTables() {
          backgroundColor: bilanData.map((_,i)=>colors[i%10]) }]
     );
   }
+}
+
+/**
+ * buildBilanTablesCompare()
+ * Variante de buildBilanTables() affichant une comparaison entre
+ * l'exercice actif et l'exercice choisi via "Comparer avec" (3 colonnes :
+ * exercice courant, exercice de comparaison, variation en €), au niveau
+ * poste/sous-total (sans détail compte par compte), à l'image de la vue
+ * comparative Pennylane. N'effectue PAS l'injection du résultat net
+ * calculé (propre à la vue Bilan mono-exercice authoritative pour le
+ * contrôle d'équilibre) — vue de comparaison purement informative.
+ * Cf. AUDIT.md §(p).
+ */
+function buildBilanTablesCompare() {
+  const tbA = document.getElementById('tbActif'), tbP = document.getElementById('tbPassif');
+  if (!tbA || !tbP) return;
+  const compareEx = ACTIVE.exercices && ACTIVE.exercices[_compareExIdBilan];
+  if (!compareEx) { buildBilanTables(); return; }
+  document.getElementById('bilan-grid')?.classList.add('compare-mode');
+
+  const curLabel = (ACTIVE.exercices && ACTIVE.exercices[ACTIVE.activeExerciceId]?.label) || 'Exercice';
+  const cmpLabel = compareEx.label;
+  const headHtml = `<tr><th style="width:40%">Poste</th><th class="r">${escHtml(curLabel)}</th><th class="r">${escHtml(cmpLabel)}</th><th class="r">Variation €</th></tr>`;
+  const theadA = document.getElementById('thead-actif'), theadP = document.getElementById('thead-passif');
+  if (theadA) theadA.innerHTML = headHtml;
+  if (theadP) theadP.innerHTML = headHtml;
+
+  const allGroups = ACTIVE.mps?.bilan || [];
+  const groupSumFor = (bal, g, sign) => {
+    let t = 0;
+    (g.accounts || []).forEach(n => { t += (bal[n] || 0) * sign; });
+    (g.subs || []).forEach(s => (s.accounts || []).forEach(n => { t += (bal[n] || 0) * sign; }));
+    return t;
+  };
+
+  ['actif', 'passif'].forEach(side => {
+    const sign = side === 'passif' ? -1 : 1;
+    const groups = allGroups.filter(g => g.side === side);
+    let runningCur = 0, runningCmp = 0, html = '';
+    groups.forEach(g => {
+      const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+      let curTotal, cmpTotal;
+      if (!isSubOrTotal) {
+        curTotal = groupSumFor(ACTIVE.bal, g, sign);
+        cmpTotal = groupSumFor(compareEx.bal, g, sign);
+        runningCur += curTotal; runningCmp += cmpTotal;
+      } else {
+        curTotal = runningCur; cmpTotal = runningCmp;
+      }
+      const variance = curTotal - cmpTotal;
+      const bold = isSubOrTotal ? ' dc-bold' : '';
+      html += `<tr class="dr-group">
+        <td colspan="4" style="padding:0">
+          <div class="dc${bold}" style="display:flex;align-items:center;padding:8px 16px;">
+            <span class="lbl" style="flex:1;">${g.label}</span>
+            <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}" style="min-width:100px;text-align:right;">${fmtV(curTotal)}</span>
+            <span class="amt" style="min-width:100px;text-align:right;color:#6b6960;">${fmtV(cmpTotal)}</span>
+            <span class="amt ${variance >= 0 ? 'pos' : 'neg'}" style="min-width:100px;text-align:right;">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
+          </div>
+        </td></tr>`;
+    });
+    (side === 'actif' ? tbA : tbP).innerHTML = html;
+  });
 }
 
 /**
@@ -2725,7 +3016,9 @@ function openDossier(id){
   const store=loadStore();
   const d=store[id];
   if(d){
-    ACTIVE={id:d.id,name:d.name,group:d.group,bal:d.bal||{},libs:d.libs||{},months:d.months||{},nbLines:d.nbLines||0,periodStart:d.periodStart||'',periodEnd:d.periodEnd||'',filename:d.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt};
+    const {exercices, activeExerciceId} = ensureExercices(d);
+    const activeEx = exercices[activeExerciceId];
+    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId};
     // Force regenerate mapping if version is outdated or mapping has no subs defined
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
     if(!ACTIVE.mps || mpsOutdated){
@@ -2737,7 +3030,11 @@ function openDossier(id){
     }
   } else if(id==='derkx-holdings'){
     // Load default hardcoded dossier — même workflow automatisé que les imports
-    ACTIVE={id:'derkx-holdings',name:'Groupe DERKX – Holdings',group:'groupe-derkx',bal:JSON.parse(JSON.stringify(DEFAULT_BAL)),libs:{},months:JSON.parse(JSON.stringify(DEFAULT_MONTHS)),nbLines:12846,periodStart:'202501',periodEnd:'202512',filename:'889362497FEC20251231.txt',savedAt:Date.now(),mps:null};
+    const holdBal=JSON.parse(JSON.stringify(DEFAULT_BAL)), holdMonths=JSON.parse(JSON.stringify(DEFAULT_MONTHS));
+    const holdExId='ex-202512';
+    ACTIVE={id:'derkx-holdings',name:'Groupe DERKX – Holdings',group:'groupe-derkx',bal:holdBal,libs:{},months:holdMonths,nbLines:12846,periodStart:'202501',periodEnd:'202512',filename:'889362497FEC20251231.txt',savedAt:Date.now(),mps:null,
+      exercices:{[holdExId]:{id:holdExId,label:exerciceLabelFromPeriod('202501','202512'),bal:holdBal,libs:{},months:holdMonths,nbLines:12846,periodStart:'202501',periodEnd:'202512',filename:'889362497FEC20251231.txt',importedAt:Date.now()}},
+      activeExerciceId:holdExId};
     ACTIVE.mps={cr:defaultMPS_CR(ACTIVE.bal),bilan:defaultMPS_Bilan(ACTIVE.bal)};
     ACTIVE.mps_version=MPS_VERSION;
     // Affectation automatique PCG 2026 après rendu initial
@@ -2745,7 +3042,10 @@ function openDossier(id){
     saveActiveDossier();
   } else {
     // Unknown id — use defaults
-    ACTIVE={id:id,name:id,group:'non-classes',bal:{},libs:{},months:{},nbLines:0,periodStart:'',periodEnd:'',filename:'',savedAt:Date.now(),mps:{cr:defaultMPS_CR({}),bilan:defaultMPS_Bilan({})}};
+    const emptyExId='ex-'+Date.now();
+    ACTIVE={id:id,name:id,group:'non-classes',bal:{},libs:{},months:{},nbLines:0,periodStart:'',periodEnd:'',filename:'',savedAt:Date.now(),mps:{cr:defaultMPS_CR({}),bilan:defaultMPS_Bilan({})},
+      exercices:{[emptyExId]:{id:emptyExId,label:'Exercice',bal:{},libs:{},months:{},nbLines:0,periodStart:'',periodEnd:'',filename:'',importedAt:Date.now()}},
+      activeExerciceId:emptyExId};
   }
   document.getElementById('home-screen').style.display='none';
   document.getElementById('dashboard-screen').style.display='block';
@@ -2936,8 +3236,21 @@ function filterDossiers(query){const q=query.toLowerCase();document.querySelecto
 function showComingSoon(name){toast(name+' — Importez un FEC pour analyser ce dossier');}
 
 // ── NOUVEAU PROJET WORKFLOW ──
-let _npGroup='non-classes',_npFile=null,_npNewName='';
-function openNouveauProjet(group){_npGroup=group||'non-classes';_npFile=null;showNpStep(1);}
+let _npGroup='non-classes',_npFile=null,_npNewName='',_npMode='new';
+function openNouveauProjet(group){_npMode='new';_npGroup=group||'non-classes';_npFile=null;showNpStep(1);}
+/**
+ * openAjouterExercice()
+ * Ajoute un exercice supplémentaire (nouveau FEC) au dossier actuellement
+ * ouvert, au lieu de créer un nouveau dossier indépendant — permet la
+ * comparaison N/N-1 sur le CR et le Bilan (cf. AUDIT.md §(p)).
+ */
+function openAjouterExercice(){
+  if(!ACTIVE.id){toast('Ouvrez un dossier avant d’ajouter un exercice',true);return;}
+  _npMode='add-exercice';
+  _npFile=null;
+  _npNewName=ACTIVE.name;
+  showNpStep(2);
+}
 function showNpStep(step){
   closeNpModal();
   const ov=document.createElement('div');ov.className='np-overlay';ov.id='np-overlay';ov.addEventListener('click',closeNpModal);
@@ -3015,6 +3328,10 @@ function npConfirm(){
   reader.readAsArrayBuffer(_npFile);
 }
 function finishNpConfirm(parsed){
+    if(_npMode==='add-exercice'){
+      addExerciceToActiveDossier(parsed, _npFile.name);
+      return;
+    }
     const id='dossier-'+Date.now();
     const year=parsed.periodEnd?parsed.periodEnd.slice(0,4):new Date().getFullYear();
     const store=loadStore();
@@ -3032,6 +3349,37 @@ function finishNpConfirm(parsed){
         if(ACTIVE.id===id) autoAffectOrphans();
       }, 600);
     }, 400);
+}
+/**
+ * addExerciceToActiveDossier(parsed, filename)
+ * Ajoute un exercice supplémentaire (nouveau FEC) au dossier
+ * actuellement ouvert, au lieu de créer un nouveau dossier. Le mapping
+ * (ACTIVE.mps) est partagé entre tous les exercices : les comptes déjà
+ * affectés le restent, seuls les comptes nouveaux (absents de tous les
+ * exercices précédents) sont traités comme orphelins par
+ * autoAffectOrphans().
+ *
+ * LIMITE CONNUE (cf. AUDIT.md §(p)) : un compte "mixte" (ex. TVA/IS,
+ * clients/fournisseurs) déjà classé pour un exercice reste sur le même
+ * poste même si son solde change de signe sur un autre exercice — le
+ * mapping n'est pas re-évalué automatiquement au changement d'exercice,
+ * seuls les comptes réellement nouveaux sont affectés.
+ */
+function addExerciceToActiveDossier(parsed, filename) {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
+  if (!ACTIVE.exercices) ACTIVE.exercices = {};
+  const exId = 'ex-' + Date.now();
+  const label = exerciceLabelFromPeriod(parsed.periodStart, parsed.periodEnd);
+  ACTIVE.exercices[exId] = {
+    id: exId, label, bal: parsed.bal, libs: parsed.libs, months: parsed.months,
+    nbLines: parsed.nbLines, periodStart: parsed.periodStart, periodEnd: parsed.periodEnd,
+    filename, importedAt: Date.now(),
+  };
+  closeNpModal();
+  switchExercice(exId);
+  // Affecter les comptes de ce nouvel exercice non encore connus du mapping partagé
+  setTimeout(() => { if (ACTIVE.exercices && ACTIVE.exercices[exId]) autoAffectOrphans(); }, 600);
+  toast(`Exercice "${label}" ajouté (${Object.keys(ACTIVE.exercices).length} exercices dans ce dossier)`);
 }
 function closeNpModal(){const el=document.getElementById('np-overlay');if(el)el.remove();}
 function handleHomeUpload(input){if(input.files[0]){_npFile=input.files[0];_npNewName='Nouveau dossier';showNpStep(2);setTimeout(()=>npSetFile(_npFile),100);}}

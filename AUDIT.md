@@ -432,3 +432,87 @@ contre une généralisation excessive). Reproduction exacte du cas signalé
 capture d'écran) : 0 compte mal classé, 0 montant rouge après
 correctif — vérifié en Node et en navigateur réel (Chromium), 0 erreur
 console. Suite complète : 101 tests, tous verts.
+
+## (p) Multi-exercices : import de plusieurs FEC dans un même dossier + comparaison N/N-1
+
+Retour utilisateur : plutôt qu'une synchronisation Pennylane (API ou
+script — écartée, cf. discussion, poste de cabinet partagé), l'utilisateur
+a demandé de reproduire nativement, dans l'app, deux écrans Pennylane
+dont il a fourni une capture : (1) un onglet **« Suivi des imports »**
+qui liste les FEC importés par exercice au sein d'un même dossier, et
+(2) une **comparaison N/N-1** avec colonne « Variation € » sur le
+Compte de résultat et le Bilan.
+
+**Modèle de données** — un dossier peut désormais contenir plusieurs
+exercices dans `ACTIVE.exercices` (`{ [exId]: { id, label, bal, libs,
+months, nbLines, periodStart, periodEnd, filename, importedAt } }`),
+`ACTIVE.activeExerciceId` pointant l'exercice affiché, et **un seul
+mapping partagé** `ACTIVE.mps` pour tout le dossier (un compte classé
+une fois reste classé pour tous les exercices). Les dossiers existants
+(mono-exercice) sont migrés à la volée par `ensureExercices(d)`
+(idempotente) lors de l'ouverture — aucune rupture de compatibilité
+avec les dossiers déjà enregistrés.
+
+**Ajout d'un exercice** — bouton « + Ajouter un exercice » dans l'onglet
+Suivi des imports (`openAjouterExercice()`), choisi explicitement par
+l'utilisateur plutôt qu'une fusion de deux dossiers importés séparément.
+`addExerciceToActiveDossier()` ajoute le nouvel exercice au dossier actif,
+bascule dessus (`switchExercice()`), et relance `autoAffectOrphans()`
+pour classer automatiquement les comptes nouveaux à cet exercice (via le
+mapping partagé déjà existant, ou en créant de nouvelles règles pour les
+comptes jamais vus).
+
+**Comparaison N/N-1** — `buildCRTableCompare()` et
+`buildBilanTablesCompare()` sont des fonctions de rendu additionnelles
+(le code des fonctions mono-exercice `buildCRTable()`/`buildBilanTables()`
+n'a reçu qu'une ligne idempotente de reset du `<thead>`, pour permettre
+de repasser à l'affichage simple sans recharger la page). Une barre
+« Exercice / Comparer avec » apparaît automatiquement dès qu'un dossier
+contient ≥ 2 exercices (`renderExerciceSelectors()`), avec un sélecteur
+qui bascule l'exercice affiché et un second qui choisit l'exercice de
+comparaison (`onCompareSelectChange()`).
+
+**Limite connue et assumée** : la comparaison Bilan
+(`buildBilanTablesCompare()`) n'effectue PAS l'injection du résultat net
+calculé dans les capitaux propres (mécanisme réservé à la vue Bilan
+mono-exercice authoritative pour le contrôle d'équilibre, cf. §(k)/
+correction 1 de `buildBilanTables()`) — c'est une vue purement
+informative de comparaison poste à poste, pas un second contrôle
+d'équilibre. Autre limite assumée : un compte « mixte » (classé selon le
+signe, cf. §(n)/(o)) déjà affecté pour un exercice ne se reclasse pas
+automatiquement en changeant d'exercice si son signe s'est inversé —
+seuls les comptes réellement nouveaux (jamais vus) sont classés à
+l'ajout d'un exercice. Documenté dans le code (commentaire dans
+`addExerciceToActiveDossier()`), arbitrage volontaire pour éviter des
+reclassements imprévisibles à chaque simple changement d'exercice.
+
+**Bug découvert et corrigé pendant la vérification navigateur réel** :
+la carte `.drill-card` du Bilan a `overflow:hidden` (nécessaire pour les
+coins arrondis en mode normal, 2 colonnes) ; en mode comparaison (4
+colonnes : Poste/N/N-1/Variation), le tableau devenait plus large que la
+moitié de carte disponible dans la grille 2 colonnes `.bilan-grid`, et
+les valeurs de la colonne N-1 étaient rognées visuellement (repéré sur
+capture d'écran Chromium réelle, pas détectable par les tests Node en
+sandbox qui n'ont pas de mise en page CSS). Corrigé en ajoutant une
+classe `.bilan-grid.compare-mode{grid-template-columns:1fr}` : Actif et
+Passif passent en pleine largeur (empilés) uniquement quand la
+comparaison est active (`buildBilanTablesCompare()` ajoute la classe,
+`buildBilanTables()` la retire).
+
+**Preuves** :
+- `tests/test_multi_exercices.js` (11 cas) : migration mono→multi-
+  exercice + idempotence, ajout d'un 2e exercice avec fusion du mapping
+  partagé (nouveau compte classé, comptes existants non perturbés),
+  `switchExercice()` recharge bien `bal`/`libs` de l'exercice choisi en
+  gardant le mapping partagé, calcul exact de la comparaison N/N-1 sur
+  CR (marge commerciale) et Bilan (créances clients à l'actif,
+  fournisseurs au passif) avec la bonne variation en €.
+- Vérification en navigateur réel (Chromium + Playwright, avec une
+  copie locale de Chart.js pour contourner le blocage réseau du CDN en
+  sandbox) : import d'un FEC 2024 dans un nouveau dossier → onglet
+  Suivi des imports affiche l'exercice → clic « Ajouter un exercice » +
+  import d'un FEC 2025 → l'onglet liste les 2 exercices avec leurs
+  périodes et noms de fichier → sélection « Comparer avec » sur le
+  Compte de résultat et le Bilan → tableaux à 4 colonnes avec labels
+  d'exercice et variations correctes, 0 erreur console JS.
+- Suite complète : 112 tests, tous verts.
