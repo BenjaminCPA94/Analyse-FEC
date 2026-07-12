@@ -2213,15 +2213,6 @@ function buildCRTable() {
     });
   });
 
-  // Mise à jour des KPIs
-  const kCA  = document.getElementById('kCA');
-  const kRN  = document.getElementById('kRN');
-  const kRNs = document.getElementById('kRNsub');
-  const kCAs = document.getElementById('kCAsub');
-  if (kCA)  kCA.textContent  = fmtK(caBase);
-  if (kRN)  kRN.textContent  = fmtK(running);
-  if (kRNs && caBase) kRNs.textContent = p2(running, caBase) + ' du CA';
-  if (kCAs) kCAs.textContent = 'Exercice · SIG PCG · live';
 }
 
 
@@ -2530,8 +2521,6 @@ function setCurrency(c) {
     renderMapping('cr'); renderMapping('bilan');
   }
 }
-function toggleCurrencyMenu(){} // legacy no-op
-
 // ── PERIOD ──
 function setPeriod(p,el) {
   PERIOD=p;
@@ -2693,34 +2682,6 @@ function goHome(){
   if(ACTIVE.id)saveActiveDossier();
   document.getElementById('home-screen').style.display='flex';
   document.getElementById('dashboard-screen').style.display='none';
-}
-
-// ── HOLDINGS SPECIFIC MPS (correct mapping) ──
-function defaultMPS_CR_Holdings(){
-  const bal=ACTIVE.bal;
-  const a=n=>Object.keys(bal).filter(k=>k.startsWith(n)).sort();
-  return {
-    cr:[
-      {id:'g1',label:"Chiffre d'affaires",type:'normal',accounts:['7060000009','7062000001','7062000003','7065000009','7065','720'],subs:[]},
-      {id:'g2',label:'Marge brute',type:'subtotal',accounts:[],subs:[]},
-      {id:'g3',label:'Charges de personnel',type:'normal',accounts:[],subs:[
-        {id:'g3a',label:'Rémunérations',accounts:['6411','6412','64128','6412800003','6413','6414']},
-        {id:'g3b',label:'Charges sociales',accounts:['6451','6452','6453','6455','64528']},
-        {id:'g3c',label:'Autres charges de personnel',accounts:['6313','6316','6474000003','6475000009']},
-      ]},
-      {id:'g4',label:'Impôts et taxes',type:'normal',accounts:[],subs:[{id:'g4a',label:'Impôts et taxes',accounts:['63511']}]},
-      {id:'g5',label:'Autres achats et charges externes',type:'normal',accounts:['604','6040000009','6040000003','611','6110000009','6132000009','61321','61322','6132200009','6132100009','6135000009','6150000009','616','6160000003','6185000009','6226000009','6226200009','6226300009','623','6230000009','6230000003','6230000002','6251','6251000003','6252','6257','6257000003','6257000006','6257000008','6257000009','6261','6261000003','6261000009','627','6270000003','6270000009','6283000003','6063','6063000003','6063000006','6063000009','6511','6511000001','6511000002','6511000003','6511000009'],subs:[]},
-      {id:'g6',label:"Autres produits et charges d'exploitation",type:'normal',accounts:['656','6560000003','658','65801','740','7401','756','7560000003','758','7580000003'],subs:[]},
-      {id:'g7',label:'EBITDA',type:'subtotal',accounts:[],subs:[]},
-      {id:'g8',label:'Dotations aux amortissements',type:'normal',accounts:['68111','68112'],subs:[]},
-      {id:'g9',label:"Résultat d'exploitation",type:'subtotal',accounts:[],subs:[]},
-      {id:'g10',label:'Résultat financier',type:'normal',accounts:['66112','66113'],subs:[]},
-      {id:'g11',label:'Résultat exceptionnel',type:'normal',accounts:[],subs:[]},
-      {id:'g12',label:'IS et participation',type:'normal',accounts:['699'],subs:[]},
-      {id:'g13',label:'Résultat net',type:'total',accounts:[],subs:[]},
-    ],
-    bilan:defaultMPS_Bilan(ACTIVE.bal)
-  };
 }
 
 // ── TOAST ──
@@ -2994,14 +2955,11 @@ function deleteFromParams(){
 }
 
 // ── MAPPING ENGINE (simplified, relies on ACTIVE.mps) ──
-function updateBackBtn(){}
 function showAffecPanel(p,el){document.querySelectorAll('.affec-sub-panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.affec-nav').forEach(x=>x.classList.remove('active'));document.getElementById('affec-'+p)?.classList.add('active');if(el)el.classList.add('active');}
 
 // Mapping rendering uses ACTIVE.mps and ACTIVE.bal
 // (Uses same renderMapping/chipHtml/mpRename/etc from previous version but reading ACTIVE state)
 let _drag=null,_pCtx=null,_pSel=new Set(),_openGroups=new Set(),_mappingRenderedOnce=false;
-function balOf(num){return ACTIVE.bal[num]||0;}
-function plV(num){const v=ACTIVE.bal[num]||0,cl=num[0];if(cl==='7')return v;if(cl==='6')return -v;return 0;}
 
 function renderMapping(key){
   const wrap=document.getElementById('mapping-'+key);if(!wrap)return;
