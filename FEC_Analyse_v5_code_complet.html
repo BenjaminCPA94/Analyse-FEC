@@ -591,6 +591,7 @@
         <input type="text" placeholder="Rechercher un dossier..." oninput="filterDossiers(this.value)">
       </div>
       <div class="home-nav">
+        <button class="home-nav-btn" onclick="openPrivacyModal()" title="Vos données restent 100% locales — aucun envoi réseau">🔒 Confidentialité</button>
         <button class="home-nav-btn">Nouveautés</button>
         <button class="home-nav-btn">Ressources</button>
         <div style="width:32px;height:32px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">EC</div>
@@ -608,6 +609,11 @@
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Nouveau dossier
     </div>
+    <div class="hs-new" onclick="document.getElementById('hs-import-input').click()" title="Restaurer un dossier depuis une sauvegarde JSON">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Importer (JSON)
+    </div>
+    <input type="file" id="hs-import-input" accept=".json" style="display:none" onchange="handleImportDossierInput(this)">
     <div class="hs-divider"></div>
     <div class="hs-group-item active" onclick="filterGroup('all',this)"><span>Tous les dossiers</span><span class="hs-group-count">4</span></div>
     <div class="hs-group-item" onclick="filterGroup('non-classes',this)"><span>Non classés</span><span class="hs-group-count">0</span></div>
@@ -787,6 +793,7 @@
             <div style="font-size:11px;color:#a09d96;margin-top:6px;">Paramètres avancés</div>
             <button class="params-btn-primary" onclick="saveParamsName()">Enregistrer</button>
             <button class="params-btn-secondary" onclick="duplicateDossier()">Dupliquer le projet</button>
+          <button class="params-btn-secondary" onclick="exportDossierJSON()" title="Sauvegarde complète hors du navigateur">Sauvegarder en JSON</button>
             <button class="params-btn-danger" onclick="deleteFromParams()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
               Supprimer le projet
@@ -1425,6 +1432,7 @@
           <input class="params-field-input" id="params-name-input" type="text">
           <button class="params-btn-primary" onclick="saveParamsName()">Enregistrer</button>
           <button class="params-btn-secondary" onclick="duplicateDossier()">Dupliquer le projet</button>
+          <button class="params-btn-secondary" onclick="exportDossierJSON()" title="Sauvegarde complète hors du navigateur">Sauvegarder en JSON</button>
           <button class="params-btn-danger" onclick="deleteFromParams()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             Supprimer le projet
@@ -4632,6 +4640,22 @@ function importDossierJSON(jsonText) {
   toast(`Dossier "${d.name || id}" importé`);
   return id;
 }
+/** Gestionnaire de l'input file "Importer (JSON)" du menu latéral. */
+function handleImportDossierInput(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const id = importDossierJSON(e.target.result);
+    if (id) {
+      const d = loadStore()[id];
+      addDossierCard(d.name || id, d.group || 'non-classes', id, 'Importé (JSON)');
+    }
+    input.value = '';
+  };
+  reader.onerror = () => { toast('Erreur de lecture du fichier', true); input.value = ''; };
+  reader.readAsText(file);
+}
 
 /**
  * deleteAllLocalData()
@@ -4647,6 +4671,48 @@ function deleteAllLocalData() {
   } catch (e) {
     toast('Échec de la suppression : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
     return false;
+  }
+}
+
+/**
+ * openPrivacyModal()
+ * Affiche l'engagement de confidentialité (aucune donnée ne quitte le
+ * navigateur — argument commercial clé pour les cabinets) et propose
+ * l'action de suppression totale des données locales.
+ */
+function openPrivacyModal() {
+  closePrivacyModal();
+  const nbDossiers = Object.keys(loadStore()).length;
+  const ov = document.createElement('div');
+  ov.id = 'privacy-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9500;display:flex;align-items:center;justify-content:center;';
+  ov.addEventListener('click', e => { if (e.target === ov) closePrivacyModal(); });
+  ov.innerHTML = `<div onclick="event.stopPropagation()" style="background:#fff;border-radius:12px;width:480px;max-width:90vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.22);">
+    <div style="font-size:16px;font-weight:700;color:#1a1916;margin-bottom:12px;">🔒 Confidentialité de vos données</div>
+    <p style="font-size:13px;color:#3a3834;line-height:1.6;margin-bottom:14px;">
+      FEC Analyse fonctionne <b>entièrement dans votre navigateur</b>. Vos FEC,
+      vos mappings et tous vos dossiers sont stockés uniquement dans le
+      stockage local (localStorage) de cet ordinateur — <b>aucune donnée
+      n'est envoyée à un serveur</b>, aucun réseau n'est utilisé pour
+      l'analyse. Fermer cet onglet ou changer d'ordinateur ne transmet rien :
+      pensez à exporter vos dossiers (bouton "Sauvegarder en JSON" dans les
+      paramètres d'un dossier) si vous voulez les conserver ailleurs.
+    </p>
+    <p style="font-size:12px;color:#6b6960;margin-bottom:18px;">${nbDossiers} dossier${nbDossiers > 1 ? 's' : ''} actuellement stocké${nbDossiers > 1 ? 's' : ''} localement.</p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button onclick="closePrivacyModal()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Fermer</button>
+      <button onclick="confirmDeleteAllData()" style="padding:8px 18px;border-radius:7px;border:none;background:#A32D2D;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Supprimer toutes les données</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function closePrivacyModal() { const el = document.getElementById('privacy-overlay'); if (el) el.remove(); }
+function confirmDeleteAllData() {
+  if (!confirm('Supprimer irréversiblement TOUS les dossiers et mappings stockés localement ?\nCette action est définitive.')) return;
+  if (deleteAllLocalData()) {
+    closePrivacyModal();
+    toast('Toutes les données locales ont été supprimées');
+    setTimeout(() => location.reload(), 800);
   }
 }
 
@@ -6030,6 +6096,7 @@ function openDossierParams(card){
           <input class="params-field-input" id="params-name-input2" type="text">
           <button class="params-btn-primary" onclick="saveParamsName()">Enregistrer</button>
           <button class="params-btn-secondary" onclick="duplicateDossier()">Dupliquer le projet</button>
+          <button class="params-btn-secondary" onclick="exportDossierJSON()" title="Sauvegarde complète hors du navigateur">Sauvegarder en JSON</button>
           <button class="params-btn-danger" onclick="deleteFromParams()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Supprimer le projet</button>
         </div>
       </div>
