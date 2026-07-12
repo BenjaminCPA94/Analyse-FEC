@@ -907,6 +907,7 @@
         <div class="drill-card">
           <div class="drill-card-header">
             <div><h2>Compte de résultat · <span id="cr-year">Exercice</span></h2><p>Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
+            <button class="no-print" onclick="exportCRToCSV()" title="Exporter le CR au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
             <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
           </div>
           <table class="dt"><thead><tr><th style="width:55%">Poste</th><th class="r">Montant</th><th class="r">% CA</th></tr></thead><tbody id="tbCR"></tbody></table>
@@ -921,6 +922,10 @@
     <!-- BILAN page -->
     <div class="page" id="page-bilan">
       <div style="padding:20px 32px;">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+          <button class="no-print" onclick="exportBilanToCSV()" title="Exporter le Bilan au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">⬇ Export CSV</button>
+          <button class="no-print" onclick="window.print()" title="Imprimer / PDF" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">🖶 Imprimer / PDF</button>
+        </div>
         <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:12px;" id="bilan-equilibre">
           Chargement du bilan…
         </div>
@@ -1079,6 +1084,13 @@
   border-radius: 2px;
   vertical-align: middle;
   margin-right: 5px;
+}
+/* Impression / export PDF : masquer la navigation, ne garder que le contenu */
+@media print {
+  .sidebar, .module-topbar, .topbar, .no-print { display: none !important; }
+  #dashboard-screen { display: block !important; }
+  .page.active { display: block !important; }
+  body, .drill-card, .dt { background: #fff !important; }
 }
 </style>
 
@@ -4480,6 +4492,163 @@ window.nav = function(id, el) {
 })(); // Fin IIFE
 
 function schedSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveActiveDossier,1500);}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXPORTS & CONFIDENTIALITÉ (RGPD)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Échappe une valeur pour une cellule CSV (RFC 4180 : séparateur ';'). */
+function csvEscapeCell(v) {
+  const s = String(v ?? '');
+  return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvFromRows(rows) {
+  // BOM UTF-8 en tête : garantit un affichage correct des accents dans Excel.
+  return '﻿' + rows.map(r => r.map(csvEscapeCell).join(';')).join('\r\n');
+}
+function downloadTextFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function safeFilePart(s) {
+  return String(s || 'dossier').replace(/[^a-z0-9\-_]+/gi, '_').slice(0, 60);
+}
+
+/**
+ * buildCRCsvRows()
+ * Construit les lignes CSV du Compte de Résultat courant (postes SIG +
+ * détail par compte), en respectant l'ordre d'affichage de buildCRTable().
+ */
+function buildCRCsvRows() {
+  const mps = ACTIVE.mps?.cr || [];
+  const rows = [['Poste', 'Sous-poste', 'Compte', 'Libellé', 'Montant (€)']];
+  let running = 0;
+  mps.forEach(g => {
+    const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+    let gTotal = 0;
+    if (!isSubOrTotal) {
+      (g.accounts || []).forEach(n => { gTotal += plV(n); });
+      (g.subs || []).forEach(s => (s.accounts || []).forEach(n => { gTotal += plV(n); }));
+      running += gTotal;
+    } else {
+      gTotal = running;
+    }
+    rows.push([g.label, '', '', '', gTotal.toFixed(2)]);
+    (g.subs || []).forEach(s => {
+      (s.accounts || []).forEach(n => {
+        rows.push(['', s.label, n, ACTIVE.libs[n] || '', plV(n).toFixed(2)]);
+      });
+    });
+    (g.accounts || []).forEach(n => {
+      rows.push(['', '', n, ACTIVE.libs[n] || '', plV(n).toFixed(2)]);
+    });
+  });
+  return rows;
+}
+
+/**
+ * buildBilanCsvRows()
+ * Construit les lignes CSV du Bilan (Actif puis Passif), même logique de
+ * signe que buildBilanHalf()/tmGroupSum().
+ */
+function buildBilanCsvRows() {
+  const groups = ACTIVE.mps?.bilan || [];
+  const rows = [['Côté', 'Poste', 'Sous-poste', 'Compte', 'Libellé', 'Montant (€)']];
+  ['actif', 'passif'].forEach(side => {
+    const sign = side === 'passif' ? -1 : 1;
+    let running = 0;
+    groups.filter(g => g.side === side).forEach(g => {
+      const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+      let gTotal = 0;
+      if (!isSubOrTotal) {
+        gTotal = tmGroupSum(g, side);
+        running += gTotal;
+      } else {
+        gTotal = running;
+      }
+      rows.push([side, g.label, '', '', '', gTotal.toFixed(2)]);
+      (g.subs || []).forEach(s => {
+        (s.accounts || []).forEach(n => {
+          rows.push([side, '', s.label, n, ACTIVE.libs[n] || '', (balOf(n) * sign).toFixed(2)]);
+        });
+      });
+      (g.accounts || []).forEach(n => {
+        rows.push([side, '', '', n, ACTIVE.libs[n] || '', (balOf(n) * sign).toFixed(2)]);
+      });
+    });
+  });
+  return rows;
+}
+
+function exportCRToCSV() {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
+  downloadTextFile(`CR_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildCRCsvRows()), 'text/csv');
+  toast('Export CSV du Compte de Résultat téléchargé');
+}
+function exportBilanToCSV() {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
+  downloadTextFile(`Bilan_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildBilanCsvRows()), 'text/csv');
+  toast('Export CSV du Bilan téléchargé');
+}
+
+/**
+ * exportDossierJSON()
+ * Sauvegarde complète et portable du dossier actif (balance, libellés,
+ * mapping, métadonnées) — permet de restaurer le dossier sur un autre
+ * poste sans dépendre du localStorage du navigateur.
+ */
+function exportDossierJSON() {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
+  saveActiveDossier();
+  const store = loadStore();
+  const d = store[ACTIVE.id];
+  if (!d) { toast('Dossier introuvable', true); return; }
+  const payload = { fecAnalyseExport: 1, exportedAt: new Date().toISOString(), dossier: d };
+  downloadTextFile(`${safeFilePart(ACTIVE.name)}_sauvegarde.json`, JSON.stringify(payload, null, 2), 'application/json');
+  toast('Sauvegarde JSON du dossier téléchargée');
+}
+
+/**
+ * importDossierJSON(jsonText)
+ * Restaure un dossier depuis un fichier exporté par exportDossierJSON().
+ * Attribue un nouvel identifiant pour ne jamais écraser un dossier
+ * existant par erreur. Retourne l'id créé, ou null si le fichier est
+ * invalide.
+ */
+function importDossierJSON(jsonText) {
+  let payload;
+  try { payload = JSON.parse(jsonText); }
+  catch (e) { toast('Fichier de sauvegarde invalide (JSON illisible)', true); return null; }
+  const d = payload && payload.dossier;
+  if (!d || !d.bal) { toast('Fichier de sauvegarde invalide (structure inattendue)', true); return null; }
+  const store = loadStore();
+  const id = 'dossier-' + Date.now();
+  store[id] = { ...d, id, mps_version: 0, savedAt: Date.now() }; // mps_version=0 → migrateLocalStorage() régénérera le mapping
+  saveStore(store);
+  toast(`Dossier "${d.name || id}" importé`);
+  return id;
+}
+
+/**
+ * deleteAllLocalData()
+ * Supprime IRRÉVERSIBLEMENT toutes les données de l'application
+ * (tous les dossiers, tous les mappings) du localStorage du navigateur.
+ * Argument RGPD : aucune donnée n'existe ailleurs (aucun envoi réseau),
+ * donc cette action est la seule façon de tout effacer.
+ */
+function deleteAllLocalData() {
+  try {
+    localStorage.removeItem(STORE_KEY);
+    return true;
+  } catch (e) {
+    toast('Échec de la suppression : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
+    return false;
+  }
+}
 
 // ── PAGE LOAD ──
 window.addEventListener('DOMContentLoaded',()=>{

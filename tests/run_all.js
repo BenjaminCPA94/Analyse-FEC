@@ -82,6 +82,9 @@ reportResults('Bilan / idempotence', require('./test_bilan_balance.js').run(html
 section('8. Sécurité — XSS');
 reportResults('XSS', require('./test_xss.js').run(htmlPath));
 
+section('9. Exports CSV / JSON (industrialisation)');
+reportResults('Exports', require('./test_exports.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
