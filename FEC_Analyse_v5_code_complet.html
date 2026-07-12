@@ -2265,33 +2265,14 @@ function buildBilanTables() {
   // Si 12x absent ou nul : injecter le résultat calculé
   const resultatAInjecter = (Math.abs(resultatEnBilan) < 1) ? resultatCalcule : 0;
 
-  // ── CORRECTION 2 : Comptes 44x à séparer selon leur solde réel ─────────
-  // Les comptes 44x peuvent être débiteurs (créances fiscales → actif)
-  // OU créditeurs (dettes fiscales TVA, IS → passif).
-  // On crée deux listes dynamiques depuis les soldes réels du FEC.
-  const creancesFiscalesActif  = Object.keys(bal).filter(n =>
-    n.startsWith('44') && bal[n] > 0   // Solde débiteur → actif
-  );
-  const dettesFiscalesPassif   = Object.keys(bal).filter(n =>
-    n.startsWith('44') && bal[n] < 0   // Solde créditeur → passif
-  );
-
-  // Injecter ces listes dans le bon groupe du mapping
-  // (uniquement si le mapping utilise la nouvelle structure)
-  passifGroups.forEach(g => {
-    if (g.id === 'bp6') { // Dettes sociales et fiscales
-      (g.subs || []).forEach(sub => {
-        // Remplacer le sous-groupe "TVA collectée" par la liste dynamique
-        if (sub.id === 'bp6_c' || sub.label.includes('TVA')) {
-          sub.accounts = dettesFiscalesPassif.filter(n => n.startsWith('445'));
-        }
-      });
-    }
-    // Capitaux propres : injecter le résultat calculé
-    if (g.id === 'bp1' || g.type === 'subtotal' && g.label.includes('Capitaux')) {
-      // Chercher ou créer la sous-catégorie résultat
-    }
-  });
+  // NOTE : la répartition des comptes 44x mixtes (444, 4458, 441) entre
+  // actif et passif selon leur solde est la responsabilité exclusive du
+  // moteur d'affectation (autoAffectOrphans() / findRoute() / table
+  // ROUTING + COMPTES_MIXTES). buildBilanTables() est une fonction de
+  // RENDU : elle ne doit jamais réécrire ACTIVE.mps, sous peine d'écraser
+  // à chaque affichage les comptes déjà correctement classés (cf.
+  // AUDIT.md §(h) — bug historique qui faisait disparaître des comptes
+  // du bilan et dupliquait des comptes entre bp6_b et bp6_c).
 
   const totalActif  = buildBilanHalf('tbActif',  actifGroups,  'actif');
   const totalPassif = buildBilanHalf('tbPassif', passifGroups, 'passif', resultatAInjecter);
