@@ -257,6 +257,41 @@ actionnable + bouton export de secours).
 
 ---
 
+## (m) Vérification en navigateur réel (Chromium/Playwright) — Phase 5
+
+Les phases 0-4 ont été validées par le harnais Node (`tests/harness.js`),
+qui exécute le script hors DOM réel. Avant livraison, une vérification en
+navigateur réel (Chromium headless, `chart.js` chargé localement pour
+contourner l'absence de réseau externe dans l'environnement d'audit) a
+été effectuée : chargement de la page, ouverture d'un nouveau dossier,
+import d'un FEC contenant un libellé de compte `<img src=x
+onerror=...>`, navigation CR/Bilan, export CSV, suppression totale des
+données (RGPD).
+
+**Résultat** : XSS confirmée neutralisée en conditions réelles (le
+libellé s'affiche échappé, aucun JavaScript ne s'exécute), CR/Bilan se
+rendent correctement, export CSV déclenche un vrai téléchargement,
+suppression RGPD vide bien le localStorage — 0 erreur console, 0
+exception JS.
+
+**CONFIRMÉ — bug supplémentaire découvert par ce test (invisible aux
+tests Node, qui ne simulent pas de clics réels)** : le bouton « Nouveau
+dossier » de la barre latérale du home screen (`<div class="hs-new">`)
+n'avait **aucun attribut `onclick`** — un clic dessus ne faisait
+strictement rien. L'application restait utilisable via les liens « +
+Nouveau projet » de chaque section, mais ce raccourci principal était
+mort depuis la version fournie. Corrigé : `onclick="openNouveauProjet('non-classes')"`,
+même action que les liens équivalents.
+
+**Point non vérifiable dans cet environnement (réseau sortant restreint)** :
+l'application charge Chart.js depuis un CDN externe
+(`cdnjs.cloudflare.com`). Si ce CDN est inaccessible (pare-feu de cabinet
+restrictif, poste sans connexion internet), les graphiques ne s'affichent
+pas — le reste de l'application (import, mapping, CR/Bilan, exports,
+qui ne dépendent pas de Chart.js) continue de fonctionner, vérifié
+explicitement par ce même test. Documenté comme limite connue dans
+`CHECKLIST_PROD.md`.
+
 ## Synthèse des correctifs à appliquer (Phase 2, par ordre de priorité)
 
 1. **[Sécurité — critique]** Ajouter une fonction `escHtml()` et l'appliquer
