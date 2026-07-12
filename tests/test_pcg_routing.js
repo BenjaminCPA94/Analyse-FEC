@@ -130,6 +130,86 @@ function run(htmlPath) {
     results.push({ name: '58x (virement interne) → non affecté au bilan', pass: where === null, detail: where });
   }
 
+  // Comptes clients (411/413/416/418) mixtes selon solde
+  for (const pfx of ['411', '413', '416', '418']) {
+    {
+      const bal = { [pfx + '001']: 500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '001');
+      results.push({
+        name: `${pfx} débiteur (client normal) → actif (ba6_a)`,
+        pass: !!where && where.gid === 'ba6' && where.subId === 'ba6_a',
+        detail: where,
+      });
+    }
+    {
+      const bal = { [pfx + '001']: -500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '001');
+      results.push({
+        name: `${pfx} créditeur (client anormal) → passif "autres dettes" (bp7_b)`,
+        pass: !!where && where.gid === 'bp7' && where.subId === 'bp7_b',
+        detail: where,
+      });
+    }
+  }
+
+  // Comptes fournisseurs (401/403/404) mixtes selon solde
+  for (const pfx of ['401', '403', '404']) {
+    {
+      const bal = { [pfx + '001']: -500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '001');
+      results.push({
+        name: `${pfx} créditeur (fournisseur normal) → passif (bp5_a)`,
+        pass: !!where && where.gid === 'bp5' && where.subId === 'bp5_a',
+        detail: where,
+      });
+    }
+    {
+      const bal = { [pfx + '001']: 500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '001');
+      results.push({
+        name: `${pfx} débiteur (fournisseur anormal) → actif "autres créances" (ba7_b)`,
+        pass: !!where && where.gid === 'ba7' && where.subId === 'ba7_b',
+        detail: where,
+      });
+    }
+  }
+
+  // Compte 109 (Capital souscrit non appelé) → ligne dédiée à l'actif
+  {
+    const bal = { '109': 1000 };
+    runIn(ctx, `
+      ACTIVE.bal = ${JSON.stringify(bal)};
+      ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+      autoAffectOrphans();
+    `);
+    const where = whereIs(ctx, 'bilan', '109');
+    results.push({
+      name: '109 (Capital souscrit non appelé) → actif, ligne dédiée (ba0)',
+      pass: !!where && where.gid === 'ba0' && where.side === 'actif',
+      detail: where,
+    });
+  }
+
   return results;
 }
 

@@ -310,3 +310,65 @@ explicitement par ce même test. Documenté comme limite connue dans
 
 Chaque correctif ci-dessus fait l'objet d'un commit séparé avec test de
 non-régression associé dans `tests/`.
+
+## (n) Ajustement post-livraison v6 — comptes mixtes clients/fournisseurs/109
+
+Demande de l'expert-comptable après revue de v6, portant sur trois
+règles PCG supplémentaires absentes de la table ROUTING d'origine :
+
+1. **Comptes clients (411, 413, 416, 418)** : normalement à l'ACTIF
+   (créances). Si le solde est créditeur (situation anormale — avance ou
+   trop-perçu client hors le compte dédié 419), le compte doit basculer
+   au PASSIF en « Autres dettes créditrices » plutôt que de rester à
+   l'actif avec un solde négatif.
+2. **Comptes fournisseurs (401, 403, 404)** : normalement au PASSIF
+   (dettes). Si le solde est débiteur (avance versée ou avoir à recevoir
+   hors le compte dédié 409), le compte doit basculer à l'ACTIF en
+   « Autres créances » plutôt que de rester au passif avec un solde
+   négatif.
+3. **Compte 109 (Capital souscrit — non appelé)**, normalement débiteur
+   par nature : doit être présenté sur une ligne dédiée à l'ACTIF
+   (« Capital souscrit — non appelé »), et non noyé dans les capitaux
+   propres au passif comme c'était le cas jusque-là (`bp1_a`).
+
+**Implémentation** : généralisation du mécanisme `COMPTES_MIXTES` (qui ne
+gérait jusqu'ici que 444/4458/441, tous vers la même paire de postes) en
+`MIXED_ROUTES`, une table `{préfixe → {actif:{gid,subId}, passif:{gid,subId}}}`
+permettant à chaque famille de comptes de basculer vers SA paire de
+postes propre. Ajout d'un nouveau groupe `ba0` (« Capital souscrit — non
+appelé ») dans `defaultMPS_Bilan()`, positionné après le sous-total
+« Total Actif Immobilisé » pour ne pas fausser ce sous-total. `MPS_VERSION`
+incrémenté à 6 (structure du mapping modifiée) — `migrateLocalStorage()`
+purge et régénère automatiquement les mappings des dossiers existants.
+
+**Périmètre volontairement limité** : les comptes d'avances dédiés (409
+« avances versées fournisseurs », 419 « avances reçues clients ») restent
+fixes (déjà correctement positionnés à l'opposé de leur famille) et ne
+sont PAS rendus mixtes — ils représentent une position toujours unidirectionnelle
+par construction PCG, contrairement aux comptes clients/fournisseurs
+génériques qui peuvent légitimement changer de sens selon les
+circonstances (avoir, trop-perçu). Les comptes fournisseurs 405 (effets
+à payer immobilisations) et 408 (factures non parvenues) n'ont **pas**
+été rendus mixtes non plus, faute de demande explicite — à confirmer si
+souhaité.
+
+**Décision non tranchée, à confirmer** : la demande mentionnait aussi
+« les comptes de capitaux propres qui sont débiteurs » de façon générale.
+Seul le compte 109 a été traité comme un cas à part avec sa propre ligne
+actif dédiée, conformément à l'exemple donné et à la présentation PCG
+standard. Les autres comptes de capitaux propres anormalement débiteurs
+(ex. 106, 108, 119 « report à nouveau débiteur ») **restent** positionnés
+au passif comme composantes négatives des capitaux propres (déjà le cas
+pour 119 via son sous-poste dédié `bp1_f`), conformément à la
+présentation PCG usuelle — ils ne sont pas remontés à l'actif. Si une
+règle plus large est souhaitée, elle doit être précisée compte par
+compte plutôt que généralisée silencieusement.
+
+**Preuves** : `tests/test_pcg_routing.js` (15 nouveaux cas : clients
+débiteurs/créditeurs × 4 préfixes, fournisseurs créditeurs/débiteurs ×
+3 préfixes, compte 109) et `tests/test_bilan_balance.js` (invariant
+Actif = Passif + Résultat net vérifié exact — écart nul, pas seulement
+sous tolérance — sur un scénario combinant toutes ces reclassifications).
+Vérifié aussi en navigateur réel (Chromium) : bilan équilibré affiché,
+ligne « Capital souscrit » visible à l'actif, ligne « Autres dettes »
+visible au passif, 0 erreur console.

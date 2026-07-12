@@ -88,8 +88,49 @@ function run(htmlPath) {
     detail: toasts,
   });
 
+  // Invariant préservé même avec des comptes clients/fournisseurs en
+  // position anormale (créditeur/débiteur) — cf. reclassification mixte
+  // clients/fournisseurs/109 ajoutée en v6.
+  {
+    const ctx2 = loadApp(htmlPath);
+    runIn(ctx2, `
+      ACTIVE.id = 'mixte-test';
+      ACTIVE.bal = {
+        '411001': 500, '411002': -300,   // client normal + client créditeur
+        '401001': -700, '401002': 200,   // fournisseur normal + fournisseur débiteur
+        '109': 1000,                     // capital souscrit non appelé
+        '101': -1000, '512': 300
+      };
+      ACTIVE.libs = {};
+      ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+      autoAffectOrphans();
+    `);
+    const bal2 = getJSON(ctx2, 'ACTIVE.bal');
+    const mapped2 = getJSON(ctx2, '[...getAllMappedAccountsBoth()].length');
+    results.push({
+      name: '0 orphelin avec comptes clients/fournisseurs en position anormale',
+      pass: mapped2 === Object.keys(bal2).length,
+      detail: `${mapped2}/${Object.keys(bal2).length}`,
+    });
+    const bilan2 = getJSON(ctx2, 'ACTIVE.mps.bilan');
+    let totalActif2 = 0, totalPassif2 = 0;
+    bilan2.forEach(g => {
+      if (g.type !== 'normal') return;
+      const sumG = (g.accounts || []).reduce((s, n) => s + bal2[n], 0)
+        + (g.subs || []).reduce((s, sub) => s + (sub.accounts || []).reduce((s2, n) => s2 + bal2[n], 0), 0);
+      if (g.side === 'actif') totalActif2 += sumG; else totalPassif2 += -sumG;
+    });
+    const ecart2 = Math.abs(totalActif2 - totalPassif2);
+    results.push({
+      name: 'Équilibre exact malgré la reclassification mixte clients/fournisseurs/109',
+      pass: ecart2 < BALANCE_TOLERANCE_EUR_TEST,
+      detail: `Actif=${totalActif2} Passif=${totalPassif2} écart=${ecart2}`,
+    });
+  }
+
   return results;
 }
+const BALANCE_TOLERANCE_EUR_TEST = 5;
 
 if (require.main === module) {
   const htmlPath = process.argv[2] || path.join(__dirname, '..', 'FEC_Analyse_v6.html');

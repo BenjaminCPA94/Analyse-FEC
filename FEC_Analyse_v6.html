@@ -1450,7 +1450,8 @@
 //  SINGLE SOURCE OF TRUTH — Active dossier state
 // ═══════════════════════════════════════════════════════════
 const STORE_KEY = 'fec_analyse_v2';
-const MPS_VERSION = 5; // v5: dédoublonnage intégré à autoAffectOrphans + auto-clean onglet affectation bilan avec side='actif'|'passif', 44x/48x split dynamique, injection résultat
+const MPS_VERSION = 6; // v5: dédoublonnage intégré à autoAffectOrphans + auto-clean onglet affectation bilan avec side='actif'|'passif', 44x/48x split dynamique, injection résultat
+                        // v6: nouveau groupe ba0 (Capital souscrit non appelé, 109) ; clients (411/413/416/418) et fournisseurs (401/403/404) mixtes selon solde
 
 /**
  * Tolérance (en euros) de l'invariant Actif = Passif + Résultat net.
@@ -1752,6 +1753,7 @@ function defaultMPS_Bilan(bal) {
       S('ba3_b', 'D\u00e9pr\u00e9ciations financi\u00e8res (296x-297x)'),
     ]),
     G('ba4', 'Total Actif Immobilis\u00e9', 'subtotal', 'actif'),
+    G('ba0', 'Capital souscrit - non appel\u00e9 (109)', 'normal', 'actif'),
     G('ba5', 'Stocks et en-cours', 'normal', 'actif', [
       S('ba5_a', 'Stocks bruts (3x)'),
       S('ba5_b', 'D\u00e9pr\u00e9ciations de stocks (39x)'),
@@ -5450,13 +5452,12 @@ function autoAffectOrphans() {
     ['4098','bilan','ba6','ba6_c'], // RRR à obtenir
     ['409','bilan','ba6','ba6_c'],
 
-    // Classe 41x — Clients
-    // 411, 413, 416, 418 → ACTIF (créances clients)
-    ['4111','bilan','ba6','ba6_a'], ['4117','bilan','ba6','ba6_a'],
+    // Classe 41x — Clients → MIXTE selon solde (cf. COMPTES_MIXTES/MIXED_ROUTES)
+    // Normalement ACTIF (créances) ; si créditeur (avance/trop-perçu client
+    // hors 419 dédié), reclassé en PASSIF "autres dettes" (bp7_b).
     ['411','bilan','ba6','ba6_a'],
     ['413','bilan','ba6','ba6_a'],  // Effets à recevoir
     ['416','bilan','ba6','ba6_a'],  // Clients douteux
-    ['4181','bilan','ba6','ba6_a'], ['4188','bilan','ba6','ba6_a'],
     ['418','bilan','ba6','ba6_a'],  // Produits non encore facturés
     // 491 = Dépréciation créances clients → diminution actif
     ['491','bilan','ba6','ba6_b'],
@@ -5632,7 +5633,7 @@ function autoAffectOrphans() {
     ['106','bilan','bp1','bp1_d'],
     ['107','bilan','bp1','bp1_d'],   // Écart d'équivalence
     ['108','bilan','bp1','bp1_a'],   // Compte de l'exploitant
-    ['109','bilan','bp1','bp1_a'],   // Capital souscrit non appelé (débiteur par nature)
+    ['109','bilan','ba0',null],   // Capital souscrit - non appelé → ligne dédiée à l'ACTIF (PCG)
 
     // 11 — Report à nouveau
     ['110','bilan','bp1','bp1_e'],   // RAN créditeur → CP positif
@@ -5683,11 +5684,11 @@ function autoAffectOrphans() {
     ['187','bilan','bp7','bp7_b'], ['188','bilan','bp7','bp7_b'],
     ['18','bilan','bp7','bp7_b'],
 
-    // Classe 40x — Fournisseurs → PASSIF
-    ['4011','bilan','bp5','bp5_a'], ['4017','bilan','bp5','bp5_a'],
+    // Classe 40x — Fournisseurs → MIXTE selon solde (cf. COMPTES_MIXTES/MIXED_ROUTES)
+    // Normalement PASSIF (dettes) ; si débiteur (avance versée/avoir à
+    // recevoir hors 409 dédié), reclassé en ACTIF "autres créances" (ba7_b).
     ['401','bilan','bp5','bp5_a'],
     ['403','bilan','bp5','bp5_a'],   // Effets à payer
-    ['4041','bilan','bp5','bp5_a'], ['4047','bilan','bp5','bp5_a'],
     ['404','bilan','bp5','bp5_a'],
     ['405','bilan','bp5','bp5_a'],   // Effets à payer immo
     ['4081','bilan','bp5','bp5_a'], ['4084','bilan','bp5','bp5_a'],
@@ -5723,15 +5724,35 @@ function autoAffectOrphans() {
   ];
 
   /*
-   * Comptes mixtes PCG : affectation par NATURE DÉBITEUR/CRÉDITEUR selon PCG 2026
-   * (Ne pas se fier uniquement au solde — tenir compte de la nature du sous-compte)
+   * Comptes mixtes PCG : affectation par SIGNE DU SOLDE quand un compte
+   * normalement fixe (actif OU passif) présente une position inverse à
+   * sa nature habituelle. Le préfixe déclencheur (clé de MIXED_ROUTES)
+   * détermine la PAIRE de destinations {actif, passif} — nécessaire car
+   * chaque famille de comptes (fiscal, clients, fournisseurs, capital)
+   * ne bascule pas vers le même poste "fourre-tout".
    *
-   * 444  : IS (acomptes payés = ACTIF / dette IS = PASSIF) → selon solde
-   * 4458 : TVA à régulariser → selon solde
+   * 444  : IS (acomptes payés = ACTIF / dette IS = PASSIF)
+   * 4458 : TVA à régulariser
+   * 441  : Subventions/État (cf. AUDIT.md §(g) — ambiguïté documentée)
+   * 411/413/416/418 : Clients normalement ACTIF ; si créditeur (hors 419
+   *   dédié) → PASSIF "Autres dettes créditrices" (bp7_b)
+   * 401/403/404 : Fournisseurs normalement PASSIF ; si débiteur (hors 409
+   *   dédié) → ACTIF "Autres créances" (ba7_b)
    * 474/475 : Différences d'évaluation → fixe par nature (474=actif, 475=passif)
    * 476/477 : Différences de conversion → fixe par nature
    */
-  const COMPTES_MIXTES = new Set(['444','4458','441']);
+  const MIXED_ROUTES = {
+    '444':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '4458': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '441':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '411':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '413':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '416':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '418':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '401':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
+    '403':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
+    '404':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
+  };
 
   // Trier du plus long au plus court → match le plus précis gagne
   ROUTING.sort((a, b) => b[0].length - a[0].length);
@@ -5745,17 +5766,11 @@ function autoAffectOrphans() {
       if (!ACTIVE.mps[key]?.find(g => g.id === gid)) continue;
 
       // Comptes mixtes : réaffecter selon solde si le préfixe est mixte
-      if (COMPTES_MIXTES.has(pfx)) {
-        // Même groupe mais côté différent selon solde
-        if (v >= 0) {
-          // Débiteur → ACTIF
-          const actifG = ACTIVE.mps.bilan?.find(g => g.id === 'ba7');
-          if (actifG) return { key:'bilan', gid:'ba7', subId:'ba7_a' };
-        } else {
-          // Créditeur → PASSIF
-          const passifG = ACTIVE.mps.bilan?.find(g => g.id === 'bp6');
-          if (passifG) return { key:'bilan', gid:'bp6', subId:'bp6_c' };
-        }
+      const mixed = MIXED_ROUTES[pfx];
+      if (mixed) {
+        const dest = v >= 0 ? mixed.actif : mixed.passif;
+        const destG = ACTIVE.mps.bilan?.find(g => g.id === dest.gid);
+        if (destG) return { key: 'bilan', gid: dest.gid, subId: dest.subId };
         continue;
       }
 

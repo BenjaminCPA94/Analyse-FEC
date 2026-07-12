@@ -4,6 +4,28 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Ajustements PCG post-livraison (comptes mixtes clients/fournisseurs/109)
+
+- **Comptes clients (411, 413, 416, 418)** : normalement à l'actif ; si le
+  solde est créditeur (anormal, hors 419 dédié), reclassés au passif en
+  « Autres dettes créditrices ».
+- **Comptes fournisseurs (401, 403, 404)** : normalement au passif ; si le
+  solde est débiteur (anormal, hors 409 dédié), reclassés à l'actif en
+  « Autres créances ».
+- **Compte 109 (Capital souscrit — non appelé)** : nouvelle ligne dédiée à
+  l'actif (groupe `ba0`), au lieu d'être noyé dans les capitaux propres au
+  passif.
+- Généralisation du mécanisme de comptes mixtes (`COMPTES_MIXTES` →
+  `MIXED_ROUTES`) pour permettre à chaque famille de comptes de basculer
+  vers sa propre paire de postes actif/passif.
+- `MPS_VERSION` incrémenté à 6 (nouveau groupe `ba0`) — migration
+  automatique des dossiers existants via `migrateLocalStorage()`.
+- 15 nouveaux tests PCG + 1 test d'invariant bilan dédié
+  (`tests/test_pcg_routing.js`, `tests/test_bilan_balance.js`).
+- Voir AUDIT.md §(n) pour le détail et les points de périmètre
+  volontairement non traités (405, 408, autres comptes de capitaux
+  propres débiteurs hors 109).
+
 ## v6 — Audit, fiabilisation, industrialisation
 
 ### Sécurité
