@@ -5463,98 +5463,77 @@ function autoAffectOrphans() {
     ['491','bilan','ba6','ba6_b'],
 
     // ── COMPTES 44x — État ─────────────────────────────────────────────────
-    // RÈGLE PCG : affectation par NATURE du sous-compte, pas par solde
-    // Exception : comptes mixtes (444, 4458, 448) → affectation par solde
+    // RÈGLE (validée avec l'expert-comptable, cf. AUDIT.md §(o)) : comme
+    // pour les clients/fournisseurs, TOUS les comptes de tiers (classe 4)
+    // sont désormais MIXTES selon le signe du solde — débiteur → actif,
+    // créditeur → passif — à l'exception des comptes de dépréciation
+    // (491/495/496, cf. classe 49) qui restent une diminution fixe de
+    // l'actif, au même titre que les amortissements.
 
-    // 441 — Subventions et aides à recevoir → TOUJOURS ACTIF
+    // 441 — Subventions/État
     ['441','bilan','ba7','ba7_a'],
 
-    // 442x — Contributions recouvrées pour le compte de l'État → TOUJOURS PASSIF
-    ['4421','bilan','bp6','bp6_c'], // Prélèvements à la source (IS retenu à la source)
-    ['4422','bilan','bp6','bp6_c'], // Prélèvements forfaitaires
-    ['4423','bilan','bp6','bp6_c'], // Retenues sur distributions
+    // 442x — Contributions recouvrées pour le compte de l'État
     ['442','bilan','bp6','bp6_c'],
 
-    // 444 — IS → MIXTE selon solde (créditeur = dette IS, débiteur = acomptes payés en excès)
-    // Ancre nécessaire pour que le compte "444" nu atteigne la branche
-    // COMPTES_MIXTES de findRoute() (sinon aucune règle ne le matche et il
-    // retombe sur le fallback générique par classe — cf. AUDIT.md §(g)).
+    // 444 — IS
     ['444','bilan','ba7','ba7_a'],
 
-    // 445 — TVA
-    // 4456x (déductible) → TOUJOURS ACTIF
-    ['44562','bilan','ba7','ba7_a'], // TVA sur immo.
-    ['44563','bilan','ba7','ba7_a'], // TVA transférée
-    ['44566','bilan','ba7','ba7_a'], // TVA autres biens
-    ['44567','bilan','ba7','ba7_a'], // Crédit TVA à reporter
-    ['44568','bilan','ba7','ba7_a'], // Taxes assimilées déductibles
-    ['4456','bilan','ba7','ba7_a'],  // TVA déductible générique
+    // 445 — TVA (déductible/collectée/à décaisser/à régulariser) : un seul
+    // "pôle TVA", cluster ba7_a (actif) / bp6_b (passif)
+    ['4456','bilan','ba7','ba7_a'],  // TVA déductible (nature actif)
+    ['4455','bilan','bp6','bp6_b'],  // TVA à décaisser (nature passif)
+    ['4457','bilan','bp6','bp6_b'],  // TVA collectée (nature passif)
+    ['4458','bilan','ba7','ba7_a'],  // TVA à régulariser
 
-    // 4452, 4455 (due/à décaisser) → TOUJOURS PASSIF
-    ['4452','bilan','bp6','bp6_b'],  // TVA due intracommunautaire
-    ['44551','bilan','bp6','bp6_b'], // TVA à décaisser
-    ['44558','bilan','bp6','bp6_b'], // Taxes assimilées à décaisser
-    ['4455','bilan','bp6','bp6_b'],
-
-    // 4457 (collectée) → TOUJOURS PASSIF
-    ['44571','bilan','bp6','bp6_b'], // TVA collectée
-    ['44578','bilan','bp6','bp6_b'], // Taxes assimilées collectées
-    ['4457','bilan','bp6','bp6_b'],
-
-    // 4458 (à régulariser) → MIXTE selon solde
-    // Ancre nécessaire pour que le compte "4458" nu atteigne la branche
-    // COMPTES_MIXTES de findRoute() (cf. AUDIT.md §(g)).
-    ['4458','bilan','ba7','ba7_a'],
-    // 44583 (remboursement demandé) → ACTIF
-    ['44581','bilan','bp6','bp6_b'], // Acomptes RSI → plutôt passif
-    ['44583','bilan','ba7','ba7_a'], // Remboursement TVA demandé → ACTIF (créance État)
-    ['44584','bilan','ba7','ba7_a'], // TVA récupérée d'avance → ACTIF
-    ['44586','bilan','bp6','bp6_b'], // TVA sur factures non parvenues → PASSIF
-    ['44587','bilan','ba7','ba7_a'], // TVA sur factures à établir → ACTIF
-
-    // 446 — Obligations cautionnées → PASSIF
+    // 446 — Obligations cautionnées
     ['446','bilan','bp6','bp6_c'],
 
-    // 447 — Autres impôts, taxes → PASSIF
+    // 447 — Autres impôts, taxes
     ['447','bilan','bp6','bp6_c'],
 
-    // 448 — Charges à payer / Produits à recevoir État → MIXTE
-    ['4481','bilan','bp6','bp6_c'],  // Charges à payer → PASSIF
-    ['44811','bilan','bp6','bp6_c'],
-    ['44812','bilan','bp6','bp6_c'],
-    ['4482','bilan','ba7','ba7_a'],  // Produits à recevoir → ACTIF
-    ['448','bilan','bp6','bp6_c'],   // Fallback → PASSIF (majorité des 448 sont des charges)
+    // 448 — Charges à payer / Produits à recevoir État
+    ['4482','bilan','ba7','ba7_a'],  // Produits à recevoir (nature actif)
+    ['448','bilan','bp6','bp6_c'],   // Charges à payer (nature passif, fallback)
 
-    // 449 — Quotas d'émission → PASSIF
+    // 449 — Quotas d'émission
     ['449','bilan','bp6','bp6_c'],
 
     // ── FIN 44x ───────────────────────────────────────────────────────────
 
-    // Classe 45 — Groupe et associés
-    ['4551','bilan','bp7','bp7_a'], ['4558','bilan','bp7','bp7_a'],
-    ['455','bilan','bp7','bp7_a'],   // CCA associés → PASSIF par défaut
-    ['456','bilan','bp7','bp7_b'],   // Opérations sur capital
-    ['457','bilan','bp7','bp7_b'],   // Dividendes à payer
-    ['458','bilan','bp7','bp7_b'],   // Opérations communes
-    ['451','bilan','bp7','bp7_b'],   // Groupe
+    // Classe 45 — Groupe et associés → MIXTE (un CCA peut être créance ou dette)
+    ['455','bilan','bp7','bp7_a'],   // Comptes courants d'associés (nature passif)
+    ['458','bilan','bp7','bp7_a'],   // Opérations communes (nature passif)
+    ['451','bilan','bp7','bp7_a'],   // Groupe (nature passif)
+    ['456','bilan','bp7','bp7_b'],   // Opérations sur capital (nature passif)
+    ['457','bilan','bp7','bp7_b'],   // Dividendes à payer (nature passif)
 
-    // Classe 46 — Débiteurs/Créditeurs divers → selon solde (mixte)
-    ['462','bilan','ba7','ba7_b'],   // Créances sur cessions immo → ACTIF
-    ['465','bilan','ba7','ba7_b'],   // Créances sur cessions VMP → ACTIF
-    ['467','bilan','ba7','ba7_b'],   // Divers comptes débiteurs → ACTIF
-    ['464','bilan','bp7','bp7_b'],   // Dettes sur acquisitions VMP → PASSIF
-    ['468','bilan','bp7','bp7_b'],   // Divers comptes créditeurs → PASSIF
+    // Classe 46 — Débiteurs/Créditeurs divers → MIXTE selon solde
+    ['462','bilan','ba7','ba7_b'],   // Créances sur cessions immo (nature actif)
+    ['465','bilan','ba7','ba7_b'],   // Créances sur cessions VMP (nature actif)
+    ['467','bilan','ba7','ba7_b'],   // Divers comptes débiteurs (nature actif)
+    ['464','bilan','bp7','bp7_b'],   // Dettes sur acquisitions VMP (nature passif)
+    ['468','bilan','bp7','bp7_b'],   // Divers comptes créditeurs (nature passif)
 
     // Classe 47 — Comptes transitoires
-    ['474','bilan','ba7','ba7_b'],   // Différences évaluation actif
-    ['476','bilan','ba7','ba7_b'],   // Différences conversion actif
-    ['475','bilan','bp7','bp7_b'],   // Différences évaluation passif
-    ['477','bilan','bp7','bp7_b'],   // Différences conversion passif
-    ['4781','bilan','ba7','ba7_b'],  // Mali fusion actif circulant → ACTIF
-    ['478','bilan','bp7','bp7_b'],   // Autres transitoires → PASSIF
-    ['471','bilan','bp7','bp7_b'],   // Comptes d'attente → traiter au passif par précaution
+    // 474/475 (différences d'évaluation) et 476/477 (différences de
+    // conversion) restent FIXES : ce sont des comptes DISTINCTS dédiés par
+    // construction PCG à un seul sens (474/476 = actif, 475/477 = passif),
+    // contrairement à un compte de tiers générique qui change de sens.
+    ['474','bilan','ba7','ba7_b'],
+    ['476','bilan','ba7','ba7_b'],
+    ['475','bilan','bp7','bp7_b'],
+    ['477','bilan','bp7','bp7_b'],
+    // 471 (comptes d'attente) et 478 (autres transitoires) : suspens
+    // génériques → MIXTE selon solde
+    ['4781','bilan','ba7','ba7_b'],  // Mali fusion actif circulant (nature actif)
+    ['478','bilan','bp7','bp7_b'],   // Autres transitoires (nature passif)
+    ['471','bilan','bp7','bp7_b'],   // Comptes d'attente (nature passif)
 
     // Classe 48 — Régularisation
+    // 486 (charges constatées d'avance) et 487 (produits constatés
+    // d'avance) restent FIXES : comptes distincts dédiés par construction
+    // PCG à un seul sens, comme 474/475/476/477 ci-dessus.
     ['481','bilan','ba7','ba7_b'],   // Frais émission emprunts → ACTIF (PCG 2026)
     ['486','bilan','ba9',null],      // CCA → ACTIF (ba9 = poste dédié)
     ['487','bilan','bp7','bp7_c'],   // PCA → PASSIF
@@ -5562,7 +5541,8 @@ function autoAffectOrphans() {
     ['4887','bilan','ba7','ba7_b'],  // Produits à répartir → ACTIF
     ['488','bilan','bp7','bp7_b'],   // Fallback → PASSIF (majorité)
 
-    // Classe 49 — Dépréciations tiers
+    // Classe 49 — Dépréciations tiers → FIXE (diminution de l'actif, même
+    // logique que les amortissements/dépréciations des classes 2/3/5)
     ['491','bilan','ba6','ba6_b'],
     ['495','bilan','bp1','bp1_e'],   // Dépréciation comptes groupe → diminution CP
     ['496','bilan','ba7','ba7_b'],   // Dépréciation autres débiteurs
@@ -5702,49 +5682,55 @@ function autoAffectOrphans() {
     ['4198','bilan','bp5','bp5_b'],
     ['419','bilan','bp5','bp5_b'],
 
-    // Classe 42 — Personnel → PASSIF
+    // Classe 42 — Personnel → MIXTE selon solde (normalement dette envers
+    // le personnel ; débiteur en cas d'avance/trop-versé)
+    ['425','bilan','ba7','ba7_b'],   // Avances au personnel (nature actif)
     ['421','bilan','bp6','bp6_a'],
     ['422','bilan','bp6','bp6_a'],   // CSE
-    ['4246','bilan','bp6','bp6_a'], ['4248','bilan','bp6','bp6_a'],
     ['424','bilan','bp6','bp6_a'],   // Participation salariés
-    ['425','bilan','ba7','ba7_b'],   // Avances au personnel → ACTIF
     ['426','bilan','bp6','bp6_a'],
     ['427','bilan','bp6','bp6_a'],
-    ['4282','bilan','bp6','bp6_a'], ['4284','bilan','bp6','bp6_a'],
-    ['4286','bilan','bp6','bp6_a'],
     ['428','bilan','bp6','bp6_a'],
 
-    // Classe 43 — Organismes sociaux → PASSIF
+    // Classe 43 — Organismes sociaux → MIXTE selon solde
+    ['439','bilan','ba7','ba7_a'],  // Produits à recevoir (nature actif)
     ['431','bilan','bp6','bp6_a'],
     ['437','bilan','bp6','bp6_a'],
-    ['4382','bilan','bp6','bp6_a'], ['4386','bilan','bp6','bp6_a'],
     ['438','bilan','bp6','bp6_a'],
-    ['439','bilan','ba7','ba7_a'],  // Organismes sociaux produits à recevoir → ACTIF
     ['43','bilan','bp6','bp6_a'],
   ];
 
   /*
-   * Comptes mixtes PCG : affectation par SIGNE DU SOLDE quand un compte
-   * normalement fixe (actif OU passif) présente une position inverse à
-   * sa nature habituelle. Le préfixe déclencheur (clé de MIXED_ROUTES)
-   * détermine la PAIRE de destinations {actif, passif} — nécessaire car
-   * chaque famille de comptes (fiscal, clients, fournisseurs, capital)
-   * ne bascule pas vers le même poste "fourre-tout".
+   * Comptes mixtes : affectation par SIGNE DU SOLDE (débiteur → actif,
+   * créditeur → passif) pour TOUS les comptes de tiers (classe 4) et
+   * assimilés, conformément à la règle générale validée avec
+   * l'expert-comptable (cf. AUDIT.md §(o)) : un compte de bilan est
+   * classé selon le signe réel de son solde, à l'exception des comptes
+   * de dépréciation/amortissement qui restent une diminution fixe de
+   * l'actif brut correspondant (28x/29x/39x/49x/59x), et des comptes
+   * PCG dédiés à un seul sens par construction (474/475, 476/477,
+   * 486/487, 409/419, 439... — cf. commentaires dans ROUTING).
    *
-   * 444  : IS (acomptes payés = ACTIF / dette IS = PASSIF)
-   * 4458 : TVA à régulariser
-   * 441  : Subventions/État (cf. AUDIT.md §(g) — ambiguïté documentée)
-   * 411/413/416/418 : Clients normalement ACTIF ; si créditeur (hors 419
-   *   dédié) → PASSIF "Autres dettes créditrices" (bp7_b)
-   * 401/403/404 : Fournisseurs normalement PASSIF ; si débiteur (hors 409
-   *   dédié) → ACTIF "Autres créances" (ba7_b)
-   * 474/475 : Différences d'évaluation → fixe par nature (474=actif, 475=passif)
-   * 476/477 : Différences de conversion → fixe par nature
+   * Le préfixe déclencheur (clé de MIXED_ROUTES) détermine la PAIRE de
+   * destinations {actif, passif} propre à sa famille — chaque famille de
+   * comptes ne bascule pas vers le même poste "fourre-tout".
    */
   const MIXED_ROUTES = {
-    '444':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
-    '4458': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    // 44x — État
     '441':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '442':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '444':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '4456': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_b' } }, // TVA
+    '4455': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_b' } },
+    '4457': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_b' } },
+    '4458': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_b' } },
+    '446':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '447':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '4482': { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '448':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+    '449':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_c' } },
+
+    // Clients / fournisseurs
     '411':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
     '413':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
     '416':  { actif: { gid: 'ba6', subId: 'ba6_a' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
@@ -5752,6 +5738,36 @@ function autoAffectOrphans() {
     '401':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
     '403':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
     '404':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp5', subId: 'bp5_a' } },
+
+    // Personnel / organismes sociaux
+    '425':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '421':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '422':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '424':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '426':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '427':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '428':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '439':  { actif: { gid: 'ba7', subId: 'ba7_a' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '431':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '437':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+    '438':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp6', subId: 'bp6_a' } },
+
+    // Groupe et associés
+    '455':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_a' } },
+    '458':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_a' } },
+    '451':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_a' } },
+    '456':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '457':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+
+    // Débiteurs/créditeurs divers, comptes d'attente
+    '462':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '465':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '467':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '464':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '468':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '4781': { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '478':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
+    '471':  { actif: { gid: 'ba7', subId: 'ba7_b' }, passif: { gid: 'bp7', subId: 'bp7_b' } },
   };
 
   // Trier du plus long au plus court → match le plus précis gagne

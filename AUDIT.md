@@ -372,3 +372,63 @@ sous tolérance — sur un scénario combinant toutes ces reclassifications).
 Vérifié aussi en navigateur réel (Chromium) : bilan équilibré affiché,
 ligne « Capital souscrit » visible à l'actif, ligne « Autres dettes »
 visible au passif, 0 erreur console.
+
+## (o) Généralisation de la règle mixte à toute la classe 4 (comptes de tiers)
+
+Retour utilisateur après revue de l'onglet Affectation des comptes : des
+sous-comptes 44x (TVA/IS) apparaissaient en **rouge** (solde affiché
+négatif) alors qu'ils étaient rangés du côté « attendu » — preuve que
+ces comptes étaient classés par NATURE fixe (comme documenté en §(g))
+et non par signe réel, contrairement aux clients/fournisseurs déjà
+corrigés en §(n). Règle générale demandée et validée : **un compte de
+bilan est classé selon le signe réel de son solde (débiteur → actif,
+créditeur → passif), sauf les comptes de dépréciation/amortissement qui
+restent une diminution fixe de l'actif brut correspondant**.
+
+**Implémentation** : généralisation de `MIXED_ROUTES` à l'ensemble des
+comptes de tiers (classe 4), en regroupant les sous-comptes 44x
+auparavant éclatés en règles fixes individuelles (4456x, 4457x, 4455x,
+4458x, 442x, 446-449) en quelques familles mixtes avec la bonne paire de
+postes cible :
+- 441/442/444/446/447/448/449/4482 → mixte {actif: ba7_a, passif: bp6_c}
+  (cluster « IS / autres taxes »)
+- 4456/4455/4457/4458 → mixte {actif: ba7_a, passif: bp6_b} (cluster
+  « TVA » — **corrige une erreur du correctif précédent** qui pairait à
+  tort 4458 avec bp6_c au lieu de bp6_b, la bonne case TVA)
+- Personnel (421/422/424/426/427/428) et organismes sociaux
+  (431/437/438) → mixte {actif: ba7_b, passif: bp6_a}, sauf 425 (avances
+  personnel, actif fixe) et 439 (produits à recevoir organismes sociaux,
+  actif fixe)
+- Groupe et associés (451/455/458/456/457) → mixte {actif: ba7_b,
+  passif: bp7_a ou bp7_b selon la nature}
+- Débiteurs/créditeurs divers (462/465/467/464/468) et comptes d'attente
+  génériques (471/478/4781) → mixte {actif: ba7_b, passif: bp7_b}
+
+**Exceptions volontairement conservées FIXES** (comptes PCG dédiés à un
+seul sens par construction, distincts d'un compte de tiers générique
+qui change de sens) :
+- 474/476 (différences d'évaluation/conversion, actif) et 475/477
+  (mêmes différences, passif) : ce sont des numéros de compte DIFFÉRENTS
+  utilisés délibérément selon le sens, pas le même compte qui s'inverse
+  — les rendre mixtes serait une erreur.
+- 486 (charges constatées d'avance) et 487 (produits constatés
+  d'avance) : même logique, comptes distincts par construction.
+- 409 (avances versées fournisseurs) et 419 (avances reçues clients) :
+  déjà correctement positionnés à l'opposé de leur famille parente,
+  non modifiés (cf. §(n)).
+- 491/495/496 (dépréciations comptes de tiers) : diminution fixe de
+  l'actif, même famille que les amortissements/dépréciations 28x/29x/
+  39x/59x — c'est l'exception explicitement nommée par l'utilisateur.
+- Comptes de capitaux propres (101-108, 119) : non modifiés, cf. §(n)
+  (décision non tranchée, à confirmer si souhaité au-delà du 109).
+
+**Preuves** : 12 nouveaux cas dans `tests/test_pcg_routing.js` (débiteur/
+créditeur pour personnel, organismes sociaux, groupe/associés,
+débiteurs/créditeurs divers, TVA déductible/collectée), plus un cas
+confirmant que 474 reste fixe-actif même à solde négatif (garde-fou
+contre une généralisation excessive). Reproduction exacte du cas signalé
+(comptes 431/4282/4372/4373/4374/4382/421000002/444/44566/44567/44587/
+4452/44551/44586/44571009 avec les vrais signes de solde déduits de la
+capture d'écran) : 0 compte mal classé, 0 montant rouge après
+correctif — vérifié en Node et en navigateur réel (Chromium), 0 erreur
+console. Suite complète : 101 tests, tous verts.

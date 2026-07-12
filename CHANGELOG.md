@@ -4,6 +4,31 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Généralisation de la règle de classement par signe (classe 4)
+
+- **Tous les comptes de tiers (classe 4)** sont désormais classés selon
+  le signe réel de leur solde (débiteur → actif, créditeur → passif),
+  au lieu d'une affectation par nature fixe qui laissait apparaître des
+  montants négatifs (rouges) sous des postes où on ne s'y attendait pas.
+  Concerné : TVA (4456/4455/4457/4458), IS et autres taxes (441/442/444/
+  446-449), personnel (421-428), organismes sociaux (431/437/438),
+  groupe et associés (451/455-458), débiteurs/créditeurs divers
+  (462/464/465/467/468), comptes d'attente (471/478/4781).
+- **Correction d'une erreur du correctif précédent** : le compte 4458
+  (TVA à régulariser) était mixte mais pointait à tort vers le poste
+  passif "Dettes IS" (bp6_c) au lieu du poste "TVA collectée" (bp6_b).
+- **Exceptions volontairement conservées fixes** (comptes PCG dédiés à
+  un seul sens par construction, pas des comptes de tiers génériques) :
+  différences d'évaluation/conversion (474-477), charges/produits
+  constatés d'avance (486/487), avances fournisseurs/clients (409/419),
+  dépréciations de tiers (491/495/496 — même famille que les
+  amortissements, qui restent en diminution fixe de l'actif).
+- 12 nouveaux tests de non-régression + reproduction exacte du cas
+  signalé (comptes 431/444/44566/44567/44587/4452/44551/44586/44571009
+  etc.) : 0 montant mal classé, 0 anomalie. Suite complète : 101 tests.
+- Voir AUDIT.md §(o) pour le détail complet et les exceptions
+  documentées.
+
 ## v6 — Ajustements PCG post-livraison (comptes mixtes clients/fournisseurs/109)
 
 - **Comptes clients (411, 413, 416, 418)** : normalement à l'actif ; si le

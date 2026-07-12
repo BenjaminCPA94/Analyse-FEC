@@ -25,7 +25,7 @@ const CASES = [
   ['4457400001', -100, 'passif', 'TVA collectée (4457x) → passif'],
   ['4421', -500, 'passif', 'IS retenu à la source (4421) → passif'],
   ['441', 300, 'actif', '441 débiteur → actif'],
-  ['44583', 200, 'actif', 'Remboursement TVA demandé (44583) → actif quel que soit le solde'],
+  ['44583', 200, 'actif', 'Remboursement TVA demandé (44583), débiteur → actif (mixte 4458)'],
   ['4860001', 150, 'actif', 'Charges constatées d’avance (486) → actif'],
   ['4870001', -150, 'passif', 'Produits constatés d’avance (487) → passif'],
   ['4190001', -400, 'passif', 'Avances et acomptes reçus clients (419) → passif'],
@@ -206,6 +206,62 @@ function run(htmlPath) {
     results.push({
       name: '109 (Capital souscrit non appelé) → actif, ligne dédiée (ba0)',
       pass: !!where && where.gid === 'ba0' && where.side === 'actif',
+      detail: where,
+    });
+  }
+
+  // Généralisation aux autres comptes de tiers (classe 4) — cf. AUDIT.md §(o)
+  const MIXED_TIERS_FAMILIES = [
+    ['421', 'personnel'], ['431', 'organismes sociaux'],
+    ['455', 'groupe/associés'], ['462', 'débiteurs/créditeurs divers'],
+    ['4456', 'TVA déductible'], ['4457', 'TVA collectée'],
+  ];
+  for (const [pfx, desc] of MIXED_TIERS_FAMILIES) {
+    {
+      const bal = { [pfx + '0001']: 500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '0001');
+      results.push({
+        name: `${pfx} (${desc}) débiteur (500) → actif`,
+        pass: !!where && where.side === 'actif',
+        detail: where,
+      });
+    }
+    {
+      const bal = { [pfx + '0001']: -500 };
+      runIn(ctx, `
+        ACTIVE.bal = ${JSON.stringify(bal)};
+        ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+        autoAffectOrphans();
+      `);
+      const where = whereIs(ctx, 'bilan', pfx + '0001');
+      results.push({
+        name: `${pfx} (${desc}) créditeur (-500) → passif`,
+        pass: !!where && where.side === 'passif',
+        detail: where,
+      });
+    }
+  }
+
+  // 474/475/476/477 (différences d'évaluation/conversion) restent FIXES,
+  // même si le solde est de signe inattendu — ce sont des comptes DISTINCTS
+  // dédiés à un seul sens par construction PCG, pas des comptes de tiers
+  // génériques (cf. AUDIT.md §(o)).
+  {
+    const bal = { '4740001': -500 }; // 474 = actif par construction, même si solde négatif
+    runIn(ctx, `
+      ACTIVE.bal = ${JSON.stringify(bal)};
+      ACTIVE.mps = { cr: defaultMPS_CR(ACTIVE.bal), bilan: defaultMPS_Bilan(ACTIVE.bal) };
+      autoAffectOrphans();
+    `);
+    const where = whereIs(ctx, 'bilan', '4740001');
+    results.push({
+      name: '474 (différence évaluation actif) reste actif même si solde négatif (fixe, pas mixte)',
+      pass: !!where && where.side === 'actif',
       detail: where,
     });
   }
