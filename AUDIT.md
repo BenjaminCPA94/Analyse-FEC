@@ -153,7 +153,22 @@ ROUTING pour activer réellement le branchement mixte déjà écrit (cf. PCG
 2026, note ANC — le compte 444 « État, impôt sur les bénéfices » peut être
 un acompte payé d'avance (actif) ou une dette d'IS restant à payer
 (passif) selon le solde ; même logique pour 4458 « TVA à régulariser »).
-→ Corrigé en Phase 2.
+→ Corrigé en Phase 2 : ajout de `['444','bilan','ba7','ba7_a']` et
+`['4458','bilan','ba7','ba7_a']` dans ROUTING (l'entrée sert uniquement
+d'ancre pour atteindre la branche `COMPTES_MIXTES` ; le gid/subId qu'elle
+porte est ignoré par cette branche, qui recalcule la destination selon le
+signe du solde — vérifié par `tests/test_pcg_routing.js`).
+
+**Point documenté (décision, non modifié)** : le commentaire du code
+juste au-dessus de la règle `441` (« Subventions et aides à recevoir →
+TOUJOURS ACTIF ») est en tension avec le fait que `441` figure aussi dans
+`COMPTES_MIXTES` (donc traité comme mixte selon signe, pas fixe-actif).
+Faute de FEC de test faisant apparaître un `441` créditeur, et pour ne pas
+introduire une régression non testée sur un point à la fois mineur et
+ambigu, ce comportement existant (mixte) est **conservé tel quel** —
+un compte 441 créditeur (cas rare en pratique) sera classé en passif
+(`bp6/bp6_c`) plutôt qu'en actif fixe. À trancher avec l'expert-comptable
+si des FEC réels présentent ce cas.
 
 ## (h) BUG MAJEUR CONFIRMÉ — `buildBilanTables()` corrompt le mapping à chaque rendu
 

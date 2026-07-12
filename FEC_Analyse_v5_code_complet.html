@@ -5175,7 +5175,10 @@ function autoAffectOrphans() {
     ['442','bilan','bp6','bp6_c'],
 
     // 444 — IS → MIXTE selon solde (créditeur = dette IS, débiteur = acomptes payés en excès)
-    // Géré dynamiquement dans findRoute()
+    // Ancre nécessaire pour que le compte "444" nu atteigne la branche
+    // COMPTES_MIXTES de findRoute() (sinon aucune règle ne le matche et il
+    // retombe sur le fallback générique par classe — cf. AUDIT.md §(g)).
+    ['444','bilan','ba7','ba7_a'],
 
     // 445 — TVA
     // 4456x (déductible) → TOUJOURS ACTIF
@@ -5198,6 +5201,9 @@ function autoAffectOrphans() {
     ['4457','bilan','bp6','bp6_b'],
 
     // 4458 (à régulariser) → MIXTE selon solde
+    // Ancre nécessaire pour que le compte "4458" nu atteigne la branche
+    // COMPTES_MIXTES de findRoute() (cf. AUDIT.md §(g)).
+    ['4458','bilan','ba7','ba7_a'],
     // 44583 (remboursement demandé) → ACTIF
     ['44581','bilan','bp6','bp6_b'], // Acomptes RSI → plutôt passif
     ['44583','bilan','ba7','ba7_a'], // Remboursement TVA demandé → ACTIF (créance État)
