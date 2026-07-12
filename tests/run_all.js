@@ -10,7 +10,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { extractMainScript } = require('./harness.js');
 
-const htmlPath = process.argv[2] || path.join(__dirname, '..', 'FEC_Analyse_v5_code_complet.html');
+const htmlPath = process.argv[2] || path.join(__dirname, '..', 'FEC_Analyse_v6.html');
 
 let totalPass = 0;
 let totalFail = 0;

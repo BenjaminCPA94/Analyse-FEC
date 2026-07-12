@@ -91,7 +91,7 @@ function run(htmlPath) {
 }
 
 if (require.main === module) {
-  const htmlPath = process.argv[2] || path.join(__dirname, '..', 'FEC_Analyse_v5_code_complet.html');
+  const htmlPath = process.argv[2] || path.join(__dirname, '..', 'FEC_Analyse_v6.html');
   const results = run(htmlPath);
   let failed = 0;
   for (const r of results) {
