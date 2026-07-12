@@ -1745,7 +1745,18 @@ function plV(num) {
   return 0;                // bilan accounts → 0 in P&L
 }
 function balOf(num) { return ACTIVE.bal[num]||0; }
-function libOf(num) { return ACTIVE.libs[num]||num; }
+/**
+ * Échappe une chaîne pour une insertion sûre dans du HTML (texte ou
+ * attribut). Toute donnée provenant du FEC importé (libellés de comptes,
+ * nom de fichier) ou saisie par l'utilisateur (nom de dossier) doit
+ * passer par cette fonction avant toute affectation à `innerHTML`.
+ */
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+function libOf(num) { return escHtml(ACTIVE.libs[num]||num); }
 
 // ── PERIOD DATA ──
 function getPeriodData() {
@@ -1993,7 +2004,7 @@ function renderDashboard() {
 
   // Imports
   const ii=document.getElementById('imports-info');
-  if(ii)ii.innerHTML=`<b>${ACTIVE.filename||'—'}</b><br>${ACTIVE.nbLines||0} écritures · ${ACTIVE.periodStart||'—'} → ${ACTIVE.periodEnd||'—'}<br>Importé le ${ACTIVE.savedAt?new Date(ACTIVE.savedAt).toLocaleDateString('fr-FR'):'—'}`;
+  if(ii)ii.innerHTML=`<b>${escHtml(ACTIVE.filename||'—')}</b><br>${ACTIVE.nbLines||0} écritures · ${ACTIVE.periodStart||'—'} → ${ACTIVE.periodEnd||'—'}<br>Importé le ${ACTIVE.savedAt?new Date(ACTIVE.savedAt).toLocaleDateString('fr-FR'):'—'}`;
 }
 
 // ── P&L TABLE ──
@@ -2799,7 +2810,11 @@ function parseFECFile(text){
   for(let i=1;i<lines.length;i++){
     const c=lines[i].split(sep);
     if(c.length<Math.max(iC,iD,iCr)+1)continue;
-    const num=(c[iC]||'').trim();if(!num)continue;
+    // Le numéro de compte est un identifiant technique (jamais affiché tel
+    // quel sans passer par un rendu) : on retire les caractères dangereux
+    // pour le HTML par défense en profondeur, même si le compte n'est
+    // normalement jamais du texte libre dans un FEC bien formé.
+    const num=(c[iC]||'').trim().replace(/[<>&"']/g,'');if(!num)continue;
     const lib   = iCL>=0?(c[iCL]||'').trim():'';
     const d     = pn(c[iD]);
     const cr    = pn(c[iCr]);
@@ -2885,7 +2900,7 @@ function showNpStep(step){
   if(step===1){ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="closeNpModal()">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:20px;">Nouveau projet</div></div><div class="np-form"><label class="np-label" for="np-name">Nom du projet</label><input class="np-input" id="np-name" type="text" placeholder="Ex: Société Dupont" style="margin-bottom:20px;"><label class="np-label" style="margin-bottom:8px;display:block;">Format</label><div class="np-select-box selected"><div><div class="np-select-title">Diagnostic financier <span style="color:#a09d96;font-weight:400;">(par défaut)</span></div><div class="np-select-desc">Format de présentation adapté pour un diagnostic complet des données financières</div></div></div><div style="font-size:12px;color:#185FA5;cursor:pointer;margin-bottom:20px;">Paramètres avancés</div><button class="np-btn" onclick="npGoStep2()">Créer</button></div></div>`;
   } else {
     const name=_npNewName||'Nouveau dossier';
-    ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${name}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Import de FEC (recommandé) ou Grand Livre</div></div><div class="np-form"><div class="np-upload-zone" id="np-drop-zone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="npHandleDrop(event)" onclick="document.getElementById('np-file-input').click()"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a09d96" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg><p>Glissez votre FEC ici ou cliquez</p><small>Format .txt, .csv (séparateur tabulation)</small><input type="file" id="np-file-input" accept=".txt,.csv,.TXT,.CSV" style="display:none" onchange="npHandleFile(this)"></div><div id="np-file-status"></div><button class="np-btn" id="np-confirm-btn" onclick="npConfirm()" disabled>Analyser</button></div></div>`;
+    ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(name)}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Import de FEC (recommandé) ou Grand Livre</div></div><div class="np-form"><div class="np-upload-zone" id="np-drop-zone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="npHandleDrop(event)" onclick="document.getElementById('np-file-input').click()"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a09d96" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg><p>Glissez votre FEC ici ou cliquez</p><small>Format .txt, .csv (séparateur tabulation)</small><input type="file" id="np-file-input" accept=".txt,.csv,.TXT,.CSV" style="display:none" onchange="npHandleFile(this)"></div><div id="np-file-status"></div><button class="np-btn" id="np-confirm-btn" onclick="npConfirm()" disabled>Analyser</button></div></div>`;
   }
   document.body.appendChild(ov);
   if(step===1)setTimeout(()=>document.getElementById('np-name')?.focus(),50);
@@ -2933,7 +2948,7 @@ function addDossierCard(name,group,id,subtitle){
   if(!id)id='dossier-'+Date.now();
   const card=document.createElement('div');card.className='dossier-card active-card';card.dataset.name=name.toLowerCase();card.dataset.id=id;
   card.style.cssText='opacity:0;transform:scale(0.9);';
-  card.innerHTML=`<div class="dc-badge"></div><div class="dc-avatar" style="background:rgba(255,255,255,.12);color:#fff;">${initials}</div><div class="dc-name">${name}</div><div class="dc-sub">${subtitle||'FEC importé'}</div>${GEAR_BTN}`;
+  card.innerHTML=`<div class="dc-badge"></div><div class="dc-avatar" style="background:rgba(255,255,255,.12);color:#fff;">${escHtml(initials)}</div><div class="dc-name">${escHtml(name)}</div><div class="dc-sub">${escHtml(subtitle||'FEC importé')}</div>${GEAR_BTN}`;
   card.onclick=()=>openDossier(id);
   const uc=grid.querySelector('.upload-card');grid.insertBefore(card,uc);
   setTimeout(()=>{card.style.cssText='transition:opacity .3s,transform .3s;';},50);toast(`Dossier "${name}" créé`);
@@ -2978,7 +2993,6 @@ function showAffecPanel(p,el){document.querySelectorAll('.affec-sub-panel').forE
 // (Uses same renderMapping/chipHtml/mpRename/etc from previous version but reading ACTIVE state)
 let _drag=null,_pCtx=null,_pSel=new Set(),_openGroups=new Set(),_mappingRenderedOnce=false;
 function balOf(num){return ACTIVE.bal[num]||0;}
-function libOf(num){return ACTIVE.libs[num]||num;}
 function plV(num){const v=ACTIVE.bal[num]||0,cl=num[0];if(cl==='7')return v;if(cl==='6')return -v;return 0;}
 
 function renderMapping(key){
@@ -3116,7 +3130,7 @@ function _moveAcc(toKey,toGid,toSubId){
  * pour signaler une source "hors mapping".
  */
 function orphanChipHtml(num) {
-  const lbl = ACTIVE.libs?.[num] || num;
+  const lbl = escHtml(ACTIVE.libs?.[num] || num);
   const v   = ACTIVE.bal?.[num] || 0;
   const vc  = v >= 0 ? '#3B6D11' : '#A32D2D';
   const vStr = Math.abs(v) >= 1e6 ? (v<0?'−':'')+(Math.abs(v)/1e6).toFixed(1)+'M€'
@@ -3502,7 +3516,7 @@ function tmCompute(mos) {
       if (n.startsWith('76') || n.startsWith('77')) return false;
       return bal[n] > 0; // Produit : solde créditeur → stocké positif
     })
-    .map(n => ({ compte: n, lib: libs[n] || n, montant: bal[n] }))
+    .map(n => ({ compte: n, lib: escHtml(libs[n] || n), montant: bal[n] }))
     .sort((a, b) => b.montant - a.montant)
     .slice(0, 8);
 
@@ -3623,7 +3637,7 @@ function tmRenderPeriodLabel() {
     : '';
 
   el.innerHTML = `Exercice ${start.slice(0,4)} · ${d.nb} mois · ${fmt(start)} → ${fmt(end)}`
-    + ` · ${ACTIVE.filename || ''}` + profileBadge + fallbackBadge;
+    + ` · ${escHtml(ACTIVE.filename || '')}` + profileBadge + fallbackBadge;
 
   // Badge risque
   const badge = document.getElementById('tm-risk-badge-top');
@@ -4714,7 +4728,7 @@ function _renderOrphanBlock(elId, orphans, dupes, key, bal) {
   const el = document.getElementById(elId);
   if (!el) return;
 
-  const lib  = n => ACTIVE.libs?.[n] || n;
+  const lib  = n => escHtml(ACTIVE.libs?.[n] || n);
   const money = v => {
     const a = Math.abs(v), s = v < 0 ? '−' : '';
     return a >= 1e6 ? s+(a/1e6).toFixed(2)+' M€'
@@ -5591,7 +5605,7 @@ function runBilanDiagnostic() {
     let s = abs >= 1e6 ? (abs/1e6).toFixed(2)+' M€' : abs >= 1e3 ? Math.round(abs/1e3)+'K€' : Math.round(abs)+'€';
     return (neg ? '−' : showSign && v > 0 ? '+' : '') + s;
   };
-  const lib = n => libs[n] || n;
+  const lib = n => escHtml(libs[n] || n);
 
   // ── TEST 1 : Balance du FEC ──
   let fecBalance = 0;
