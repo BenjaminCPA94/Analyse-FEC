@@ -1433,6 +1433,13 @@ const STORE_KEY = 'fec_analyse_v2';
 const MPS_VERSION = 5; // v5: dédoublonnage intégré à autoAffectOrphans + auto-clean onglet affectation bilan avec side='actif'|'passif', 44x/48x split dynamique, injection résultat
 
 /**
+ * Tolérance (en euros) de l'invariant Actif = Passif + Résultat net.
+ * Un FEC bien formé peut présenter un écart résiduel de quelques euros
+ * dû aux arrondis à 2 décimales cumulés sur l'exercice — cf. AUDIT.md §(i).
+ */
+const BALANCE_TOLERANCE_EUR = 5;
+
+/**
  * migrateLocalStorage()
  * ─────────────────────────────────────────────────────────────────────────
  * Détecte et purge automatiquement les mappings obsolètes dans localStorage.
@@ -1506,8 +1513,36 @@ function fmtK(n) {
 function pct(v,b){ return b?((v/b)*100).toFixed(1)+' %':'—'; }
 
 // ── STORAGE ──
-function loadStore() { try{return JSON.parse(localStorage.getItem(STORE_KEY)||'{}')}catch{return{}} }
-function saveStore(data) { try{localStorage.setItem(STORE_KEY,JSON.stringify(data))}catch(e){toast('Stockage insuffisant',true)} }
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }
+  catch(e) {
+    console.warn('[FEC Analyse] localStorage illisible (JSON corrompu) :', e);
+    toast('Stockage local illisible — les dossiers précédents sont peut-être perdus', true);
+    return {};
+  }
+}
+/**
+ * saveStore(data)
+ * Persiste tous les dossiers dans localStorage. En cas de quota dépassé
+ * (QuotaExceededError), affiche un message actionnable plutôt qu'un
+ * simple "stockage insuffisant" — le dossier en cours de traitement
+ * n'est alors PAS sauvegardé silencieusement en échec : l'utilisateur
+ * est invité à exporter/nettoyer avant de continuer.
+ */
+function saveStore(data) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    return true;
+  } catch(e) {
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+      toast('Stockage plein : exportez ou supprimez un dossier avant de continuer (Paramètres → Confidentialité)', true);
+    } else {
+      toast('Échec de sauvegarde locale : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
+    }
+    console.error('[FEC Analyse] saveStore() a échoué :', e);
+    return false;
+  }
+}
 
 function saveActiveDossier() {
   if (!ACTIVE.id) return;
@@ -2274,13 +2309,13 @@ function buildBilanTables() {
   const ecart = Math.abs(totalActif - totalPassif);
   const equilibreEl = document.getElementById('bilan-equilibre');
   if (equilibreEl) {
-    if (ecart < 5) {
+    if (ecart < BALANCE_TOLERANCE_EUR) {
       equilibreEl.innerHTML = `<span style="color:#3B6D11;font-weight:700;">
         ✓ Bilan équilibré — Total Actif = Total Passif = ${fmtV(totalActif)}
         ${ecart > 0 ? `<span style="font-weight:400;font-size:10px;opacity:.7;">(écart ${fmtV(ecart)} = arrondi FEC)</span>` : ''}
       </span>`;
     } else {
-      const causeHint = Math.abs(ecart - Math.abs(resultatCalcule)) < 5
+      const causeHint = Math.abs(ecart - Math.abs(resultatCalcule)) < BALANCE_TOLERANCE_EUR
         ? 'Le résultat (12x) n\'est pas encore affecté — injection automatique active'
         : ecart < 1000 ? 'Écart mineur — vérifiez les comptes non classés'
         : 'Comptes manquants dans le mapping — cliquez sur Affectation des comptes';
@@ -5586,7 +5621,7 @@ function runBilanDiagnostic() {
     if (cl === '7') fecBalance -= bal[n]; // bal[7x]=cr-d → réinverser
     else            fecBalance += bal[n]; // bal[1-6x]=d-cr
   });
-  const fecOk = Math.abs(fecBalance) < 5;
+  const fecOk = Math.abs(fecBalance) < BALANCE_TOLERANCE_EUR;
 
   // ── TEST 2 : Masses Actif/Passif/Résultat ──
   const inCR    = getAllMappedAccounts('cr');
@@ -5621,7 +5656,7 @@ function runBilanDiagnostic() {
   if (!has12) passifMasse += resultatMasse;
 
   const ecartMasses = actifMasse - passifMasse;
-  const bilanOk = Math.abs(ecartMasses) < 5;
+  const bilanOk = Math.abs(ecartMasses) < BALANCE_TOLERANCE_EUR;
 
   // ── TEST 3 : Comptes à sens inversé ──
   const wrongSide = [];
