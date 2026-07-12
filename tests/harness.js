@@ -132,6 +132,10 @@ function buildSandbox() {
       }
     },
     Intl,
+    TextDecoder,
+    TextEncoder,
+    Uint8Array,
+    ArrayBuffer,
     Math,
     Date,
     JSON,

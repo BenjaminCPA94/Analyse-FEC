@@ -2890,12 +2890,39 @@ function npGoStep2(){const name=(document.getElementById('np-name')?.value||'').
 function npHandleDrop(e){e.preventDefault();document.getElementById('np-drop-zone')?.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)npSetFile(f);}
 function npHandleFile(input){if(input.files[0])npSetFile(input.files[0]);}
 function npSetFile(file){_npFile=file;const s=document.getElementById('np-file-status');if(s)s.innerHTML=`<div class="np-file-ok"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${file.name} · ${(file.size/1024).toFixed(0)} Ko</div>`;const btn=document.getElementById('np-confirm-btn');if(btn)btn.disabled=false;}
+/**
+ * decodeFecBuffer(buffer)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Décode le contenu binaire d'un fichier FEC en texte, en détectant
+ * l'encodage réel au lieu de forcer Latin-1 :
+ *  1. BOM UTF-8 (EF BB BF) présent → UTF-8 sans ambiguïté.
+ *  2. Sinon, tentative de décodage UTF-8 strict (`fatal:true`) : si le
+ *     fichier est bien de l'UTF-8 valide (cas fréquent des exports FEC
+ *     récents, notamment avec libellés accentués), on le garde.
+ *  3. Sinon (séquences invalides en UTF-8), repli sur Windows-1252
+ *     (sur-ensemble de Latin-1, encodage historique le plus courant des
+ *     exports FEC français).
+ */
+function decodeFecBuffer(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3));
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (e) {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+}
 function npConfirm(){
   if(!_npFile)return;
   const btn=document.getElementById('np-confirm-btn');if(btn){btn.disabled=true;btn.textContent='Analyse en cours…';}
   const reader=new FileReader();
   reader.onload=e=>{
-    const parsed=parseFECFile(e.target.result);
+    let text;
+    try { text = decodeFecBuffer(e.target.result); }
+    catch(err) { toast('Impossible de déterminer l’encodage du fichier',true); if(btn){btn.disabled=false;btn.textContent='Analyser';} return; }
+    const parsed=parseFECFile(text);
     if(!parsed){toast('FEC invalide — vérifiez le format',true);if(btn){btn.disabled=false;btn.textContent='Analyser';}return;}
     const id='dossier-'+Date.now();
     const year=parsed.periodEnd?parsed.periodEnd.slice(0,4):new Date().getFullYear();
@@ -2916,7 +2943,7 @@ function npConfirm(){
     }, 400);
   };
   reader.onerror=()=>toast('Erreur de lecture',true);
-  reader.readAsText(_npFile,'latin1');
+  reader.readAsArrayBuffer(_npFile);
 }
 function closeNpModal(){const el=document.getElementById('np-overlay');if(el)el.remove();}
 function handleHomeUpload(input){if(input.files[0]){_npFile=input.files[0];_npNewName='Nouveau dossier';showNpStep(2);setTimeout(()=>npSetFile(_npFile),100);}}
