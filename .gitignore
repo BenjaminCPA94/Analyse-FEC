@@ -1,0 +1,7 @@
+# Clés API / secrets — ne jamais committer
+scripts/pennylane-sync/.env
+*.env
+!.env.example
+
+# FEC téléchargés localement (données comptables, pas du code)
+scripts/pennylane-sync/FEC_*.txt
