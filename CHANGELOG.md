@@ -4,6 +4,29 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Comparaison N/N-1 : alignement, postes dépliables, grand livre
+
+- **Correctif d'alignement** : les colonnes (Poste/N/N-1/Variation) du
+  Compte de résultat et du Bilan en mode comparaison étaient décalées
+  par rapport à l'en-tête (deux systèmes de mise en page différents
+  entre lignes et en-tête). En-tête et lignes utilisent désormais la
+  même grille CSS, alignement garanti par construction.
+- **Postes à nouveau dépliables en comparaison** : cliquer sur un poste
+  (CR ou Bilan) affiche le détail par compte, avec la valeur de
+  l'exercice courant et de l'exercice de comparaison côte à côte —
+  même mécanisme que la vue mono-exercice.
+- **Nouveau : grand livre par compte.** Cliquer sur n'importe quel
+  compte (vue normale ou comparaison) ouvre le détail écriture par
+  écriture (date, journal, pièce, libellé, débit, crédit, solde
+  cumulé). Ce détail n'est conservé qu'en mémoire pendant la session
+  (jamais écrit sur le disque, pour éviter de saturer le stockage
+  local sur de gros FEC) — un message invite à réimporter le FEC si le
+  détail n'est plus disponible après un rechargement de page.
+- 5 nouveaux tests (`tests/test_grand_livre.js`) + vérification
+  Playwright/Chromium du parcours complet. Suite complète : 117 tests,
+  tous verts.
+- Voir AUDIT.md §(q) pour le détail complet.
+
 ## v6 — Multi-exercices : import de plusieurs FEC + comparaison N/N-1
 
 - **Nouvel onglet « Suivi des imports »** : liste, pour le dossier

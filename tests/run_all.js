@@ -88,6 +88,9 @@ reportResults('Exports', require('./test_exports.js').run(htmlPath));
 section('10. Multi-exercices — migration, ajout, comparaison N/N-1');
 reportResults('Multi-exercices', require('./test_multi_exercices.js').run(htmlPath));
 
+section('11. Grand livre — détail par compte');
+reportResults('Grand livre', require('./test_grand_livre.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

@@ -94,6 +94,7 @@
   .dc{display:grid;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;column-gap:0;}
   .dc.has-pct{grid-template-columns:20px 1fr 120px 80px;}
   .dc.no-pct{grid-template-columns:20px 1fr 120px;}
+  .dc.cmp3{grid-template-columns:20px 1fr 110px 110px 110px;}
   .dc-bold{font-weight:700;background:#f4f3f0!important;}
   .dc-bold:hover{background:#eeede9!important;}
   .dr-sub{display:none;}
@@ -101,7 +102,12 @@
   .dcs{display:grid;align-items:center;padding:7px 16px 7px 36px;border-bottom:1px solid var(--border);background:var(--surface2);column-gap:0;}
   .dcs.has-pct{grid-template-columns:64px 1fr 120px 80px;}
   .dcs.no-pct{grid-template-columns:64px 1fr 120px;}
+  .dcs.cmp3{grid-template-columns:64px 1fr 110px 110px 110px;}
   .dcs:hover{background:#eeede9;}
+  .dcs-acct{cursor:pointer;}
+  .dcs-acct .num-code{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;}
+  .dc-head{background:var(--surface2);border-bottom:1px solid var(--border);}
+  .dc-head .lbl,.dc-head .amt{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);}
   .chevron{width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);transition:transform .15s;flex-shrink:0;}
   .dr-group.expanded .chevron{transform:rotate(90deg);}
   .lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:12px;}
@@ -1593,6 +1599,17 @@ function saveStore(data) {
 function saveActiveDossier() {
   if (!ACTIVE.id) return;
   const store = loadStore();
+  // Le détail écriture par écriture (ledger, cf. openGrandLivre()) n'est
+  // JAMAIS persisté : un FEC réel peut compter des centaines de milliers
+  // de lignes, ce qui dépasserait vite le quota localStorage (~5-10 Mo)
+  // et ferait échouer la sauvegarde de tout le dossier. On n'enregistre
+  // qu'une copie de ACTIVE.exercices sans ce champ.
+  const exercicesToSave = ACTIVE.exercices
+    ? Object.fromEntries(Object.entries(ACTIVE.exercices).map(([exId, ex]) => {
+        const { ledger, ...rest } = ex;
+        return [exId, rest];
+      }))
+    : null;
   store[ACTIVE.id] = {
     id: ACTIVE.id, name: ACTIVE.name, group: ACTIVE.group,
     bal: ACTIVE.bal, libs: ACTIVE.libs, months: ACTIVE.months,
@@ -1601,7 +1618,7 @@ function saveActiveDossier() {
     mps: ACTIVE.mps, mps_version: MPS_VERSION,
     isRDCompany: ACTIVE.isRDCompany||false,
     revenueTypes: ACTIVE.revenueTypes||{},
-    exercices: ACTIVE.exercices || null,
+    exercices: exercicesToSave,
     activeExerciceId: ACTIVE.activeExerciceId || null,
     savedAt: Date.now()
   };
@@ -1661,6 +1678,7 @@ function switchExercice(exId) {
   ACTIVE.bal = ex.bal; ACTIVE.libs = ex.libs; ACTIVE.months = ex.months;
   ACTIVE.nbLines = ex.nbLines; ACTIVE.periodStart = ex.periodStart;
   ACTIVE.periodEnd = ex.periodEnd; ACTIVE.filename = ex.filename;
+  ACTIVE.ledger = ex.ledger || null;
   schedSave();
   renderDashboard();
 }
@@ -2376,7 +2394,7 @@ function buildCRTable() {
             html += `<tr class="dr-sub" data-parent="${gk}"
                           data-subparent="${sk}">
               <td colspan="3" style="padding:0">
-                <div class="dcs has-pct" style="padding-left:44px;">
+                <div class="dcs has-pct dcs-acct" style="padding-left:44px;" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
                   <span class="num-code">${num}</span>
                   <span class="lbl-muted">${libOf(num)}</span>
                   <span class="amt-sm ${sc}">${fmtV(sv)}</span>
@@ -2392,7 +2410,7 @@ function buildCRTable() {
           const sc = sv >= 0 ? 'pos' : 'neg';
           html += `<tr class="dr-sub" data-parent="${gk}">
             <td colspan="3" style="padding:0">
-              <div class="dcs has-pct">
+              <div class="dcs has-pct dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
                 <span class="num-code">${num}</span>
                 <span class="lbl-muted">${libOf(num)}</span>
                 <span class="amt-sm ${sc}">${fmtV(sv)}</span>
@@ -2407,7 +2425,7 @@ function buildCRTable() {
           const sc = sv >= 0 ? 'pos' : 'neg';
           html += `<tr class="dr-sub" data-parent="${gk}">
             <td colspan="3" style="padding:0">
-              <div class="dcs has-pct">
+              <div class="dcs has-pct dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
                 <span class="num-code">${num}</span>
                 <span class="lbl-muted">${libOf(num)}</span>
                 <span class="amt-sm ${sc}">${fmtV(sv)}</span>
@@ -2455,11 +2473,18 @@ function buildCRTable() {
 /**
  * buildCRTableCompare()
  * Variante de buildCRTable() affichant une comparaison entre l'exercice
- * actif et l'exercice choisi via "Comparer avec" (3 colonnes : exercice
- * courant, exercice de comparaison, variation en €). Reprend la même
- * structure SIG (postes/sous-totaux) que buildCRTable(), au niveau
- * poste uniquement (sans détail compte par compte), à l'image de la
- * vue comparative Pennylane. Cf. AUDIT.md §(p).
+ * actif et l'exercice choisi via "Comparer avec" (Poste / exercice
+ * courant / exercice de comparaison / variation en €), à l'image de la
+ * vue comparative Pennylane. Les postes restent dépliables (même
+ * mécanisme toggleGroup()/data-parent que buildCRTable()) pour voir le
+ * détail par compte, avec la valeur de chaque exercice côte à côte.
+ *
+ * ALIGNEMENT : l'en-tête et chaque ligne utilisent la MÊME grille CSS
+ * (.dc.cmp3, grid-template-columns identique) au sein d'une unique
+ * cellule <td colspan> — un tableau HTML classique désynchronise les
+ * <th> réels (dimensionnés par leur propre contenu) des colonnes
+ * internes en grille utilisées par buildCRTable()/buildBilanHalf(),
+ * ce qui provoquait un décalage visuel (cf. AUDIT.md §(q)).
  */
 function buildCRTableCompare() {
   const tb = document.getElementById('tbCR');
@@ -2470,7 +2495,13 @@ function buildCRTableCompare() {
   const thead = document.getElementById('thead-cr');
   const curLabel = (ACTIVE.exercices && ACTIVE.exercices[ACTIVE.activeExerciceId]?.label) || 'Exercice';
   const cmpLabel = compareEx.label;
-  if (thead) thead.innerHTML = `<tr><th style="width:40%">Poste</th><th class="r">${escHtml(curLabel)}</th><th class="r">${escHtml(cmpLabel)}</th><th class="r">Variation €</th></tr>`;
+  if (thead) thead.innerHTML = `<tr><th colspan="4" style="padding:0"><div class="dc cmp3 dc-head">
+    <span class="chevron"></span>
+    <span class="lbl">Poste</span>
+    <span class="amt">${escHtml(curLabel)}</span>
+    <span class="amt">${escHtml(cmpLabel)}</span>
+    <span class="amt">Variation €</span>
+  </div></th></tr>`;
 
   const mps = ACTIVE.mps?.cr || [];
   const plVFor = (bal, num) => {
@@ -2485,10 +2516,27 @@ function buildCRTableCompare() {
     (g.subs || []).forEach(s => (s.accounts || []).forEach(n => { t += plVFor(bal, n); }));
     return t;
   };
+  const acctRow = (gk, num, sk) => {
+    const cv = plVFor(ACTIVE.bal, num), pv = plVFor(compareEx.bal, num), vv = cv - pv;
+    return `<tr class="dr-sub" data-parent="${gk}"${sk ? ` data-subparent="${sk}"` : ''}>
+      <td colspan="4" style="padding:0">
+        <div class="dcs cmp3 dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+          <span class="num-code">${num}</span>
+          <span class="lbl-muted">${libOf(num)}</span>
+          <span class="amt-sm ${cv >= 0 ? 'pos' : 'neg'}">${fmtV(cv)}</span>
+          <span class="amt-sm" style="color:var(--text3);">${fmtV(pv)}</span>
+          <span class="amt-sm ${vv >= 0 ? 'pos' : 'neg'}">${vv >= 0 ? '+' : ''}${fmtV(vv)}</span>
+        </div>
+      </td></tr>`;
+  };
 
   let runningCur = 0, runningCmp = 0, html = '';
-  mps.forEach(g => {
+  mps.forEach((g, idx) => {
     const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+    const hasSubs  = g.subs && g.subs.length > 0;
+    const hasAccts = g.accounts && g.accounts.length > 0;
+    const hasKids  = !isSubOrTotal && (hasSubs || hasAccts);
+    const gk = `crc_${idx}`;
     let curTotal, cmpTotal;
     if (!isSubOrTotal) {
       curTotal = groupTotalFor(ACTIVE.bal, g);
@@ -2499,27 +2547,69 @@ function buildCRTableCompare() {
     }
     const variance = curTotal - cmpTotal;
     const bold = isSubOrTotal ? ' dc-bold' : '';
-    html += `<tr class="dr-group">
+    html += `<tr class="dr-group${hasKids ? ' has-kids' : ''}" data-group="${gk}" onclick="toggleGroup('${gk}')">
       <td colspan="4" style="padding:0">
-        <div class="dc${bold}" style="display:flex;align-items:center;padding:8px 16px;">
-          <span class="lbl" style="flex:1;">${g.label}</span>
-          <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${fmtV(curTotal)}</span>
-          <span class="amt" style="min-width:110px;text-align:right;color:#6b6960;">${fmtV(cmpTotal)}</span>
-          <span class="amt ${variance >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
+        <div class="dc cmp3${bold}">
+          <span class="chevron">${hasKids ? '›' : ''}</span>
+          <span class="lbl">${g.label}</span>
+          <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}">${fmtV(curTotal)}</span>
+          <span class="amt" style="color:var(--text3);">${fmtV(cmpTotal)}</span>
+          <span class="amt ${variance >= 0 ? 'pos' : 'neg'}">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
         </div>
       </td></tr>`;
+
+    if (hasKids) {
+      if (hasSubs) {
+        g.subs.forEach(sub => {
+          let cst = 0, pst = 0;
+          (sub.accounts || []).forEach(n => { cst += plVFor(ACTIVE.bal, n); pst += plVFor(compareEx.bal, n); });
+          const vst = cst - pst;
+          const sk = `crc_sub_${idx}_${sub.id}`;
+          const shk = sub.accounts && sub.accounts.length > 0;
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="4" style="padding:0">
+              <div class="dcs cmp3" style="cursor:pointer;font-weight:600;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
+                <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
+                <span class="lbl">${sub.label}</span>
+                <span class="amt-sm ${cst >= 0 ? 'pos' : 'neg'}">${fmtV(cst)}</span>
+                <span class="amt-sm" style="color:var(--text3);">${fmtV(pst)}</span>
+                <span class="amt-sm ${vst >= 0 ? 'pos' : 'neg'}">${vst >= 0 ? '+' : ''}${fmtV(vst)}</span>
+              </div>
+            </td></tr>`;
+          (sub.accounts || []).forEach(num => { html += acctRow(gk, num, sk); });
+        });
+        (g.accounts || []).forEach(num => { html += acctRow(gk, num); });
+      } else {
+        (g.accounts || []).forEach(num => { html += acctRow(gk, num); });
+      }
+    }
   });
   const varianceRN = runningCur - runningCmp;
   html += `<tr class="dr-total">
     <td colspan="4" style="padding:0">
-      <div class="dc dc-bold" style="display:flex;align-items:center;padding:8px 16px;">
-        <span class="lbl" style="flex:1;">= Résultat net de l'exercice</span>
-        <span class="amt ${runningCur >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${fmtV(runningCur)}</span>
-        <span class="amt" style="min-width:110px;text-align:right;color:#6b6960;">${fmtV(runningCmp)}</span>
-        <span class="amt ${varianceRN >= 0 ? 'pos' : 'neg'}" style="min-width:110px;text-align:right;">${varianceRN >= 0 ? '+' : ''}${fmtV(varianceRN)}</span>
+      <div class="dc cmp3 dc-bold">
+        <span class="chevron"></span>
+        <span class="lbl">= Résultat net de l'exercice</span>
+        <span class="amt ${runningCur >= 0 ? 'pos' : 'neg'}">${fmtV(runningCur)}</span>
+        <span class="amt" style="color:var(--text3);">${fmtV(runningCmp)}</span>
+        <span class="amt ${varianceRN >= 0 ? 'pos' : 'neg'}">${varianceRN >= 0 ? '+' : ''}${fmtV(varianceRN)}</span>
       </div>
     </td></tr>`;
   tb.innerHTML = html;
+
+  // Sous-lignes de compte (niveau 3) repliées par défaut
+  document.querySelectorAll('[data-subparent]').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[data-group^="crc_sub_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`[data-subparent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
 }
 
 
@@ -2638,13 +2728,17 @@ function buildBilanTables() {
 /**
  * buildBilanTablesCompare()
  * Variante de buildBilanTables() affichant une comparaison entre
- * l'exercice actif et l'exercice choisi via "Comparer avec" (3 colonnes :
- * exercice courant, exercice de comparaison, variation en €), au niveau
- * poste/sous-total (sans détail compte par compte), à l'image de la vue
- * comparative Pennylane. N'effectue PAS l'injection du résultat net
- * calculé (propre à la vue Bilan mono-exercice authoritative pour le
- * contrôle d'équilibre) — vue de comparaison purement informative.
- * Cf. AUDIT.md §(p).
+ * l'exercice actif et l'exercice choisi via "Comparer avec" (Poste /
+ * exercice courant / exercice de comparaison / variation en €), à
+ * l'image de la vue comparative Pennylane. Les postes restent
+ * dépliables (même mécanisme toggleGroup()/data-parent que
+ * buildBilanHalf()) pour voir le détail par compte de chaque exercice.
+ * Le résultat net calculé (compte 12x absent) est affiché à titre
+ * informatif pour chaque exercice dans le détail des capitaux propres,
+ * mais — contrairement à buildBilanHalf() — n'est PAS injecté dans le
+ * total Capitaux propres affiché : le contrôle d'équilibre Actif=Passif
+ * authoritative reste celui de la vue Bilan mono-exercice (#bilan-
+ * equilibre, calculé par buildBilanTables()). Cf. AUDIT.md §(p)/(q).
  */
 function buildBilanTablesCompare() {
   const tbA = document.getElementById('tbActif'), tbP = document.getElementById('tbPassif');
@@ -2655,7 +2749,13 @@ function buildBilanTablesCompare() {
 
   const curLabel = (ACTIVE.exercices && ACTIVE.exercices[ACTIVE.activeExerciceId]?.label) || 'Exercice';
   const cmpLabel = compareEx.label;
-  const headHtml = `<tr><th style="width:40%">Poste</th><th class="r">${escHtml(curLabel)}</th><th class="r">${escHtml(cmpLabel)}</th><th class="r">Variation €</th></tr>`;
+  const headHtml = `<tr><th colspan="4" style="padding:0"><div class="dc cmp3 dc-head">
+    <span class="chevron"></span>
+    <span class="lbl">Poste</span>
+    <span class="amt">${escHtml(curLabel)}</span>
+    <span class="amt">${escHtml(cmpLabel)}</span>
+    <span class="amt">Variation €</span>
+  </div></th></tr>`;
   const theadA = document.getElementById('thead-actif'), theadP = document.getElementById('thead-passif');
   if (theadA) theadA.innerHTML = headHtml;
   if (theadP) theadP.innerHTML = headHtml;
@@ -2667,34 +2767,124 @@ function buildBilanTablesCompare() {
     (g.subs || []).forEach(s => (s.accounts || []).forEach(n => { t += (bal[n] || 0) * sign; }));
     return t;
   };
+  // Résultat net calculé (7x-6x) — affiché à titre informatif si le
+  // compte 12x est absent du FEC, cf. buildBilanTables() CORRECTION 1.
+  const resultatFor = (bal) => {
+    let calc = 0;
+    Object.keys(bal).forEach(n => {
+      const cl = n[0];
+      if (cl === '7') calc += bal[n];
+      if (cl === '6') calc -= bal[n];
+    });
+    const enBilan = Object.keys(bal).filter(n => n.startsWith('12')).reduce((s, n) => s + bal[n], 0);
+    return Math.abs(enBilan) < 1 ? calc : 0;
+  };
+  const rnCur = resultatFor(ACTIVE.bal), rnCmp = resultatFor(compareEx.bal);
 
   ['actif', 'passif'].forEach(side => {
     const sign = side === 'passif' ? -1 : 1;
     const groups = allGroups.filter(g => g.side === side);
-    let runningCur = 0, runningCmp = 0, html = '';
-    groups.forEach(g => {
+    let html = '';
+    let runningCur = 0, runningCmp = 0;
+    groups.forEach((g, idx) => {
       const isSubOrTotal = g.type === 'subtotal' || g.type === 'total';
+      const hasSubs  = g.subs && g.subs.length > 0;
+      const hasAccts = g.accounts && g.accounts.length > 0;
+      const isCapPropres = side === 'passif' && (g.id === 'bp1' || g.label.toLowerCase().includes('capitaux propres'));
+      const hasRN = isCapPropres && (Math.abs(rnCur) > 1 || Math.abs(rnCmp) > 1);
+      const hasKids = !isSubOrTotal && (hasSubs || hasAccts || hasRN);
+      const gk = `bilc_${side}_${idx}`;
       let curTotal, cmpTotal;
       if (!isSubOrTotal) {
         curTotal = groupSumFor(ACTIVE.bal, g, sign);
         cmpTotal = groupSumFor(compareEx.bal, g, sign);
+        if (isCapPropres) { curTotal += rnCur; cmpTotal += rnCmp; }
         runningCur += curTotal; runningCmp += cmpTotal;
       } else {
+        // Sous-total/total : snapshot du cumul courant (même logique que
+        // buildBilanHalf()).
         curTotal = runningCur; cmpTotal = runningCmp;
       }
       const variance = curTotal - cmpTotal;
       const bold = isSubOrTotal ? ' dc-bold' : '';
-      html += `<tr class="dr-group">
+      html += `<tr class="dr-group${hasKids ? ' has-kids' : ''}" data-group="${gk}" onclick="toggleGroup('${gk}')">
         <td colspan="4" style="padding:0">
-          <div class="dc${bold}" style="display:flex;align-items:center;padding:8px 16px;">
-            <span class="lbl" style="flex:1;">${g.label}</span>
-            <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}" style="min-width:100px;text-align:right;">${fmtV(curTotal)}</span>
-            <span class="amt" style="min-width:100px;text-align:right;color:#6b6960;">${fmtV(cmpTotal)}</span>
-            <span class="amt ${variance >= 0 ? 'pos' : 'neg'}" style="min-width:100px;text-align:right;">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
+          <div class="dc cmp3${bold}">
+            <span class="chevron">${hasKids ? '›' : ''}</span>
+            <span class="lbl">${g.label}</span>
+            <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}">${fmtV(curTotal)}</span>
+            <span class="amt" style="color:var(--text3);">${fmtV(cmpTotal)}</span>
+            <span class="amt ${variance >= 0 ? 'pos' : 'neg'}">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
           </div>
         </td></tr>`;
+
+      if (hasKids) {
+        const acctRow = (num, sk) => {
+          const cv = (ACTIVE.bal[num] || 0) * sign, pv = (compareEx.bal[num] || 0) * sign, vv = cv - pv;
+          return `<tr class="dr-sub" data-parent="${gk}"${sk ? ` data-subparent="${sk}"` : ''}>
+            <td colspan="4" style="padding:0">
+              <div class="dcs cmp3 dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                <span class="num-code">${num}</span>
+                <span class="lbl-muted">${libOf(num)}</span>
+                <span class="amt-sm ${cv >= 0 ? 'pos' : 'neg'}">${fmtV(cv)}</span>
+                <span class="amt-sm" style="color:var(--text3);">${fmtV(pv)}</span>
+                <span class="amt-sm ${vv >= 0 ? 'pos' : 'neg'}">${vv >= 0 ? '+' : ''}${fmtV(vv)}</span>
+              </div>
+            </td></tr>`;
+        };
+        if (hasSubs) {
+          g.subs.forEach(sub => {
+            let cst = 0, pst = 0;
+            (sub.accounts || []).forEach(n => { cst += (ACTIVE.bal[n] || 0) * sign; pst += (compareEx.bal[n] || 0) * sign; });
+            const vst = cst - pst;
+            const sk = `bilc_sub_${side}_${idx}_${sub.id}`;
+            const shk = sub.accounts && sub.accounts.length > 0;
+            html += `<tr class="dr-sub" data-parent="${gk}">
+              <td colspan="4" style="padding:0">
+                <div class="dcs cmp3" style="cursor:pointer;font-weight:600;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
+                  <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
+                  <span class="lbl">${sub.label}</span>
+                  <span class="amt-sm ${cst >= 0 ? 'pos' : 'neg'}">${fmtV(cst)}</span>
+                  <span class="amt-sm" style="color:var(--text3);">${fmtV(pst)}</span>
+                  <span class="amt-sm ${vst >= 0 ? 'pos' : 'neg'}">${vst >= 0 ? '+' : ''}${fmtV(vst)}</span>
+                </div>
+              </td></tr>`;
+            (sub.accounts || []).forEach(num => { html += acctRow(num, sk); });
+          });
+          (g.accounts || []).forEach(num => { html += acctRow(num); });
+        } else {
+          (g.accounts || []).forEach(num => { html += acctRow(num); });
+        }
+        if (hasRN) {
+          const vrn = rnCur - rnCmp;
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="4" style="padding:0">
+              <div class="dcs cmp3">
+                <span class="num-code" style="color:#185FA5;font-weight:700;">12x</span>
+                <span class="lbl-muted">Résultat de l'exercice (calculé)</span>
+                <span class="amt-sm ${rnCur >= 0 ? 'pos' : 'neg'}">${fmtV(rnCur)}</span>
+                <span class="amt-sm" style="color:var(--text3);">${fmtV(rnCmp)}</span>
+                <span class="amt-sm ${vrn >= 0 ? 'pos' : 'neg'}">${vrn >= 0 ? '+' : ''}${fmtV(vrn)}</span>
+              </div>
+            </td></tr>`;
+        }
+      }
     });
     (side === 'actif' ? tbA : tbP).innerHTML = html;
+  });
+
+  // Sous-lignes de compte repliées par défaut + toggle imbriqué des sous-catégories
+  document.querySelectorAll('[data-subparent]').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[data-group^="bilc_sub_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`[data-subparent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
   });
 }
 
@@ -2821,7 +3011,7 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
             const sv=balOf(num)*sign, sc=sv>=0?'pos':'neg';
             html+=`<tr class="dr-sub" data-parent="${gk}" data-subparent="${sk}">
               <td colspan="2" style="padding:0">
-                <div class="dcs no-pct" style="padding-left:44px;">
+                <div class="dcs no-pct dcs-acct" style="padding-left:44px;" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
                   <span class="num-code">${num}</span>
                   <span class="lbl-muted">${libOf(num)}</span>
                   <span class="amt-sm ${sc}">${fmtV(sv)}</span>
@@ -2835,7 +3025,7 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
         const sv=balOf(num)*sign, sc=sv>=0?'pos':'neg';
         html+=`<tr class="dr-sub" data-parent="${gk}">
           <td colspan="2" style="padding:0">
-            <div class="dcs no-pct">
+            <div class="dcs no-pct dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
               <span class="num-code">${num}</span>
               <span class="lbl-muted">${libOf(num)}</span>
               <span class="amt-sm ${sc}">${fmtV(sv)}</span>
@@ -2943,6 +3133,81 @@ function toggleGroup(id){
   const row=document.querySelector(`[data-group="${id}"]`);
   if(row){const chev=row.querySelector('.chevron');if(chev)chev.style.transform=isOpen?'':'rotate(90deg)';}
 }
+
+/** fmtDateFR(yyyymmdd) Formate une date FEC (AAAAMMJJ) en JJ/MM/AAAA — retourne la chaîne d'origine si le format est inattendu. */
+function fmtDateFR(d) {
+  if (!d || d.length !== 8) return d || '';
+  return `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}`;
+}
+
+/**
+ * openGrandLivre(num)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Ouvre une fenêtre modale listant le détail écriture par écriture
+ * (grand livre) du compte `num` pour l'exercice actuellement affiché.
+ *
+ * STOCKAGE : le détail ligne à ligne (ACTIVE.ledger / ACTIVE.exercices[
+ * id].ledger) n'est conservé qu'EN MÉMOIRE, pour la durée de la session
+ * — il n'est jamais écrit dans localStorage (cf. saveActiveDossier() qui
+ * exclut délibérément ce champ). Un FEC réel peut compter plusieurs
+ * centaines de milliers de lignes ; le stocker intégralement en local-
+ * Storage risquerait de dépasser le quota du navigateur (~5-10 Mo) et de
+ * faire échouer la sauvegarde de TOUT le dossier (cf. AUDIT.md §(q)).
+ * Conséquence assumée : après un rechargement de page (ou changement
+ * d'exercice suivi d'un retour), le détail n'est plus disponible tant
+ * que le FEC n'a pas été réimporté — un message l'indique clairement
+ * plutôt que d'afficher un tableau vide.
+ */
+function openGrandLivre(num) {
+  document.getElementById('gl-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'np-overlay';
+  ov.id = 'gl-overlay';
+  ov.addEventListener('click', () => ov.remove());
+
+  const lines = ACTIVE.ledger && ACTIVE.ledger[num];
+  if (!lines || !lines.length) {
+    ov.innerHTML = `<div class="np-modal" onclick="event.stopPropagation()">
+      <div class="np-modal-hd" style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>Grand livre — ${escHtml(num)}<div style="font-size:12px;font-weight:400;color:#a09d96;margin-top:2px;">${libOf(num)}</div></div>
+        <button class="np-back" style="margin:0;" onclick="document.getElementById('gl-overlay').remove()">✕</button>
+      </div>
+      <div class="np-form" style="font-size:13px;color:#6b6960;line-height:1.5;">
+        Détail non disponible pour ce compte sur cet exercice — le grand livre n'est conservé qu'en mémoire pendant la session en cours (jamais enregistré sur le disque). Si vous avez rechargé la page ou changé de dossier depuis l'import, réimportez ce FEC pour revoir le détail.
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    return;
+  }
+
+  let running = 0;
+  const rows = lines.map(l => {
+    running += (l.d || 0) - (l.cr || 0);
+    return `<tr>
+      <td>${escHtml(fmtDateFR(l.dt))}</td>
+      <td>${escHtml(l.jr || '')}</td>
+      <td>${escHtml(l.pc || '')}</td>
+      <td>${escHtml(l.lb || '')}</td>
+      <td class="r">${l.d ? fmtV(l.d) : ''}</td>
+      <td class="r">${l.cr ? fmtV(l.cr) : ''}</td>
+      <td class="r">${fmtV(running)}</td>
+    </tr>`;
+  }).join('');
+
+  ov.innerHTML = `<div class="np-modal" onclick="event.stopPropagation()" style="width:860px;max-width:92vw;max-height:84vh;display:flex;flex-direction:column;">
+    <div class="np-modal-hd" style="display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;">
+      <div>Grand livre — ${escHtml(num)}<div style="font-size:12px;font-weight:400;color:#a09d96;margin-top:2px;">${libOf(num)} · ${lines.length} écriture${lines.length > 1 ? 's' : ''}</div></div>
+      <button class="np-back" style="margin:0;" onclick="document.getElementById('gl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:16px 24px 24px;overflow:auto;">
+      <table class="dt" style="width:100%;">
+        <thead><tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Libellé</th><th class="r">Débit</th><th class="r">Crédit</th><th class="r">Solde cumulé</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
 function showAffecPanel(panel,el){
   document.querySelectorAll('.affec-sub-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.affec-nav').forEach(n=>n.classList.remove('active'));
@@ -3018,7 +3283,7 @@ function openDossier(id){
   if(d){
     const {exercices, activeExerciceId} = ensureExercices(d);
     const activeEx = exercices[activeExerciceId];
-    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId};
+    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId,ledger:activeEx.ledger||null};
     // Force regenerate mapping if version is outdated or mapping has no subs defined
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
     if(!ACTIVE.mps || mpsOutdated){
@@ -3126,6 +3391,7 @@ function parseFECFile(text){
   const iD    = col('debit','montantdebit');
   const iCr   = col('credit','montantcredit');
   const iDt   = col('ecrituredate','datecriture','datepiece','date');
+  const iPc   = col('pieceref','numeropiece','numpiece','piece');
   if(iC<0||iD<0||iCr<0)return null;
 
   const pn=s=>parseFloat((s||'0').replace(/\s/g,'').replace(',','.'))||0;
@@ -3148,7 +3414,7 @@ function parseFECFile(text){
     return false;
   }
 
-  const bal={},libs={},months={},rawLines=[];
+  const bal={},libs={},months={},rawLines=[],ledger={};
   let nb=0,nbAN=0;
 
   for(let i=1;i<lines.length;i++){
@@ -3165,9 +3431,15 @@ function parseFECFile(text){
     const date  = iDt>=0?(c[iDt]||'').trim().replace(/-/g,''):'';
     const jrnl  = iJrnl>=0?(c[iJrnl]||'').trim():'';
     const ecLib = iLib>=0?(c[iLib]||'').trim():'';
+    const piece = iPc>=0?(c[iPc]||'').trim():'';
     const mo    = date.length>=6?date.slice(0,6):null;
     const cl    = num[0];
     if(lib&&!libs[num])libs[num]=lib;
+
+    // Grand livre : détail écriture par écriture par compte (cf.
+    // openGrandLivre() — conservé en mémoire seulement, jamais persisté).
+    if(!ledger[num])ledger[num]=[];
+    ledger[num].push({dt:date,jr:jrnl,pc:piece,lb:ecLib||lib||'',d,cr});
 
     const anEcr = isAN(jrnl,ecLib);
     if(anEcr){nbAN++;} else {nb++;}
@@ -3226,7 +3498,7 @@ function parseFECFile(text){
     cir_cii:accs.filter(n=>n.startsWith('699')).reduce((s,n)=>s+Math.abs(bal[n]),0),
   };
 
-  return{bal,libs,months,rawLines,nbLines:nb,nbAN,
+  return{bal,libs,months,rawLines,ledger,nbLines:nb,nbAN,
     periodStart:mos[0]||'',periodEnd:mos[mos.length-1]||'',
     isRDCompany,revenueTypes,parserVersion:3};
 }
@@ -3344,6 +3616,12 @@ function finishNpConfirm(parsed){
     // Ouvrir le dossier puis affecter automatiquement les orphelins selon PCG 2026
     setTimeout(()=>{
       openDossier(id);
+      // Grand livre : attaché en mémoire seulement (jamais persisté, cf.
+      // openGrandLivre()) sur l'exercice qui vient d'être créé.
+      if(ACTIVE.id===id && ACTIVE.exercices && ACTIVE.activeExerciceId){
+        ACTIVE.exercices[ACTIVE.activeExerciceId].ledger = parsed.ledger;
+        ACTIVE.ledger = parsed.ledger;
+      }
       // Lancer l'affectation automatique après rendu initial (délai court)
       setTimeout(()=>{
         if(ACTIVE.id===id) autoAffectOrphans();
@@ -3374,6 +3652,7 @@ function addExerciceToActiveDossier(parsed, filename) {
     id: exId, label, bal: parsed.bal, libs: parsed.libs, months: parsed.months,
     nbLines: parsed.nbLines, periodStart: parsed.periodStart, periodEnd: parsed.periodEnd,
     filename, importedAt: Date.now(),
+    ledger: parsed.ledger, // en mémoire seulement — cf. openGrandLivre()
   };
   closeNpModal();
   switchExercice(exId);

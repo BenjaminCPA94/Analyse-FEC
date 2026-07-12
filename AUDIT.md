@@ -516,3 +516,80 @@ comparaison est active (`buildBilanTablesCompare()` ajoute la classe,
   Compte de résultat et le Bilan → tableaux à 4 colonnes avec labels
   d'exercice et variations correctes, 0 erreur console JS.
 - Suite complète : 112 tests, tous verts.
+
+## (q) Retour utilisateur sur la comparaison N/N-1 : alignement, postes dépliables, grand livre
+
+Après livraison de la comparaison N/N-1 (§(p)), retour utilisateur sur
+capture d'écran : les colonnes du Compte de résultat comparatif
+apparaissaient décalées par rapport à l'en-tête (POSTE/2025/2024/
+VARIATION €), les postes n'étaient plus dépliables comme en vue
+mono-exercice, et l'utilisateur a demandé à pouvoir aller jusqu'au
+détail du grand livre (écriture par écriture) de chaque compte.
+
+**(1) Décalage visuel — cause et correctif.** Le rendu du CR/Bilan
+mono-exercice n'utilise PAS de vraies colonnes `<table>` pour les
+montants : chaque ligne est une unique `<td colspan>` contenant un
+`<div>` en CSS Grid (`.dc.has-pct{grid-template-columns:20px 1fr 120px
+80px}`, `.dc.no-pct{...}`) qui simule les colonnes. `buildCRTableCompare()`
+et `buildBilanTablesCompare()` avaient été écrites avec un tout autre
+mécanisme (flex + `min-width` en style inline) pour les lignes, alors
+que l'en-tête (`<thead>`) utilisait de vraies colonnes `<th>` — les deux
+systèmes de dimensionnement (grid interne à largeurs fixes vs `<th>`
+proportionnels) ne s'alignaient qu'approximativement. Corrigé en
+généralisant le MÊME mécanisme CSS Grid aux deux vues : nouvelle classe
+`.dc.cmp3`/`.dcs.cmp3` (`grid-template-columns:20px 1fr 110px 110px
+110px`), et l'en-tête utilise désormais lui aussi un unique `<th
+colspan>` contenant un `<div class="dc cmp3 dc-head">` avec la même
+grille — alignement garanti par construction, plus par coïncidence de
+proportions.
+
+**(2) Postes dépliables en comparaison.** `buildCRTableCompare()` et
+`buildBilanTablesCompare()` ont été réécrites pour reprendre le même
+mécanisme de dépliage que les vues mono-exercice
+(`toggleGroup()`/`data-parent`/`data-subparent`, chevrons `›`) :
+cliquer sur un poste affiche désormais ses sous-catégories puis ses
+comptes, avec la valeur de l'exercice courant, celle de l'exercice de
+comparaison et la variation, côte à côte pour chaque compte. Pour le
+Bilan, le résultat net calculé (compte 12x absent, cf. §(k)) est
+maintenant aussi affiché — à titre informatif, pour les deux exercices
+— dans le détail des capitaux propres ; contrairement à la vue
+mono-exercice, il n'est PAS utilisé pour le contrôle d'équilibre
+Actif=Passif (qui reste celui, authoritative, de `buildBilanTables()`)
+— cette vue de comparaison reste volontairement informative.
+
+**(3) Grand livre par compte.** Nouvelle fonction `openGrandLivre(num)`
+: un clic sur n'importe quelle ligne de compte (mono-exercice ou
+comparaison, CR ou Bilan) ouvre une fenêtre modale listant le détail
+écriture par écriture du compte pour l'exercice affiché (date,
+journal, pièce, libellé, débit, crédit, solde cumulé).
+
+  - `parseFECFile()` construit désormais, en plus de `bal`/`libs`/
+    `months`, un objet `ledger` (`{ [compte]: [{dt,jr,pc,lb,d,cr}, …] }`)
+    à partir de CHAQUE ligne du FEC (y compris les écritures à
+    nouveau, contrairement à `rawLines` qui les exclut).
+  - **Stockage strictement en mémoire, jamais persisté.** Un FEC réel
+    peut compter plusieurs centaines de milliers de lignes ; conserver
+    ce détail dans localStorage (quota navigateur ~5-10 Mo) ferait
+    échouer la sauvegarde de tout le dossier pour les FEC volumineux
+    déjà pris en charge par ailleurs (cf. §(k), FEC 500 000 lignes).
+    `saveActiveDossier()` construit donc explicitement une copie de
+    `ACTIVE.exercices` en retirant le champ `ledger` avant de
+    sérialiser vers localStorage. Conséquence assumée et documentée
+    dans le code : après un rechargement de page, `openGrandLivre()`
+    affiche un message explicite invitant à réimporter le FEC plutôt
+    qu'un tableau vide silencieux.
+  - Le ledger est rattaché à l'exercice concerné dès l'import (nouveau
+    dossier ou « Ajouter un exercice ») et suit `switchExercice()` :
+    `ACTIVE.ledger` pointe toujours sur le détail de l'exercice
+    actuellement affiché.
+
+**Preuves** : `tests/test_grand_livre.js` (5 cas — construction du
+ledger par `parseFECFile()`, contenu des champs, affichage de la
+modale avec le détail, message de repli si le détail est absent,
+exclusion effective du ledger du payload localStorage). Vérification
+en navigateur réel (Chromium + Playwright) : alignement pixel-parfait
+de l'en-tête et des lignes en comparaison CR/Bilan, dépliage d'un poste
+jusqu'au compte en mode comparaison, clic sur un compte → ouverture de
+la modale grand livre avec le détail correct (date formatée JJ/MM/AAAA,
+montants, solde cumulé), 0 erreur console. Suite complète : 117 tests,
+tous verts.
