@@ -1533,6 +1533,11 @@ function fmtK(n) {
 function pct(v,b){ return b?((v/b)*100).toFixed(1)+' %':'—'; }
 
 // ── STORAGE ──
+/**
+ * loadStore()
+ * Charge tous les dossiers persistés (localStorage[STORE_KEY]).
+ * @returns {object} Map { dossierId → dossier }, {} si absent/corrompu.
+ */
 function loadStore() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }
   catch(e) {
@@ -1564,6 +1569,11 @@ function saveStore(data) {
   }
 }
 
+/**
+ * saveActiveDossier()
+ * Persiste l'état courant du dossier ouvert (ACTIVE) dans localStorage.
+ * No-op si aucun dossier n'est ouvert (ACTIVE.id falsy).
+ */
 function saveActiveDossier() {
   if (!ACTIVE.id) return;
   const store = loadStore();
@@ -1712,6 +1722,16 @@ function defaultMPS_CR(bal) {
   ];
 }
 
+/**
+ * defaultMPS_Bilan(bal)
+ * Génère le squelette VIDE du Bilan (Actif/Passif) selon le PCG 2026 —
+ * chaque groupe porte un champ `side` ('actif'|'passif') utilisé par
+ * buildBilanTables()/tmGroupSum(). Rempli ensuite par autoAffectOrphans().
+ * @param {object} bal Non utilisé directement (signature conservée pour
+ *   symétrie avec defaultMPS_CR(bal)) — les comptes sont injectés par
+ *   autoAffectOrphans(), pas ici.
+ * @returns {Array<object>} Liste des groupes du Bilan.
+ */
 function defaultMPS_Bilan(bal) {
   const G = (id, label, type, side, subs) =>
     ({ id, label, type, side, accounts: [], subs: subs||[] });
@@ -1895,6 +1915,13 @@ function updateChart(id,labels,datasets) {
 }
 
 // ── RENDER ALL DASHBOARD ──
+/**
+ * renderDashboard()
+ * Point d'entrée du rendu complet du dossier ouvert : titre, KPIs de
+ * synthèse, graphiques CA/résultat/charges. Appelée à l'ouverture d'un
+ * dossier et après tout changement de devise/période. Ne mute jamais
+ * ACTIVE.mps (lecture seule) — cf. AUDIT.md §(h).
+ */
 function renderDashboard() {
   const pd = getPeriodData();
   const resV = pd.ca.map((c,i)=>c-pd.ch[i]);
@@ -2725,6 +2752,14 @@ function openDossier(id){
 }
 
 // Check if a mapping already has subcategories defined
+/**
+ * hasSubs(mps)
+ * Détecte si un mapping est à jour (structure v3+ : sous-groupes CR et
+ * champ `side` sur les groupes Bilan). Utilisée par migrateLocalStorage()
+ * pour décider si un mapping doit être régénéré.
+ * @param {?object} mps { cr, bilan } ou null.
+ * @returns {boolean}
+ */
 function hasSubs(mps) {
   if(!mps||!mps.cr||!mps.bilan) return false;
   // Valid if CR has subcategories AND bilan has side field (v3+)
@@ -2748,20 +2783,30 @@ function toast(msg,isErr){
 }
 
 // ── FEC PARSER ──
+/**
+ * parseFECFile(text)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Parser FEC — Conformité L.47 A du LPF — PCG 2024.
+ * Accepte un séparateur tabulation ou '|', résout les colonnes par nom
+ * d'en-tête (indépendant de leur ordre), et tolère montants à virgule
+ * décimale et lignes vides/malformées.
+ *
+ * EXCLUSION DES À-NOUVEAUX :
+ *   Détection par JournalCode (AN, OUV, RAN…) ET EcritureLib.
+ *   Les AN de classe 6-7 sont EXCLUS des soldes P&L.
+ *   Les AN de classe 1-5 sont INCLUS (solde bilan d'ouverture requis).
+ *
+ * CONVENTION DES SOLDES :
+ *   bal[6xx] = Débit - Crédit  (positif = charge nette)
+ *   bal[7xx] = Crédit - Débit  (positif = produit net)
+ *   bal[1-5] = Débit - Crédit  (positif = solde débiteur)
+ *
+ * @param {string} text Contenu texte déjà décodé du fichier FEC.
+ * @returns {?object} { bal, libs, months, rawLines, nbLines, nbAN,
+ *   periodStart, periodEnd, isRDCompany, revenueTypes, parserVersion }
+ *   ou null si le fichier est vide/invalide (colonnes requises absentes).
+ */
 function parseFECFile(text){
-  /*
-   * Parser FEC — Conformité L.47 A du LPF — PCG 2024
-   *
-   * EXCLUSION DES À-NOUVEAUX :
-   *   Détection par JournalCode (AN, OUV, RAN…) ET EcritureLib.
-   *   Les AN de classe 6-7 sont EXCLUS des soldes P&L.
-   *   Les AN de classe 1-5 sont INCLUS (solde bilan d'ouverture requis).
-   *
-   * CONVENTION DES SOLDES :
-   *   bal[6xx] = Débit - Crédit  (positif = charge nette)
-   *   bal[7xx] = Crédit - Débit  (positif = produit net)
-   *   bal[1-5] = Débit - Crédit  (positif = solde débiteur)
-   */
   const lines=text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length<2)return null;
 
@@ -4617,11 +4662,13 @@ function buildBilanCsvRows() {
   return rows;
 }
 
+/** exportCRToCSV() Télécharge le détail du Compte de Résultat courant en CSV (cf. buildCRCsvRows()). */
 function exportCRToCSV() {
   if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
   downloadTextFile(`CR_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildCRCsvRows()), 'text/csv');
   toast('Export CSV du Compte de Résultat téléchargé');
 }
+/** exportBilanToCSV() Télécharge le détail du Bilan courant (Actif+Passif) en CSV (cf. buildBilanCsvRows()). */
 function exportBilanToCSV() {
   if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
   downloadTextFile(`Bilan_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildBilanCsvRows()), 'text/csv');
@@ -5809,6 +5856,13 @@ function autoAffectOrphans() {
 
 
 
+/**
+ * fixAllDuplicates()
+ * Supprime les doublons intra-table (un même compte affecté à plusieurs
+ * groupes/sous-groupes d'une même table CR ou Bilan), en conservant la
+ * première occurrence rencontrée. Ne traite pas les doublons cross-table
+ * CR↔Bilan (gérés par l'étape 0 de autoAffectOrphans()).
+ */
 function fixAllDuplicates() {
   let fixed = 0;
   ['cr','bilan'].forEach(key => {
