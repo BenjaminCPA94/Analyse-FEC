@@ -100,6 +100,9 @@ reportResults('TNS', require('./test_tns.js').run(htmlPath));
 section('14. Rémunération dirigeant — moteur d\'optimisation (RemunerationEngine)');
 reportResults('Rémunération dirigeant', require('./test_remuneration_engine.js').run(htmlPath));
 
+section('15. IRPP — moteur de calcul et recherche de cases (IrppEngine / IRPP_CASES)');
+reportResults('IRPP', require('./test_irpp_engine.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

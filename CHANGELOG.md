@@ -4,6 +4,82 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Module « IRPP » (calcul de l'impôt sur le revenu + recherche de case déclarative)
+
+- **Nouvelle tuile d'accueil « IRPP »**, même architecture que les
+  modules Prévisionnel/TNS/Rémunération (stockage indépendant
+  `fec_analyse_irpp_v1`, liste + écran de déclaration, sauvegarde
+  automatique, suppression).
+- **Recherche de case en langage courant (`IRPP_CASES` /
+  `rechercherCasesIrpp`)** — fonctionnalité demandée explicitement :
+  catalogue de 18 cases fréquentes de la déclaration de revenus
+  (2042/2042 C/2044), chacune avec son formulaire, sa catégorie, un
+  descriptif et une liste de mots-clés. Un moteur de recherche par score
+  (correspondance exacte de mot-clé, sous-chaîne, mot à mot) permet de
+  taper une situation en langage courant (« dons », « j'ai fait des
+  dons », « nounou », « PER »...) et d'obtenir la ou les cases
+  correspondantes triées par pertinence, avec leur explication. Onglet
+  « Recherche de case », actif par défaut à l'ouverture d'une
+  déclaration, avec des suggestions cliquables (dons, PER, garde
+  d'enfant, emploi à domicile, loyer, dividendes, pension alimentaire,
+  plus-value) quand le champ est vide. Chaque champ de saisie de
+  l'onglet Revenus / Déductions-réductions-crédits affiche également un
+  badge avec sa case officielle (ex. « case 1AJ », « case 7UD »), pour
+  relier directement la saisie du foyer à la déclaration réelle.
+- **Barème IR jamais dupliqué** : `REGLES_IR_2025` référence directement
+  `REGLES_REMUNERATION_2025.ir.{bareme,decote,plafondParDemiPart,
+  abattementFraisPro}` (même objet, vérifié par test) — un seul barème
+  IR existe dans toute l'application. Les paramètres propres à ce module
+  (dons, PER, emploi à domicile, frais de garde, micro-foncier,
+  plafonnement des niches fiscales) sont additionnels, versionnés avec
+  leur source légale (article du CGI) et leur date de vérification.
+- **Moteur (`IrppEngine.calculerDeclaration`)** : revenu net global
+  imposable (salaires/pensions avec abattement borné de 10 %, foncier
+  micro ou réel, BIC/BNC), RCM au choix PFU (30 %, par défaut) ou option
+  barème progressif (irrévocable, abattement de 40 % sur les seuls
+  dividendes, prélèvements sociaux toujours dus), déductions du revenu
+  global (pensions alimentaires versées, PER plafonné à 10 % du revenu
+  professionnel avec un plancher, alerte explicite si le plafond est
+  dépassé), IR avec quotient familial plafonné et décote (réutilise
+  `RemunerationEngine.calculerIRAvecPlafonnement`, aucune logique de
+  barème dupliquée), réductions d'impôt (dons à deux taux avec report de
+  l'excédent du taux renforcé vers le taux normal, PME, Pinel — non
+  remboursables, plafonnées à l'impôt brut, plafonnement global des
+  niches fiscales de 10 000 €/an hors dons, alertes explicites en cas de
+  dépassement ou de perte), crédits d'impôt (emploi à domicile, frais de
+  garde — remboursables, peuvent générer une restitution si leur montant
+  dépasse l'impôt dû après réductions), taux marginal et taux moyen
+  d'imposition.
+- **Écran** : onglets Recherche de case / Revenus / Déductions-réductions-
+  crédits / Résultats (tableau détaillé du calcul, taux marginal/moyen,
+  impôt mensualisé, export CSV). Avertissement explicite renvoyant vers
+  le simulateur officiel des impôts pour toute déclaration réelle.
+- **Périmètre non couvert dans cette livraison** (annoncé, pas simulé en
+  silence) : catalogue de cases volontairement limité aux ~18 situations
+  les plus fréquentes (pas d'exhaustivité avec les ~400 cases réelles de
+  la 2042/2042 C) ; pas de calcul des prélèvements sociaux sur revenus
+  fonciers/professionnels (uniquement IR) ; pas de gestion des revenus
+  exceptionnels/différés (quotient de l'article 163-0 A CGI) ni du
+  report des déficits fonciers/dons sur plusieurs années ; pas
+  d'abattement pour durée de détention sur les plus-values mobilières
+  (option barème) ; pas de rattachement d'enfants majeurs ni de
+  gestion fine des pensions de réversion ; pas d'articulation avec le
+  prélèvement à la source (acompte/régularisation) — le module calcule
+  l'impôt dû sur les revenus, pas le solde après PAS déjà versé.
+- 44 nouveaux tests (`tests/test_irpp_engine.js`), couvrant les
+  abattements bornés, PFU vs option barème, déductions et leur
+  plafonnement (PER), réductions à deux taux avec report (dons),
+  plafonnement global des niches fiscales, non-remboursabilité des
+  réductions, remboursabilité des crédits (restitution), micro-foncier
+  vs réel, taux marginal par tranche, non-duplication du barème IR, et
+  la recherche de case pour l'exemple explicitement demandé
+  (« dons » → 7UD/7UF) — intégrés à `run_all.js`, 258 tests au total,
+  tous verts. Vérifié en navigateur headless (Playwright) : les 4
+  onglets, recherche en direct, badges de case, cycle de vie complet
+  (création/saisie/sauvegarde/liste), et non-régression intégrale de
+  tous les modules existants (Dossiers, Prévisionnel, TNS,
+  Rémunération dirigeant).
+
 ## v6 — Module « Rémunération dirigeant » (optimisation rémunération/dividendes)
 
 - **Nouvelle tuile d'accueil « Rémunération dirigeant »**, même architecture

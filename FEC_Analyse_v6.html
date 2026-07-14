@@ -665,6 +665,11 @@
         <div class="module-tile-title">Rémunération dirigeant</div>
         <div class="module-tile-sub">Comparez rémunération, dividendes et formes juridiques pour identifier la stratégie la plus adaptée au dirigeant et à son foyer fiscal.</div>
       </div>
+      <div class="module-tile" onclick="openModule('irpp')">
+        <div class="module-tile-icon">🔎</div>
+        <div class="module-tile-title">IRPP</div>
+        <div class="module-tile-sub">Calculez l'impôt sur le revenu du foyer et retrouvez, en langage courant, dans quelle case de la déclaration saisir chaque revenu ou charge (dons, PER, garde d'enfants...).</div>
+      </div>
     </div>
   </div>
 </div><!-- /module-menu-screen -->
@@ -1793,6 +1798,81 @@
     <div id="rmpanel-inverse" style="display:none;padding-top:16px;"></div>
   </div>
 </div><!-- /remu-screen -->
+
+<!-- ═══ IRPP — écran liste ═══ -->
+<div id="irpp-list-screen" style="display:none;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+    </div>
+  </div>
+  <div class="std-list-content" style="margin-top:56px;">
+    <div class="std-list-back" onclick="showModuleMenu()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      Accueil
+    </div>
+    <div class="std-list-header">
+      <div>
+        <h1>IRPP</h1>
+        <p>Calcul de l'impôt sur le revenu du foyer et recherche de case déclarative.</p>
+      </div>
+      <button class="params-btn-primary" onclick="creerNouvelleIrpp()">+ Nouvelle déclaration</button>
+    </div>
+    <div id="irpp-list-content">
+      <div class="std-empty">Aucune déclaration pour l'instant. Cliquez sur « + Nouvelle déclaration » pour commencer.</div>
+    </div>
+  </div>
+</div><!-- /irpp-list-screen -->
+
+<!-- ═══ IRPP — écran de déclaration ═══ -->
+<div id="irpp-screen" style="display:none;background:#f7f6f3;min-height:100vh;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+      <div class="home-nav">
+        <button class="home-nav-btn" onclick="backToIrppList()">← Liste des déclarations</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:56px;padding:20px 32px 60px;max-width:1180px;margin-left:auto;margin-right:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input id="irpp-name-input" type="text" oninput="onIrppNameChange(this.value)"
+          style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:200px;">
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;" id="irpp-annee-badge"></span>
+      </div>
+      <button class="params-btn-danger" onclick="deleteCurrentIrpp()" style="margin:0;">Supprimer</button>
+    </div>
+    <div style="background:#fff0e6;border:1px solid #e8643c;color:#e8643c;border-radius:8px;padding:8px 14px;font-size:11px;margin:12px 0;">
+      ⚠ Simulation d'aide à la décision basée sur des barèmes indicatifs — ne remplace pas le simulateur officiel des impôts (simulateur-ir-ifi.impots.gouv.fr) ni un conseil fiscal personnalisé. À valider avant toute déclaration réelle.
+    </div>
+    <div id="irpp-warning-banner"></div>
+
+    <div class="params-tabs-top" style="margin-top:8px;">
+      <div class="params-tab active" id="irtab-recherche" onclick="showIrppTab('recherche')">🔎 Recherche de case</div>
+      <div class="params-tab" id="irtab-revenus" onclick="showIrppTab('revenus')">Revenus</div>
+      <div class="params-tab" id="irtab-avantages" onclick="showIrppTab('avantages')">Déductions, réductions &amp; crédits</div>
+      <div class="params-tab" id="irtab-resultats" onclick="showIrppTab('resultats')">Résultats</div>
+    </div>
+
+    <div id="irpanel-recherche" style="padding-top:16px;"></div>
+    <div id="irpanel-revenus" style="display:none;padding-top:16px;"></div>
+    <div id="irpanel-avantages" style="display:none;padding-top:16px;"></div>
+    <div id="irpanel-resultats" style="display:none;padding-top:16px;"></div>
+  </div>
+</div><!-- /irpp-screen -->
 
 <script>
 // ═══════════════════════════════════════════════════════════
@@ -4097,7 +4177,7 @@ function goHome(){
  */
 function showModuleMenu(){
   if(ACTIVE.id) saveActiveDossier();
-  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen','remu-list-screen','remu-screen']
+  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen','remu-list-screen','remu-screen','irpp-list-screen','irpp-screen']
     .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   document.getElementById('module-menu-screen').style.display = 'flex';
 }
@@ -4123,6 +4203,9 @@ function openModule(mod){
   } else if (mod === 'remuneration') {
     renderRemuList();
     document.getElementById('remu-list-screen').style.display = 'block';
+  } else if (mod === 'irpp') {
+    renderIrppList();
+    document.getElementById('irpp-list-screen').style.display = 'block';
   }
 }
 
@@ -6750,6 +6833,620 @@ function exportRemuComparateurToCSV() {
   downloadTextFile(`Comparateur_statuts_${safeFilePart(REMU_ACTIVE.name)}.csv`, csvFromRows(rmScenariosToCsv(RM_COMPARISON_ROWS, scenarios)), 'text/csv');
   toast('Export CSV du comparateur de statuts téléchargé');
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — RÈGLES (config versionnée) ────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * REGLES_IR_2025 — paramètres du calcul de l'impôt sur le revenu des
+ * personnes physiques (déclaration 2042/2042 C). Le barème, la décote et
+ * le plafonnement du quotient familial sont ceux déjà définis dans
+ * REGLES_REMUNERATION_2025.ir (référencés, jamais dupliqués) : un seul
+ * barème IR existe dans l'application. Les paramètres propres aux
+ * réductions/crédits d'impôt et déductions (dons, PER, emploi à domicile,
+ * frais de garde, etc.) sont additionnels et spécifiques à ce module.
+ *
+ * BARÈME INDICATIF — année de référence 2025 (revenus 2024). À valider
+ * avant tout usage réel (BOFiP/service-public.fr/expert-comptable) : cf.
+ * avertissement affiché à l'écran.
+ */
+const REGLES_IR_2025 = {
+  annee: 2025,
+  source: 'Barèmes 2025 — legifrance.gouv.fr, bofip.impots.gouv.fr, service-public.fr',
+  derniereVerification: '2025-01-01',
+  bareme: REGLES_REMUNERATION_2025.ir.bareme,
+  decote: REGLES_REMUNERATION_2025.ir.decote,
+  plafondParDemiPart: REGLES_REMUNERATION_2025.ir.plafondParDemiPart,
+  abattementFraisPro: REGLES_REMUNERATION_2025.ir.abattementFraisPro,
+  abattementPensions: { taux: 0.10, min: 422, max: 4123, source: 'art. 158-5 a) CGI' },
+  pfu: REGLES_REMUNERATION_2025.pfu,
+  abattementDividendes: REGLES_REMUNERATION_2025.bareme_dividendes.abattement,
+  abattementMicroFoncier: 0.30,
+  plafondNichesFiscales: 10000,
+  dons: { tauxRenforce: 0.75, plafondRenforce: 1000, tauxNormal: 0.66, plafondNormalPctRevenu: 0.20, source: 'art. 200 et 200 bis CGI' },
+  emploiDomicile: { taux: 0.50, plafond: 12000, source: 'art. 199 sexdecies CGI' },
+  fraisGarde: { taux: 0.50, plafondParEnfant: 3500, source: 'art. 200 quater B CGI' },
+  per: { tauxPlafondRevenuPro: 0.10, plafondMinimum: 4399, source: 'art. 163 quatervicies CGI' },
+  pensionAlimentaireEnfantMajeur: { plafondParEnfant: 6794, source: 'art. 156-II-2° CGI' },
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — MOTEUR (pur) ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * IrppEngine — calcul d'une déclaration de revenus simplifiée : revenu
+ * imposable du foyer, IR avec quotient familial plafonné et décote
+ * (réutilise RemunerationEngine.calculerIRAvecPlafonnement, aucune
+ * duplication du moteur de barème), PFU vs option barème sur les revenus
+ * de capitaux mobiliers, déductions du revenu global, réductions
+ * d'impôt (non remboursables, plafonnées à l'IR brut) et crédits
+ * d'impôt (remboursables). Fonctions pures, testées indépendamment dans
+ * tests/test_irpp_engine.js.
+ */
+const IrppEngine = (function () {
+  /** calculerAbattementBorne(brut, cfg) — abattement proportionnel borné [min, brut]. */
+  function calculerAbattementBorne(brut, cfg) {
+    if (brut <= 0) return 0;
+    return Math.min(Math.max(brut * cfg.taux, cfg.min), Math.max(cfg.min, brut));
+  }
+
+  /**
+   * calculerDeclaration(d, regles)
+   * d.situationFamiliale, d.nbParts
+   * d.revenus: {salairesDecl1, salairesDecl2, pensionsDecl1, pensionsDecl2, bic, bnc,
+   *   fonciersBrut, fonciersMicro, dividendes, interets, plusValuesMobilieres, autresImposables}
+   * d.optionBaremeRCM: bool — option pour le barème progressif sur les RCM (sinon PFU par défaut)
+   * d.deductions: {pensionsAlimentairesVersees, versementsPER, revenuProfessionnelPourPER}
+   * d.reductions: {donsOrganismesDifficulte, donsAutresOrganismes, souscriptionPME, tauxPME, investissementPinel}
+   * d.credits: {emploiDomicile, fraisGardeMontant, fraisGardeNbEnfants}
+   */
+  function calculerDeclaration(d, regles) {
+    const alertes = [];
+    const r = d.revenus || {};
+    const nbParts = safe(d.nbParts) || 1;
+    const situationFamiliale = d.situationFamiliale || 'celibataire';
+
+    const salairesBrut = safe(r.salairesDecl1) + safe(r.salairesDecl2);
+    const salairesNet = Math.max(0, salairesBrut - calculerAbattementBorne(salairesBrut, regles.abattementFraisPro));
+    const pensionsBrut = safe(r.pensionsDecl1) + safe(r.pensionsDecl2);
+    const pensionsNet = Math.max(0, pensionsBrut - calculerAbattementBorne(pensionsBrut, regles.abattementPensions));
+
+    const fonciersNet = r.fonciersMicro
+      ? Math.max(0, safe(r.fonciersBrut) * (1 - regles.abattementMicroFoncier))
+      : safe(r.fonciersBrut); // régime réel : l'utilisateur saisit directement le net (issu de la 2044)
+
+    const dividendes = safe(r.dividendes), interets = safe(r.interets), pv = safe(r.plusValuesMobilieres);
+    let rcmDansRevenuGlobal = 0, prelevementForfaitaire = { ir: 0, ps: 0, total: 0 };
+    const psTotal = (dividendes + interets + pv) * regles.pfu.tauxPS; // prélèvements sociaux dus dans tous les cas (PFU ou option barème)
+    if (d.optionBaremeRCM) {
+      const dividendesImposables = dividendes * (1 - regles.abattementDividendes);
+      rcmDansRevenuGlobal = dividendesImposables + interets + pv; // PV mobilières : pas d'abattement pour durée de détention (simplifié)
+      prelevementForfaitaire = { ir: 0, ps: psTotal, total: psTotal };
+    } else {
+      const irForfait = (dividendes + interets + pv) * regles.pfu.tauxIR;
+      prelevementForfaitaire = { ir: irForfait, ps: psTotal, total: irForfait + psTotal };
+    }
+
+    const revenuBrutGlobal = safe(salairesNet + pensionsNet + safe(r.bic) + safe(r.bnc) + fonciersNet + rcmDansRevenuGlobal + safe(r.autresImposables));
+
+    // ── Déductions du revenu global ──
+    const dedPensions = Math.min(safe(d.deductions && d.deductions.pensionsAlimentairesVersees), revenuBrutGlobal);
+    const plafondPER = Math.max(regles.per.plafondMinimum, safe(d.deductions && d.deductions.revenuProfessionnelPourPER) * regles.per.tauxPlafondRevenuPro);
+    const versementsPER = Math.max(0, safe(d.deductions && d.deductions.versementsPER));
+    const dedPER = Math.min(versementsPER, plafondPER);
+    if (versementsPER > plafondPER) alertes.push(`Versements PER (${Math.round(versementsPER)} €) supérieurs au plafond déductible estimé (${Math.round(plafondPER)} €) — l'excédent n'est pas déductible cette année (sauf plafond non utilisé des 3 années précédentes, non pris en compte ici).`);
+
+    const revenuNetGlobal = Math.max(0, revenuBrutGlobal - dedPensions - dedPER);
+
+    const irBrut = RemunerationEngine.calculerIRAvecPlafonnement(revenuNetGlobal, nbParts, situationFamiliale, regles);
+
+    // ── Réductions d'impôt (non remboursables, imputées dans la limite de l'IR restant) ──
+    const dons1 = Math.min(safe(d.reductions && d.reductions.donsOrganismesDifficulte), regles.dons.plafondRenforce);
+    const donsExcedent = Math.max(0, safe(d.reductions && d.reductions.donsOrganismesDifficulte) - regles.dons.plafondRenforce);
+    const dons2 = safe(d.reductions && d.reductions.donsAutresOrganismes) + donsExcedent;
+    const plafondDons2 = revenuNetGlobal * regles.dons.plafondNormalPctRevenu;
+    const dons2Retenu = Math.min(dons2, Math.max(0, plafondDons2));
+    if (dons2 > plafondDons2) alertes.push(`Dons (hors organismes d'aide aux personnes en difficulté) supérieurs au plafond de 20% du revenu imposable — la fraction excédentaire est reportable sur les 5 années suivantes (non simulé ici).`);
+    const reductionDons = dons1 * regles.dons.tauxRenforce + dons2Retenu * regles.dons.tauxNormal;
+
+    const tauxPME = d.reductions && d.reductions.tauxPME !== undefined ? d.reductions.tauxPME : 0.18;
+    const reductionPME = safe(d.reductions && d.reductions.souscriptionPME) * tauxPME;
+    const reductionPinel = safe(d.reductions && d.reductions.investissementPinel);
+
+    const reductionsPlafonnables = reductionPME + reductionPinel; // hors dons, soumises au plafonnement global des niches fiscales
+    const reductionsPlafonnablesRetenues = Math.min(reductionsPlafonnables, regles.plafondNichesFiscales);
+    if (reductionsPlafonnables > regles.plafondNichesFiscales) alertes.push(`Réductions soumises au plafonnement global des niches fiscales (${Math.round(reductionsPlafonnables)} €) supérieures au plafond annuel de ${regles.plafondNichesFiscales} € — l'excédent est perdu (non reportable pour la plupart des dispositifs).`);
+
+    const totalReductionsAvantPlafonIR = reductionDons + reductionsPlafonnablesRetenues;
+    const reductionsImputees = Math.min(totalReductionsAvantPlafonIR, irBrut);
+    if (totalReductionsAvantPlafonIR > irBrut) alertes.push(`Réductions d'impôt (${Math.round(totalReductionsAvantPlafonIR)} €) supérieures à l'impôt brut (${Math.round(irBrut)} €) — une réduction d'impôt n'est jamais remboursable, la fraction excédentaire est perdue.`);
+    const irApresReductions = Math.max(0, irBrut - reductionsImputees);
+
+    // ── Crédits d'impôt (remboursables, non plafonnés à l'IR) ──
+    const creditEmploiDomicile = Math.min(safe(d.credits && d.credits.emploiDomicile), regles.emploiDomicile.plafond) * regles.emploiDomicile.taux;
+    const nbEnfantsGardes = Math.max(0, safe(d.credits && d.credits.fraisGardeNbEnfants));
+    const plafondGarde = nbEnfantsGardes * regles.fraisGarde.plafondParEnfant;
+    const creditGarde = Math.min(safe(d.credits && d.credits.fraisGardeMontant), Math.max(0, plafondGarde)) * regles.fraisGarde.taux;
+    const totalCredits = creditEmploiDomicile + creditGarde;
+
+    const irNetAvantPFU = irApresReductions - totalCredits; // peut être négatif = restitution
+    const irNetFinal = irNetAvantPFU + prelevementForfaitaire.total;
+
+    return {
+      salairesNet, pensionsNet, fonciersNet, revenuBrutGlobal, dedPensions, dedPER, revenuNetGlobal,
+      nbParts, situationFamiliale, irBrut,
+      reductionDons, reductionPME, reductionPinel, reductionsPlafonnablesRetenues, totalReductionsAvantPlafonIR, reductionsImputees, irApresReductions,
+      creditEmploiDomicile, creditGarde, totalCredits, irNetAvantPFU,
+      prelevementForfaitaire, irNetFinal,
+      tauxMarginal: revenuNetGlobal > 0 ? tauxMarginalPourRevenu(revenuNetGlobal, nbParts, regles) : 0,
+      tauxMoyen: revenuBrutGlobal > 0 ? irBrut / revenuBrutGlobal : 0,
+      alertes,
+    };
+  }
+
+  /** tauxMarginalPourRevenu — taux d'imposition de la dernière tranche atteinte par le quotient familial. */
+  function tauxMarginalPourRevenu(revenuImposable, nbParts, regles) {
+    const quotient = safe(revenuImposable) / Math.max(0.5, safe(nbParts));
+    for (const t of regles.bareme) {
+      if (t.jusqu === null || quotient <= t.jusqu) return t.taux;
+    }
+    return 0;
+  }
+
+  return { calculerAbattementBorne, calculerDeclaration, tauxMarginalPourRevenu };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — CATALOGUE DE CASES (recherche « quelle case pour... ») ─
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * IRPP_CASES — catalogue des cases les plus fréquentes de la déclaration
+ * de revenus (2042/2042 C), indexé par mots-clés pour une recherche en
+ * langage courant (« j'ai fait des dons » → 7UD/7UF). Portée volontairement
+ * limitée aux situations les plus courantes ; ne remplace pas le
+ * simulateur officiel des impôts ni un conseil personnalisé.
+ */
+const IRPP_CASES = [
+  { code: '1AJ', formulaire: '2042', categorie: 'Traitements et salaires', libelle: 'Salaires (déclarant 1)',
+    motsCles: ['salaire', 'salaires', 'traitement', 'paie', 'employeur', 'net imposable'],
+    aide: "Montant du salaire net imposable du déclarant 1, tel qu'indiqué par l'employeur (case « Net imposable » du bulletin de paie de décembre, ou pré-rempli)." },
+  { code: '1BJ', formulaire: '2042', categorie: 'Traitements et salaires', libelle: 'Salaires (déclarant 2)',
+    motsCles: ['salaire conjoint', 'salaire épouse', 'salaire époux', 'salaire partenaire'],
+    aide: "Même principe que 1AJ, pour le déclarant 2 (conjoint/partenaire de Pacs)." },
+  { code: '1AP', formulaire: '2042', categorie: 'Pensions et retraites', libelle: 'Pensions, retraites, rentes (déclarant 1)',
+    motsCles: ['retraite', 'pension', 'rente', 'caisse de retraite'],
+    aide: "Pensions de retraite perçues, avant abattement de 10% (appliqué automatiquement)." },
+  { code: '4BA', formulaire: '2044', categorie: 'Revenus fonciers', libelle: 'Revenus fonciers — régime réel, résultat bénéficiaire',
+    motsCles: ['loyer', 'location nue', 'revenu foncier', 'immeuble locatif', 'appartement loué'],
+    aide: "Location non meublée avec charges réelles (>15 000 €/an de loyers ou option pour le réel) : résultat net après charges, reporté depuis la 2044." },
+  { code: '4BB', formulaire: '2044', categorie: 'Revenus fonciers', libelle: 'Revenus fonciers — régime réel, déficit foncier',
+    motsCles: ['déficit foncier', 'travaux location', 'perte location nue'],
+    aide: "Déficit foncier (travaux, intérêts d'emprunt...) imputable sur le revenu global dans la limite de 10 700 €/an (hors intérêts d'emprunt)." },
+  { code: '4BE', formulaire: '2042', categorie: 'Revenus fonciers', libelle: 'Revenus fonciers — micro-foncier',
+    motsCles: ['micro foncier', 'petit loyer', 'location nue simple'],
+    aide: "Location non meublée avec loyers bruts ≤ 15 000 €/an : abattement forfaitaire de 30% appliqué automatiquement, pas de charges à détailler." },
+  { code: '2DC', formulaire: '2042', categorie: 'Revenus de capitaux mobiliers', libelle: 'Dividendes et revenus assimilés',
+    motsCles: ['dividende', 'dividendes', 'action', 'sicav', 'distribution société'],
+    aide: "Dividendes perçus. Éligibles à l'abattement de 40% en cas d'option pour le barème progressif ; sinon soumis au PFU (flat tax) de 30%." },
+  { code: '2TR', formulaire: '2042', categorie: 'Revenus de capitaux mobiliers', libelle: 'Intérêts et produits de placement à revenu fixe',
+    motsCles: ['intérêt', 'intérêts', 'livret', 'obligation', 'compte à terme', 'assurance vie fonds euros'],
+    aide: "Intérêts (comptes à terme, obligations...). Non éligibles à l'abattement de 40% (contrairement aux dividendes)." },
+  { code: '3VG', formulaire: '2042 C', categorie: 'Plus-values', libelle: 'Plus-values de cession de valeurs mobilières',
+    motsCles: ['plus value', 'plus-value', 'vente actions', 'cession titres', 'vente parts sociales'],
+    aide: "Plus-value réalisée lors de la vente de titres (actions, parts de SARL...). Soumise au PFU de 30% par défaut, option barème possible." },
+  { code: '6GU', formulaire: '2042', categorie: 'Charges déductibles', libelle: 'Pensions alimentaires versées à des enfants majeurs',
+    motsCles: ['pension alimentaire enfant majeur', 'pension étudiant', 'aide enfant majeur'],
+    aide: "Pension alimentaire versée à un enfant majeur non rattaché, déductible dans la limite de 6 794 € par enfant (2025)." },
+  { code: '6EL', formulaire: '2042', categorie: 'Charges déductibles', libelle: 'Pensions alimentaires versées (divorce, séparation)',
+    motsCles: ['pension alimentaire', 'pension divorce', 'prestation compensatoire versée', 'pension ex-conjoint'],
+    aide: "Pensions alimentaires versées sur décision de justice (ex-conjoint, enfants mineurs non rattachés...), déductibles du revenu global." },
+  { code: '6NS', formulaire: '2042', categorie: 'Charges déductibles', libelle: "Versements sur un Plan d'Épargne Retraite (PER)",
+    motsCles: ['per', 'plan epargne retraite', 'plan épargne retraite', 'retraite individuelle', 'perp', 'madelin'],
+    aide: "Versements volontaires sur un PER individuel, déductibles dans la limite de 10% des revenus professionnels de l'année précédente (avec un plancher, 4 399 € en 2025)." },
+  { code: '7UD', formulaire: '2042 RICI', categorie: 'Dons', libelle: "Dons aux organismes d'aide aux personnes en difficulté",
+    motsCles: ['don', 'dons', 'don restos du coeur', 'don association caritative', 'don personnes en difficulté', 'secours populaire'],
+    aide: "Dons aux organismes venant en aide aux personnes en difficulté (Restos du Cœur, Secours populaire...) : réduction d'impôt de 75% dans la limite de 1 000 € (2025), puis 66% au-delà (case 7UF)." },
+  { code: '7UF', formulaire: '2042 RICI', categorie: 'Dons', libelle: "Dons à d'autres organismes d'intérêt général",
+    motsCles: ['don', 'dons', 'don association', 'don fondation', 'don église', 'don parti politique'],
+    aide: "Dons à des organismes d'intérêt général ou reconnus d'utilité publique : réduction d'impôt de 66%, dans la limite de 20% du revenu imposable (excédent reportable 5 ans)." },
+  { code: '7CF', formulaire: '2042 C', categorie: 'Investissements', libelle: 'Souscription au capital de PME',
+    motsCles: ['souscription pme', 'investissement pme', 'capital pme', 'ir-pme', 'madelin pme'],
+    aide: "Souscription au capital de PME éligibles : réduction d'impôt (taux variable selon l'année, ~18-25%), soumise au plafonnement global des niches fiscales (10 000 €/an)." },
+  { code: '7QE', formulaire: '2042 C', categorie: 'Investissements', libelle: 'Investissement locatif Pinel',
+    motsCles: ['pinel', 'investissement locatif', 'défiscalisation immobilière'],
+    aide: "Investissement locatif Pinel : réduction d'impôt étalée sur la durée d'engagement, soumise au plafonnement global des niches fiscales (10 000 €/an)." },
+  { code: '7DB', formulaire: '2042 RICI', categorie: 'Emploi à domicile', libelle: "Emploi d'un salarié à domicile",
+    motsCles: ['femme de ménage', 'aide à domicile', "garde d'enfant à domicile", 'jardinier', 'cesu', 'employé de maison'],
+    aide: "Dépenses d'emploi à domicile (ménage, garde d'enfant, jardinage, CESU...) : crédit d'impôt de 50% dans la limite de 12 000 € (majorable), remboursable même sans impôt à payer." },
+  { code: '7GA', formulaire: '2042 RICI', categorie: 'Frais de garde', libelle: "Frais de garde d'enfants de moins de 6 ans",
+    motsCles: ['crèche', 'nounou', 'assistante maternelle', 'garde enfant', 'frais de garde'],
+    aide: "Frais de garde d'un enfant de moins de 6 ans (crèche, assistante maternelle...) : crédit d'impôt de 50%, plafonné à 3 500 € de dépenses par enfant, remboursable." },
+];
+
+/** irNormaliser(s) — minuscules, sans accents, ponctuation retirée (pour une recherche tolérante). */
+function irNormaliser(s) {
+  return (s || '').toString().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ').trim();
+}
+/** rechercherCasesIrpp(requete) — recherche en texte libre dans IRPP_CASES, triée par pertinence. */
+function rechercherCasesIrpp(requete) {
+  const q = irNormaliser(requete);
+  if (!q) return [];
+  const motsRequete = q.split(/\s+/).filter(Boolean);
+  const resultats = [];
+  for (const c of IRPP_CASES) {
+    let score = 0;
+    const hayCles = c.motsCles.map(irNormaliser);
+    const hayLibelle = irNormaliser(c.libelle);
+    const hayCategorie = irNormaliser(c.categorie);
+    for (const mc of hayCles) {
+      if (mc === q) score += 20;
+      else if (mc.includes(q) || q.includes(mc)) score += 10;
+    }
+    for (const mot of motsRequete) {
+      if (mot.length < 3) continue;
+      if (hayCles.some(mc => mc.includes(mot))) score += 5;
+      if (hayLibelle.includes(mot)) score += 3;
+      if (hayCategorie.includes(mot)) score += 1;
+    }
+    if (score > 0) resultats.push(Object.assign({}, c, { score }));
+  }
+  resultats.sort((a, b) => b.score - a.score);
+  return resultats;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — STOCKAGE ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+const IRPP_STORE_KEY = 'fec_analyse_irpp_v1';
+function loadIrppStore() {
+  try { return JSON.parse(localStorage.getItem(IRPP_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[IRPP] localStorage illisible :', e); toast('Stockage des déclarations IRPP illisible', true); return {}; }
+}
+function saveIrppStore(data) {
+  try { localStorage.setItem(IRPP_STORE_KEY, JSON.stringify(data)); return true; }
+  catch (e) { toast('Échec de sauvegarde de la déclaration : ' + (e && e.message || 'erreur inconnue'), true); console.error('[IRPP] saveIrppStore() a échoué :', e); return false; }
+}
+function saveIrpp(record) { record.updatedAt = Date.now(); const store = loadIrppStore(); store[record.id] = record; saveIrppStore(store); }
+function deleteIrppById(id) { const store = loadIrppStore(); delete store[id]; saveIrppStore(store); }
+function listIrpp() { return Object.values(loadIrppStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); }
+
+function creerIrppVierge(name) {
+  return {
+    id: 'irpp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: name || 'Nouvelle déclaration', createdAt: Date.now(), updatedAt: Date.now(),
+    reglesSnapshot: JSON.parse(JSON.stringify(REGLES_IR_2025)),
+    situationFamiliale: 'celibataire', nbParts: 1,
+    revenus: {
+      salairesDecl1: 0, salairesDecl2: 0, pensionsDecl1: 0, pensionsDecl2: 0, bic: 0, bnc: 0,
+      fonciersBrut: 0, fonciersMicro: true, dividendes: 0, interets: 0, plusValuesMobilieres: 0, autresImposables: 0,
+    },
+    optionBaremeRCM: false,
+    deductions: { pensionsAlimentairesVersees: 0, versementsPER: 0, revenuProfessionnelPourPER: 0 },
+    reductions: { donsOrganismesDifficulte: 0, donsAutresOrganismes: 0, souscriptionPME: 0, tauxPME: 0.18, investissementPinel: 0 },
+    credits: { emploiDomicile: 0, fraisGardeMontant: 0, fraisGardeNbEnfants: 0 },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — ÉCRAN LISTE ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+function renderIrppList() {
+  const el = document.getElementById('irpp-list-content');
+  if (!el) return;
+  const items = listIrpp();
+  if (!items.length) {
+    el.innerHTML = '<div class="std-empty">Aucune déclaration pour l\'instant. Cliquez sur « + Nouvelle déclaration » pour commencer.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="std-item-grid">${items.map(r => `
+    <div class="std-item-card" onclick="openIrppEditor('${r.id}')">
+      <div class="std-item-name">${escHtml(r.name)}</div>
+      <div class="std-item-meta">${r.situationFamiliale === 'couple' ? 'Couple' : 'Célibataire'} · ${r.nbParts} part(s) · barèmes ${r.reglesSnapshot.annee}</div>
+    </div>`).join('')}</div>`;
+}
+function creerNouvelleIrpp() {
+  const record = creerIrppVierge();
+  saveIrpp(record);
+  openIrppEditor(record.id);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE IRPP — ÉCRAN DE DÉCLARATION ────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+let IRPP_ACTIVE = null;
+let IRPP_TAB = 'recherche';
+let _irppSaveTimer = null;
+
+function openIrppEditor(id) {
+  const store = loadIrppStore();
+  const record = store[id];
+  if (!record) { toast('Déclaration introuvable', true); return; }
+  IRPP_ACTIVE = record;
+  ['home-screen', 'dashboard-screen', 'irpp-list-screen'].forEach(sid => { const e = document.getElementById(sid); if (e) e.style.display = 'none'; });
+  document.getElementById('irpp-screen').style.display = 'block';
+  showIrppTab('recherche');
+  renderIrpp();
+}
+function backToIrppList() {
+  if (IRPP_ACTIVE) saveIrpp(IRPP_ACTIVE);
+  IRPP_ACTIVE = null;
+  document.getElementById('irpp-screen').style.display = 'none';
+  document.getElementById('irpp-list-screen').style.display = 'block';
+  renderIrppList();
+}
+function deleteCurrentIrpp() {
+  if (!IRPP_ACTIVE) return;
+  if (!confirm(`Supprimer définitivement « ${IRPP_ACTIVE.name} » ?`)) return;
+  deleteIrppById(IRPP_ACTIVE.id);
+  IRPP_ACTIVE = null;
+  document.getElementById('irpp-screen').style.display = 'none';
+  document.getElementById('irpp-list-screen').style.display = 'block';
+  renderIrppList();
+  toast('Déclaration supprimée');
+}
+function onIrppNameChange(v) { if (!IRPP_ACTIVE) return; IRPP_ACTIVE.name = v || 'Déclaration'; schedSaveIrpp(); }
+function schedSaveIrpp() { clearTimeout(_irppSaveTimer); _irppSaveTimer = setTimeout(() => { if (IRPP_ACTIVE) saveIrpp(IRPP_ACTIVE); }, 800); }
+function showIrppTab(tab) {
+  IRPP_TAB = tab;
+  ['recherche', 'revenus', 'avantages', 'resultats'].forEach(t => {
+    document.getElementById('irtab-' + t)?.classList.toggle('active', t === tab);
+    const p = document.getElementById('irpanel-' + t);
+    if (p) p.style.display = (t === tab) ? 'block' : 'none';
+  });
+}
+
+/** irField(label, code, value, onchangeExpr, opts) — champ numérique avec badge de case déclarative associée. */
+function irField(label, code, value, onchangeExpr, opts) {
+  opts = opts || {};
+  const isPct = !!opts.pct;
+  const display = isPct ? safe(value) * 100 : safe(value);
+  const step = opts.step !== undefined ? opts.step : (isPct ? 0.5 : 100);
+  const badge = code ? `<span style="display:inline-block;background:#e6f1fb;color:#185FA5;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;white-space:nowrap;">case ${escHtml(code)}</span>` : '';
+  return `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">
+    <span>${escHtml(label)}${badge}</span>
+    <span style="display:flex;align-items:center;gap:4px;">
+      <input type="number" step="${step}" value="${round2(display)}"
+        style="width:100%;padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;"
+        onchange="${onchangeExpr}">
+      <span style="font-size:11px;color:#a09d96;flex-shrink:0;">${opts.suffix || (isPct ? '%' : '€')}</span>
+    </span>
+  </label>`;
+}
+
+/** irSetX — setters génériques déclenchant un re-rendu complet. */
+function irSetSituation(key, raw) {
+  IRPP_ACTIVE[key] = key === 'situationFamiliale' ? raw : (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0);
+  renderIrpp();
+}
+function irSetRevenu(key, raw, isBool) {
+  IRPP_ACTIVE.revenus[key] = isBool ? !!raw : (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0);
+  renderIrpp();
+}
+function irSetOptionBareme(checked) { IRPP_ACTIVE.optionBaremeRCM = !!checked; renderIrpp(); }
+function irSetDeduction(key, raw) { IRPP_ACTIVE.deductions[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
+function irSetReduction(key, raw) { IRPP_ACTIVE.reductions[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
+function irSetCredit(key, raw) { IRPP_ACTIVE.credits[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
+
+function renderIrpp() {
+  if (!IRPP_ACTIVE) return;
+  const nameEl = document.getElementById('irpp-name-input');
+  if (nameEl && nameEl.value !== IRPP_ACTIVE.name) nameEl.value = IRPP_ACTIVE.name;
+  const badge = document.getElementById('irpp-annee-badge');
+  if (badge) badge.textContent = 'Barèmes ' + IRPP_ACTIVE.reglesSnapshot.annee;
+
+  let compute;
+  try { compute = IrppEngine.calculerDeclaration(IRPP_ACTIVE, IRPP_ACTIVE.reglesSnapshot); }
+  catch (e) {
+    console.error('[IRPP] Erreur de calcul', e);
+    toast('Erreur de calcul : ' + e.message, true);
+    return;
+  }
+
+  const warnEl = document.getElementById('irpp-warning-banner');
+  if (warnEl) {
+    warnEl.innerHTML = compute.alertes.length
+      ? `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin:10px 0;">${compute.alertes.map(a => '⚠ ' + escHtml(a)).join('<br>')}</div>`
+      : '';
+  }
+
+  renderIrRecherche();
+  renderIrRevenus();
+  renderIrAvantages();
+  renderIrResultats(compute);
+  schedSaveIrpp();
+}
+
+// ── Onglet 1 : Recherche de case ─────────────────────────────────────────
+function renderIrRecherche() {
+  const el = document.getElementById('irpanel-recherche');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 6px;font-size:14px;">Dans quelle case dois-je déclarer... ?</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Décrivez votre situation en langage courant (ex. « dons », « nounou », « PER », « loyer »...) pour retrouver la case de la déclaration de revenus correspondante.</p>
+      <input id="ir-recherche-input" type="text" placeholder="Ex. : j'ai fait des dons..." oninput="irRecherche(this.value)"
+        style="width:100%;padding:10px 14px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:14px;box-sizing:border-box;">
+      <div id="ir-recherche-resultats" style="margin-top:14px;"></div>
+    </div>`;
+  const input = document.getElementById('ir-recherche-input');
+  if (input) irRecherche(input.value || '');
+}
+function irRecherche(query) {
+  const el = document.getElementById('ir-recherche-resultats');
+  if (!el) return;
+  const q = (query || '').trim();
+  if (!q) {
+    el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+      ${['dons', 'PER', 'nounou / crèche', 'femme de ménage', 'loyer', 'dividendes', 'pension alimentaire', 'plus-value actions'].map(ex =>
+        `<button onclick="document.getElementById('ir-recherche-input').value='${escHtml(ex)}';irRecherche('${escHtml(ex)}');" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:6px 10px;font-size:11px;color:#1a1916;cursor:pointer;text-align:left;">${escHtml(ex)}</button>`).join('')}
+    </div>`;
+    return;
+  }
+  const resultats = rechercherCasesIrpp(q);
+  if (!resultats.length) {
+    el.innerHTML = `<div class="std-empty" style="padding:20px;">Aucune case trouvée pour « ${escHtml(q)} ». Essayez un autre mot-clé, ou consultez le simulateur officiel des impôts.</div>`;
+    return;
+  }
+  el.innerHTML = resultats.slice(0, 6).map(c => `
+    <div style="border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="background:#185FA5;color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;">Case ${escHtml(c.code)}</span>
+        <span style="font-size:11px;color:#a09d96;">Formulaire ${escHtml(c.formulaire)} · ${escHtml(c.categorie)}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#1a1916;margin-top:6px;">${escHtml(c.libelle)}</div>
+      <div style="font-size:12px;color:#6b6960;margin-top:4px;">${escHtml(c.aide)}</div>
+    </div>`).join('');
+}
+
+// ── Onglet 2 : Revenus ────────────────────────────────────────────────────
+function renderIrRevenus() {
+  const el = document.getElementById('irpanel-revenus');
+  if (!el || !IRPP_ACTIVE) return;
+  const s = IRPP_ACTIVE, r = s.revenus;
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Foyer fiscal</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Situation familiale
+          <select onchange="irSetSituation('situationFamiliale',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+            <option value="celibataire" ${s.situationFamiliale === 'celibataire' ? 'selected' : ''}>Célibataire / divorcé(e) / veuf(ve)</option>
+            <option value="couple" ${s.situationFamiliale === 'couple' ? 'selected' : ''}>Marié(e) / pacsé(e)</option>
+          </select></label>
+        ${irField('Nombre de parts fiscales', null, s.nbParts, `irSetSituation('nbParts',this.value)`, { suffix: 'parts', step: 0.5 })}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Traitements, salaires et pensions</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField('Salaires (déclarant 1)', '1AJ', r.salairesDecl1, `irSetRevenu('salairesDecl1',this.value)`)}
+        ${irField('Salaires (déclarant 2)', '1BJ', r.salairesDecl2, `irSetRevenu('salairesDecl2',this.value)`)}
+        ${irField('Pensions, retraites (déclarant 1)', '1AP', r.pensionsDecl1, `irSetRevenu('pensionsDecl1',this.value)`)}
+        ${irField('Pensions, retraites (déclarant 2)', '1BP', r.pensionsDecl2, `irSetRevenu('pensionsDecl2',this.value)`)}
+      </div>
+      <p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Montants nets imposables avant abattement — l'abattement de 10% (frais professionnels ou pensions) est appliqué automatiquement.</p>
+    </div>
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Revenus professionnels et fonciers</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField('BIC (bénéfices industriels et commerciaux)', null, r.bic, `irSetRevenu('bic',this.value)`)}
+        ${irField('BNC (bénéfices non commerciaux)', null, r.bnc, `irSetRevenu('bnc',this.value)`)}
+        ${irField(r.fonciersMicro ? 'Revenus fonciers bruts (micro-foncier)' : 'Revenus fonciers nets (régime réel)', r.fonciersMicro ? '4BE' : '4BA', r.fonciersBrut, `irSetRevenu('fonciersBrut',this.value)`)}
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:12px;">
+        <input type="checkbox" ${r.fonciersMicro ? 'checked' : ''} onchange="irSetRevenu('fonciersMicro',this.checked,true)"> Régime micro-foncier (abattement forfaitaire de 30%, loyers bruts ≤ 15 000 €/an)
+      </label>
+    </div>
+    <div class="drill-card" style="padding:20px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Revenus de capitaux mobiliers et plus-values</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Par défaut, ces revenus sont soumis au prélèvement forfaitaire unique (PFU, 30%). L'option pour le barème progressif (irrévocable et globale pour tous les revenus du foyer) peut être plus avantageuse selon le taux marginal d'imposition.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField('Dividendes', '2DC', r.dividendes, `irSetRevenu('dividendes',this.value)`)}
+        ${irField('Intérêts', '2TR', r.interets, `irSetRevenu('interets',this.value)`)}
+        ${irField('Plus-values de cession de valeurs mobilières', '3VG', r.plusValuesMobilieres, `irSetRevenu('plusValuesMobilieres',this.value)`)}
+        ${irField('Autres revenus imposables', null, r.autresImposables, `irSetRevenu('autresImposables',this.value)`)}
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:12px;">
+        <input type="checkbox" ${s.optionBaremeRCM ? 'checked' : ''} onchange="irSetOptionBareme(this.checked)"> Opter pour le barème progressif sur les revenus de capitaux mobiliers (au lieu du PFU)
+      </label>
+    </div>`;
+}
+
+// ── Onglet 3 : Déductions, réductions & crédits ──────────────────────────
+function renderIrAvantages() {
+  const el = document.getElementById('irpanel-avantages');
+  if (!el || !IRPP_ACTIVE) return;
+  const de = IRPP_ACTIVE.deductions, re = IRPP_ACTIVE.reductions, cr = IRPP_ACTIVE.credits;
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Déductions du revenu global</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField('Pensions alimentaires versées', '6EL / 6GU', de.pensionsAlimentairesVersees, `irSetDeduction('pensionsAlimentairesVersees',this.value)`)}
+        ${irField('Versements sur un PER', '6NS', de.versementsPER, `irSetDeduction('versementsPER',this.value)`)}
+        ${irField('Revenus professionnels de référence pour le plafond PER', null, de.revenuProfessionnelPourPER, `irSetDeduction('revenuProfessionnelPourPER',this.value)`)}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Réductions d'impôt</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Non remboursables (plafonnées à l'impôt brut). La plupart sont soumises au plafonnement global des niches fiscales de 10 000 €/an — les dons en sont exclus.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField("Dons aux organismes d'aide aux personnes en difficulté", '7UD', re.donsOrganismesDifficulte, `irSetReduction('donsOrganismesDifficulte',this.value)`)}
+        ${irField("Dons à d'autres organismes d'intérêt général", '7UF', re.donsAutresOrganismes, `irSetReduction('donsAutresOrganismes',this.value)`)}
+        ${irField('Souscription au capital de PME', '7CF', re.souscriptionPME, `irSetReduction('souscriptionPME',this.value)`)}
+        ${irField('Investissement locatif Pinel', '7QE', re.investissementPinel, `irSetReduction('investissementPinel',this.value)`)}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:20px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Crédits d'impôt</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Remboursables : si leur montant dépasse l'impôt dû, l'excédent donne lieu à une restitution.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${irField("Emploi d'un salarié à domicile", '7DB', cr.emploiDomicile, `irSetCredit('emploiDomicile',this.value)`)}
+        ${irField("Frais de garde d'enfants de moins de 6 ans", '7GA', cr.fraisGardeMontant, `irSetCredit('fraisGardeMontant',this.value)`)}
+        ${irField('Nombre d’enfants gardés', null, cr.fraisGardeNbEnfants, `irSetCredit('fraisGardeNbEnfants',this.value)`, { suffix: '', step: 1 })}
+      </div>
+    </div>`;
+}
+
+// ── Onglet 4 : Résultats ──────────────────────────────────────────────────
+function renderIrResultats(compute) {
+  const el = document.getElementById('irpanel-resultats');
+  if (!el) return;
+  const row = (label, value, bold) => `<tr${bold ? ' style="font-weight:700;background:#f4f3f0;"' : ''}>
+      <td style="padding:9px 16px;">${escHtml(label)}</td>
+      <td class="r" style="padding:9px 16px;color:${value < 0 ? '#A32D2D' : '#1a1916'};">${fmtV(value)}</td>
+    </tr>`;
+  el.innerHTML = `
+    <div class="drill-card" style="overflow-x:auto;margin-bottom:16px;">
+      <table class="dt"><thead><tr><th>Poste</th><th class="r">Montant</th></tr></thead><tbody>
+        ${row('Revenu brut global', compute.revenuBrutGlobal)}
+        ${row('− Déductions (pensions alimentaires, PER)', -(compute.dedPensions + compute.dedPER))}
+        ${row('= Revenu net global imposable', compute.revenuNetGlobal, true)}
+        ${row("Impôt brut (barème, quotient familial plafonné, décote)", compute.irBrut)}
+        ${row('− Réductions d’impôt imputées', -compute.reductionsImputees)}
+        ${row('= Impôt après réductions', compute.irApresReductions, true)}
+        ${row('− Crédits d’impôt', -compute.totalCredits)}
+        ${row('+ Prélèvement forfaitaire sur revenus de capitaux mobiliers (PFU)', compute.prelevementForfaitaire.total)}
+        ${row('= Impôt net total (négatif = restitution)', compute.irNetFinal, true)}
+      </tbody></table>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
+      <div class="drill-card" style="padding:16px;text-align:center;">
+        <div style="font-size:11px;color:#6b6960;">Taux marginal d'imposition</div>
+        <div style="font-size:22px;font-weight:700;color:#185FA5;">${(compute.tauxMarginal * 100).toFixed(0)} %</div>
+      </div>
+      <div class="drill-card" style="padding:16px;text-align:center;">
+        <div style="font-size:11px;color:#6b6960;">Taux moyen d'imposition</div>
+        <div style="font-size:22px;font-weight:700;color:#185FA5;">${(compute.tauxMoyen * 100).toFixed(1)} %</div>
+      </div>
+      <div class="drill-card" style="padding:16px;text-align:center;">
+        <div style="font-size:11px;color:#6b6960;">Impôt net mensualisé (÷12)</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1916;">${fmtV(compute.irNetFinal / 12)}</div>
+      </div>
+    </div>
+    ${pvExportBtn('exportIrppResultatsToCSV', 'résultats de la déclaration')}`;
+}
+
+function exportIrppResultatsToCSV() {
+  if (!IRPP_ACTIVE) return;
+  const compute = IrppEngine.calculerDeclaration(IRPP_ACTIVE, IRPP_ACTIVE.reglesSnapshot);
+  const rows = [
+    ['Indicateur', 'Montant'],
+    ['Revenu brut global', compute.revenuBrutGlobal.toFixed(2)],
+    ['Revenu net global imposable', compute.revenuNetGlobal.toFixed(2)],
+    ['Impôt brut', compute.irBrut.toFixed(2)],
+    ['Réductions d’impôt imputées', compute.reductionsImputees.toFixed(2)],
+    ['Impôt après réductions', compute.irApresReductions.toFixed(2)],
+    ['Crédits d’impôt', compute.totalCredits.toFixed(2)],
+    ['Prélèvement forfaitaire (PFU)', compute.prelevementForfaitaire.total.toFixed(2)],
+    ['Impôt net total', compute.irNetFinal.toFixed(2)],
+    ['Taux marginal', (compute.tauxMarginal * 100).toFixed(1) + ' %'],
+    ['Taux moyen', (compute.tauxMoyen * 100).toFixed(1) + ' %'],
+  ];
+  downloadTextFile(`IRPP_${safeFilePart(IRPP_ACTIVE.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV des résultats téléchargé');
+}
+
 
 // ── TOAST ──
 function toast(msg,isErr){
