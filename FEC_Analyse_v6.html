@@ -1714,6 +1714,29 @@
   </div>
 </div><!-- /tns-screen -->
 
+<!-- ═══ TNS — écran de paramétrage des caisses ═══ -->
+<div id="tns-caisses-screen" style="display:none;background:#f7f6f3;min-height:100vh;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+      <div class="home-nav">
+        <button class="home-nav-btn" onclick="closeTnsCaissesParametrage()">← Retour</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:56px;padding:20px 32px 60px;max-width:900px;margin-left:auto;margin-right:auto;">
+    <h1 style="font-size:20px;margin:0 0 4px;">Paramétrage des caisses</h1>
+    <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Choisissez une caisse, puis un poste de cotisation à gauche pour modifier ses tranches ou ses classes forfaitaires. Rien n'est enregistré tant que vous n'avez pas cliqué sur « Enregistrer ».</p>
+    <div id="tns-caisses-content"></div>
+  </div>
+</div><!-- /tns-caisses-screen -->
+
 <!-- ═══ RÉMUNÉRATION DIRIGEANT — écran liste ═══ -->
 <div id="remu-list-screen" style="display:none;">
   <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
@@ -4183,7 +4206,7 @@ function goHome(){
  */
 function showModuleMenu(){
   if(ACTIVE.id) saveActiveDossier();
-  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen','remu-list-screen','remu-screen','irpp-list-screen','irpp-screen']
+  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen','tns-caisses-screen','remu-list-screen','remu-screen','irpp-list-screen','irpp-screen']
     .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   document.getElementById('module-menu-screen').style.display = 'flex';
 }
@@ -5565,7 +5588,69 @@ const TnsEngine = (function () {
     };
   }
 
-  return { safe, cotisationParTranches, calculerTNSReel, calculerTNSMicro };
+  /**
+   * calculerCotisationsCaisse(caisse, revenu, classesChoisies, pass, options)
+   * Moteur unifié pour les caisses paramétrables (cf. TNS_CAISSES_DEFAUT) :
+   *  - mode 'tranches' : postes en % du revenu par tranches relatives au
+   *    PASS, comme calculerTNSReel ci-dessus.
+   *  - mode 'classes' : postes à cotisation forfaitaire — l'utilisateur
+   *    choisit une classe par poste (classesChoisies[poste]), chaque classe
+   *    portant un montant annuel fixe en euros (CNBF, CRN, professions
+   *    libérales réglementées à caisse autonome...).
+   * Dans les deux cas, la CSG déductible et la CSG/CRDS non déductible sont
+   * calculées séparément sur la même assiette (revenu + total hors CSG),
+   * plus fidèle à la déclaration réelle que l'ancien poste unique csgCrds.
+   */
+  function calculerCotisationsCaisse(caisse, revenu, classesChoisies, pass, options) {
+    options = options || {};
+    classesChoisies = classesChoisies || {};
+    const r = safe(revenu);
+    const postes = {};
+
+    if (caisse.mode === 'tranches') {
+      Object.keys(caisse.lignes).forEach(poste => {
+        const tranches = caisse.lignes[poste].map(t => ({ jusqu: t.jusquPASS === null ? Infinity : t.jusquPASS * safe(pass), taux: t.taux }));
+        postes[poste] = cotisationParTranches(r, tranches);
+      });
+      postes.formationPro = safe(caisse.formationProTauxPASS) * safe(pass);
+    } else if (caisse.mode === 'classes') {
+      Object.keys(caisse.postesClasses).forEach(poste => {
+        const posteDef = caisse.postesClasses[poste];
+        const codeChoisi = classesChoisies[poste] || posteDef.classeParDefaut;
+        const classes = posteDef.classes || [];
+        const classe = classes.find(c => c.code === codeChoisi) || classes[0] || { montant: 0 };
+        postes[poste] = safe(classe.montant);
+      });
+    } else {
+      throw new Error(`Mode de caisse inconnu : ${caisse.mode}`);
+    }
+
+    const totalHorsCSG = Object.values(postes).reduce((s, v) => s + safe(v), 0);
+    const assietteCSG = r + totalHorsCSG;
+    const csgDeductible = assietteCSG * safe(caisse.csgDeductibleTaux);
+    const csgNonDeductible = assietteCSG * safe(caisse.csgNonDeductibleTaux);
+
+    const reductionACRE = options.acre ? safe(options.tauxReductionACRE !== undefined ? options.tauxReductionACRE : 0.5) : 0;
+    const facteur = 1 - reductionACRE;
+
+    const postesReduits = {};
+    Object.keys(postes).forEach(p => { postesReduits[p] = safe(postes[p]) * facteur; });
+    const csgDeductibleReduit = csgDeductible * facteur;
+    const csgNonDeductibleReduit = csgNonDeductible * facteur;
+    const total = (totalHorsCSG + csgDeductible + csgNonDeductible) * facteur;
+
+    return {
+      ...postesReduits,
+      csgDeductible: safe(csgDeductibleReduit),
+      csgNonDeductible: safe(csgNonDeductibleReduit),
+      baseCSG: safe(assietteCSG),
+      total: safe(total),
+      revenuNet: safe(r - total),
+      tauxGlobal: r > 0 ? total / r : 0,
+    };
+  }
+
+  return { safe, cotisationParTranches, calculerTNSReel, calculerTNSMicro, calculerCotisationsCaisse };
 })();
 
 /**
@@ -5610,6 +5695,7 @@ const TNS_LABELS_POSTES = {
   invaliditeDeces: 'Invalidité-décès', allocationsFamiliales: 'Allocations familiales',
   maladie: 'Maladie-maternité', indemnitesJournalieres: 'Indemnités journalières',
   formationPro: 'Formation professionnelle (CFP)', csgCrds: 'CSG-CRDS',
+  csgDeductible: 'CSG déductible', csgNonDeductible: 'CSG/CRDS non déductible',
 };
 
 /** baremeReelAvecPass(bareme, pass) — convertit les seuils jusquPASS (multiples du PASS) en montants absolus € pour le moteur. */
@@ -5620,6 +5706,138 @@ function baremeReelAvecPass(bareme, pass) {
   });
   return { tranches, formationProMontant: bareme.formationProTauxPASS * pass, tauxCSGCRDS: bareme.tauxCSGCRDS };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — CAISSES PARAMÉTRABLES (régimes professionnels) ─────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * TNS_CAISSES_DEFAUT — catalogue des caisses/régimes de protection sociale
+ * des indépendants, au-delà des 3 régimes déjà couverts (commerçant/
+ * artisan réel, libéral réel, micro-entrepreneur). Deux modes de calcul :
+ *
+ *  - mode 'tranches' : postes en % du revenu par tranches relatives au
+ *    PASS (comme les régimes déjà existants) — utilisé ici pour AVA/
+ *    ORGANIC (même barème SSI que le régime « Commerçant/artisan »
+ *    existant, jamais dupliqué), CIPAV (même barème que « Profession
+ *    libérale » existant) et MSA.
+ *  - mode 'classes' : postes à cotisation forfaitaire, l'utilisateur
+ *    choisissant une classe par poste (ex. CNBF, CRN, professions
+ *    libérales réglementées à caisse autonome). Chaque poste porte une ou
+ *    plusieurs classes nommées, avec un montant annuel en euros.
+ *
+ * IMPORTANT — transparence sur la fiabilité des données : cet environnement
+ * de développement n'a pas d'accès réseau externe, il n'a donc pas été
+ * possible de vérifier les barèmes réels de CARCDSF/CARMF/CARPIMKO/CARPV/
+ * CAVEC/CAVP/CNBF/CRN/CAVAMAC/CAVOM/MSA auprès d'une source officielle.
+ * Ces caisses sont livrées avec leur structure complète (postes, classes,
+ * libellés) mais des montants/taux à 0 — `aParametrer: true` — à
+ * compléter par l'utilisateur via l'écran « Paramétrage des caisses »
+ * avant tout usage réel. AVA-Artisan, ORGANIC-Commerçant et CIPAV-Libéral
+ * réutilisent les barèmes réels déjà vérifiés du régime SSI/libéral
+ * existant (aucune duplication de valeur : mêmes objets que
+ * TNS_BAREME_REEL_DEFAUT).
+ */
+function tnsCaisseClassesVide(code, label, categorie) {
+  const posteVide = () => ({ classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: 0 }], classeParDefaut: 'unique' });
+  return {
+    code, label, categorie, mode: 'classes', aParametrer: true,
+    postesClasses: {
+      retraiteBase: posteVide(), retraiteComplementaire: posteVide(),
+      invaliditeDeces: posteVide(), formationPro: posteVide(),
+    },
+    csgDeductibleTaux: 0, csgNonDeductibleTaux: 0,
+  };
+}
+function tnsCaisseTranchesVide(code, label, categorie) {
+  const posteVide = () => [{ jusquPASS: 1, taux: 0 }, { jusquPASS: null, taux: 0 }];
+  return {
+    code, label, categorie, mode: 'tranches', aParametrer: true,
+    lignes: {
+      retraiteBase: posteVide(), retraiteComplementaire: posteVide(),
+      invaliditeDeces: posteVide(), allocationsFamiliales: posteVide(),
+      maladie: posteVide(), indemnitesJournalieres: posteVide(),
+    },
+    formationProTauxPASS: 0, csgDeductibleTaux: 0, csgNonDeductibleTaux: 0,
+  };
+}
+const TNS_CAISSES_DEFAUT = {
+  ava_artisan: {
+    code: 'AVA', label: 'AVA - Artisan', categorie: 'Artisan', mode: 'tranches',
+    lignes: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant.tranches)),
+    formationProTauxPASS: TNS_BAREME_REEL_DEFAUT.commercant.formationProTauxPASS,
+    csgDeductibleTaux: 0.068, csgNonDeductibleTaux: 0.029,
+  },
+  organic_commercant: {
+    code: 'ORGANIC', label: 'ORGANIC - Commerçant', categorie: 'Commerçant', mode: 'tranches',
+    lignes: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant.tranches)),
+    formationProTauxPASS: TNS_BAREME_REEL_DEFAUT.commercant.formationProTauxPASS,
+    csgDeductibleTaux: 0.068, csgNonDeductibleTaux: 0.029,
+  },
+  carcdsf_dentiste: tnsCaisseClassesVide('CARCDSF', 'CARCDSF - Chirurgien-dentiste', 'Profession médicale'),
+  carcdsf_sage_femme: tnsCaisseClassesVide('CARCDSF', 'CARCDSF - Sage-femme', 'Profession médicale'),
+  carmf_medecin: tnsCaisseClassesVide('CARMF', 'CARMF - Médecin', 'Profession médicale'),
+  carpimko_aux_medical: tnsCaisseClassesVide('CARPIMKO', 'CARPIMKO - Auxiliaire médical', 'Profession médicale'),
+  carpv_veterinaire: tnsCaisseClassesVide('CARPV', 'CARPV - Vétérinaire', 'Profession médicale'),
+  cavec_expert_comptable: tnsCaisseClassesVide('CAVEC', 'CAVEC - Expert-comptable', 'Profession juridique/chiffre'),
+  cavp_pharmacien: tnsCaisseClassesVide('CAVP', 'CAVP - Pharmacien', 'Profession médicale'),
+  cavp_biologiste: tnsCaisseClassesVide('CAVP', 'CAVP - Biologiste', 'Profession médicale'),
+  cipav_liberal: {
+    code: 'CIPAV', label: 'CIPAV - Libéral', categorie: 'Profession libérale', mode: 'tranches',
+    lignes: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.liberal.tranches)),
+    formationProTauxPASS: TNS_BAREME_REEL_DEFAUT.liberal.formationProTauxPASS,
+    csgDeductibleTaux: 0.068, csgNonDeductibleTaux: 0.029,
+  },
+  cnbf_avocat: {
+    code: 'CNBF', label: 'CNBF - Avocat', categorie: 'Profession juridique/chiffre', mode: 'classes', aParametrer: true,
+    postesClasses: {
+      retraiteBase: {
+        classes: [
+          { code: 'plafond', label: 'Base - Plafond', montant: 0 },
+          { code: 'classe1', label: 'Base - Classe 1', montant: 0 },
+          { code: 'classe2', label: 'Base - Classe 2', montant: 0 },
+          { code: 'classe2plus', label: 'Base - Classe 2+ (à partir de 2025)', montant: 0 },
+          { code: 'classe3', label: "Base - Classe 3 (jusqu'en 2024)", montant: 0 },
+          { code: 'classe3plus', label: "Base - Classe 3+ (jusqu'en 2024)", montant: 0 },
+          { code: 'classe4', label: "Base - Classe 4 (jusqu'en 2020)", montant: 0 },
+          { code: 'classe4t5', label: "Base - Classe 4 - Option T5 (jusqu'en 2020)", montant: 0 },
+        ],
+        classeParDefaut: 'classe1',
+      },
+      retraiteComplementaire: { classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: 0 }], classeParDefaut: 'unique' },
+      invaliditeDeces: { classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: 0 }], classeParDefaut: 'unique' },
+      formationPro: { classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: 0 }], classeParDefaut: 'unique' },
+    },
+    csgDeductibleTaux: 0, csgNonDeductibleTaux: 0,
+  },
+  crn_notaire: tnsCaisseClassesVide('CRN', 'CRN - Notaire', 'Profession juridique/chiffre'),
+  cavamac_agent_assurance: tnsCaisseClassesVide('CAVAMAC', "CAVAMAC - Agent d'assurance", 'Profession commerciale'),
+  cavom_officier_ministeriel: tnsCaisseClassesVide('CAVOM', 'CAVOM - Officier ministériel', 'Profession juridique/chiffre'),
+  msa: tnsCaisseTranchesVide('MSA', 'MSA', 'Agricole'),
+};
+const TNS_CAISSES_STORE_KEY = 'fec_analyse_tns_caisses_v1';
+/** chargerCaissesEffectives() — barèmes par défaut + surcharges utilisateur enregistrées via l'écran de paramétrage (par caisse entière, jamais fusionné champ à champ pour rester prévisible). */
+function chargerCaissesEffectives() {
+  const caisses = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT));
+  let overrides = {};
+  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[TNS] Surcharges de caisses illisibles :', e); }
+  Object.keys(overrides).forEach(id => { if (caisses[id]) caisses[id] = overrides[id]; });
+  return caisses;
+}
+function sauvegarderCaisseOverride(id, caisse) {
+  let overrides = {};
+  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); } catch (e) { /* ignore */ }
+  overrides[id] = caisse;
+  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overrides)); return true; }
+  catch (e) { toast('Échec de sauvegarde du paramétrage : ' + (e && e.message || 'erreur inconnue'), true); return false; }
+}
+function reinitialiserCaisseOverride(id) {
+  let overrides = {};
+  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); } catch (e) { /* ignore */ }
+  delete overrides[id];
+  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overrides)); } catch (e) { /* ignore */ }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // ── MODULE TNS — STOCKAGE ─────────────────────────────────────────────
@@ -5664,6 +5882,7 @@ function creerTnsVierge() {
     acre: false, tauxReductionACRE: 0.5, versementLiberatoire: false,
     baremeReel: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant)),
     baremeMicro: JSON.parse(JSON.stringify(TNS_BAREME_MICRO_DEFAUT.servicesBIC)),
+    caisseId: 'ava_artisan', classesChoisies: {},
   };
 }
 
@@ -5738,6 +5957,7 @@ function tnsSetRegime(regime) {
   TNS_ACTIVE.regime = regime;
   if (regime === 'reel_commercant') TNS_ACTIVE.baremeReel = JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant));
   if (regime === 'reel_liberal') TNS_ACTIVE.baremeReel = JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.liberal));
+  if (regime === 'caisse' && !TNS_ACTIVE.caisseId) TNS_ACTIVE.caisseId = 'ava_artisan';
   renderTns();
 }
 function tnsSetNatureMicro(nature) {
@@ -5755,6 +5975,20 @@ function tnsSetTranche(poste, idx, raw) {
   TNS_ACTIVE.baremeReel.tranches[poste][idx].taux = Number.isFinite(v) ? v / 100 : 0;
   renderTns();
 }
+function tnsSetCaisse(caisseId) {
+  TNS_ACTIVE.caisseId = caisseId;
+  TNS_ACTIVE.classesChoisies = {};
+  renderTns();
+}
+function tnsSetClasseChoisie(poste, code) {
+  TNS_ACTIVE.classesChoisies = TNS_ACTIVE.classesChoisies || {};
+  TNS_ACTIVE.classesChoisies[poste] = code;
+  renderTns();
+}
+function tnsOuvrirParametrageCaisses() {
+  if (TNS_ACTIVE) saveTns(TNS_ACTIVE);
+  openTnsCaissesParametrage(TNS_ACTIVE ? TNS_ACTIVE.caisseId : null);
+}
 function tnsSetMicroTaux(key, raw) {
   const v = parseFloat(raw);
   TNS_ACTIVE.baremeMicro[key] = Number.isFinite(v) ? v / 100 : 0;
@@ -5770,12 +6004,19 @@ function renderTns() {
   if (!el) return;
   const t = TNS_ACTIVE;
   const isMicro = t.regime === 'micro';
-  const isReel = !isMicro;
+  const isCaisse = t.regime === 'caisse';
+  const isReel = !isMicro && !isCaisse;
+
+  const caisses = isCaisse ? chargerCaissesEffectives() : null;
+  const caisse = isCaisse ? (caisses[t.caisseId] || caisses.ava_artisan) : null;
 
   let resultat, assiette;
   if (isReel) {
     assiette = t.revenu;
     resultat = TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
+  } else if (isCaisse) {
+    assiette = t.revenu;
+    resultat = TnsEngine.calculerCotisationsCaisse(caisse, t.revenu, t.classesChoisies, t.pass, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
   } else {
     assiette = t.ca;
     resultat = TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
@@ -5785,6 +6026,7 @@ function renderTns() {
     ['reel_commercant', 'Réel — Commerçant / artisan'],
     ['reel_liberal', 'Réel — Profession libérale'],
     ['micro', 'Micro-entrepreneur'],
+    ['caisse', 'Caisse professionnelle'],
   ].map(([id, label]) => `<button onclick="tnsSetRegime('${id}')" style="flex:1;padding:10px 8px;border-radius:8px;border:1.5px solid ${t.regime === id ? '#185FA5' : 'rgba(0,0,0,.12)'};background:${t.regime === id ? '#e6f1fb' : '#fff'};color:${t.regime === id ? '#185FA5' : '#1a1916'};font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`).join('');
 
   let html = `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
@@ -5795,7 +6037,7 @@ function renderTns() {
   html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
     <h3 style="margin:0 0 12px;font-size:14px;">Paramètres</h3>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">`;
-  if (isReel) {
+  if (isReel || isCaisse) {
     html += pvField('Revenu professionnel net annuel', t.revenu, `tnsSetField('revenu',this.value)`);
     html += pvField('PASS de référence', t.pass, `tnsSetField('pass',this.value)`);
   } else {
@@ -5807,14 +6049,47 @@ function renderTns() {
     html += `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
       <input type="checkbox" ${t.versementLiberatoire ? 'checked' : ''} onchange="tnsSetField('versementLiberatoire',this.checked,true)"> Versement fiscal libératoire de l’IR</label>`;
   }
+  if (isCaisse) {
+    html += `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Activité
+      <select onchange="tnsSetCaisse(this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+        ${Object.entries(caisses).map(([id, c]) => `<option value="${id}" ${t.caisseId === id ? 'selected' : ''}>${escHtml(c.label)}</option>`).join('')}
+      </select></label>`;
+  }
   html += `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
     <input type="checkbox" ${t.acre ? 'checked' : ''} onchange="tnsSetField('acre',this.checked,true)"> ACRE (1ʳᵉ année)</label>`;
   if (t.acre) {
     html += pvField('Taux de réduction ACRE', t.tauxReductionACRE, `tnsSetField('tauxReductionACRE',this.value/100)`, { pct: true });
   }
-  html += `</div></div>`;
+  html += `</div>`;
+  if (isCaisse) {
+    html += `<div style="margin-top:14px;"><button class="no-print" onclick="tnsOuvrirParametrageCaisses()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;color:#1a1916;cursor:pointer;">⚙ Paramétrage des caisses</button></div>`;
+  }
+  html += `</div>`;
 
-  // Barème détaillé, éditable
+  if (isCaisse && caisse.aParametrer) {
+    html += `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">⚠ La caisse « ${escHtml(caisse.label)} » n'est pas encore paramétrée (montants/taux à 0) — ouvrez « Paramétrage des caisses » pour saisir les valeurs réelles avant d'utiliser ce résultat.</div>`;
+  }
+
+  // Choix de classe par poste (caisses à cotisation forfaitaire par classe)
+  if (isCaisse && caisse.mode === 'classes') {
+    const postesAvecChoix = Object.entries(caisse.postesClasses).filter(([, def]) => (def.classes || []).length > 1);
+    if (postesAvecChoix.length) {
+      html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
+        <h3 style="margin:0 0 12px;font-size:14px;">Classe choisie</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">
+          ${postesAvecChoix.map(([poste, def]) => {
+            const choisi = (t.classesChoisies || {})[poste] || def.classeParDefaut;
+            return `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">${escHtml(TNS_LABELS_POSTES[poste] || poste)}
+              <select onchange="tnsSetClasseChoisie('${poste}',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+                ${def.classes.map(c => `<option value="${c.code}" ${c.code === choisi ? 'selected' : ''}>${escHtml(c.label)} (${fmtV(c.montant)})</option>`).join('')}
+              </select></label>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  // Barème détaillé, éditable (régimes historiques réel/micro uniquement — la caisse se paramètre via l'écran dédié)
   if (isReel) {
     html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;overflow-x:auto;">
       <h3 style="margin:0 0 4px;font-size:14px;">Barème (éditable)</h3>
@@ -5831,7 +6106,7 @@ function renderTns() {
         }).join('')}
       </tbody></table>
     </div>`;
-  } else {
+  } else if (isMicro) {
     html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 12px;font-size:14px;">Taux (éditables)</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">
@@ -5843,13 +6118,14 @@ function renderTns() {
   }
 
   // Résultat
-  const rows = isReel
+  const rows = (isReel || isCaisse)
     ? Object.keys(resultat).filter(k => TNS_LABELS_POSTES[k]).map(k => [TNS_LABELS_POSTES[k], resultat[k]])
     : [['Cotisations sociales', resultat.cotisationsSociales], ['Formation professionnelle (CFP)', resultat.cfp], ['Versement libératoire de l’IR', resultat.versementLiberatoire]];
 
   html += pvExportBtn('exportTnsToCSV', 'Cotisations TNS') + `<div class="drill-card">
     <table class="dt"><tbody>
       ${rows.map(([label, v]) => `<tr><td style="padding:9px 16px;">${escHtml(label)}</td><td class="r" style="padding:9px 16px;">${fmtV(v)}</td></tr>`).join('')}
+      ${isCaisse ? `<tr><td style="padding:9px 16px;">Base CSG</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.baseCSG)}</td></tr>` : ''}
       <tr style="font-weight:700;background:#f4f3f0;"><td style="padding:9px 16px;">= Total cotisations</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.total)}</td></tr>
       <tr><td style="padding:9px 16px;">Taux global</td><td class="r" style="padding:9px 16px;">${(resultat.tauxGlobal * 100).toFixed(1)} %</td></tr>
       <tr style="font-weight:700;"><td style="padding:9px 16px;">= Revenu net après cotisations</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.revenuNet)}</td></tr>
@@ -5863,13 +6139,19 @@ function renderTns() {
 function exportTnsToCSV() {
   if (!TNS_ACTIVE) return;
   const t = TNS_ACTIVE;
-  const isReel = t.regime !== 'micro';
-  const resultat = isReel
-    ? TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE })
-    : TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
+  const isMicro = t.regime === 'micro';
+  const isCaisse = t.regime === 'caisse';
+  const isReel = !isMicro && !isCaisse;
+  let resultat;
+  if (isReel) resultat = TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
+  else if (isCaisse) {
+    const caisses = chargerCaissesEffectives();
+    resultat = TnsEngine.calculerCotisationsCaisse(caisses[t.caisseId] || caisses.ava_artisan, t.revenu, t.classesChoisies, t.pass, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
+  } else resultat = TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
   const rows = [['Poste', 'Montant (€)']];
-  if (isReel) {
+  if (isReel || isCaisse) {
     Object.keys(resultat).filter(k => TNS_LABELS_POSTES[k]).forEach(k => rows.push([TNS_LABELS_POSTES[k], resultat[k].toFixed(2)]));
+    if (isCaisse) rows.push(['Base CSG', resultat.baseCSG.toFixed(2)]);
   } else {
     rows.push(['Cotisations sociales', resultat.cotisationsSociales.toFixed(2)]);
     rows.push(['Formation professionnelle (CFP)', resultat.cfp.toFixed(2)]);
@@ -5880,6 +6162,179 @@ function exportTnsToCSV() {
   downloadTextFile(`TNS_${safeFilePart(t.name)}.csv`, csvFromRows(rows), 'text/csv');
   toast('Export CSV du calcul TNS téléchargé');
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — PARAMÉTRAGE DES CAISSES ─────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+let TNS_CAISSE_PARAM_ID = null;
+let TNS_CAISSE_DRAFT = null;
+let TNS_CAISSE_POSTE_ACTIF = null;
+
+function tnsParamPostesDe(caisse) {
+  return caisse.mode === 'tranches' ? Object.keys(caisse.lignes) : Object.keys(caisse.postesClasses);
+}
+function openTnsCaissesParametrage(caisseId) {
+  ['home-screen', 'dashboard-screen', 'tns-list-screen', 'tns-screen'].forEach(sid => { const e = document.getElementById(sid); if (e) e.style.display = 'none'; });
+  document.getElementById('tns-caisses-screen').style.display = 'block';
+  tnsParamSelectCaisse(caisseId || Object.keys(TNS_CAISSES_DEFAUT)[0]);
+}
+function closeTnsCaissesParametrage() {
+  document.getElementById('tns-caisses-screen').style.display = 'none';
+  if (TNS_ACTIVE) { document.getElementById('tns-screen').style.display = 'block'; renderTns(); }
+  else { document.getElementById('tns-list-screen').style.display = 'block'; renderTnsList(); }
+}
+function tnsParamSelectCaisse(caisseId) {
+  TNS_CAISSE_PARAM_ID = caisseId;
+  const effectives = chargerCaissesEffectives();
+  TNS_CAISSE_DRAFT = JSON.parse(JSON.stringify(effectives[caisseId]));
+  TNS_CAISSE_POSTE_ACTIF = tnsParamPostesDe(TNS_CAISSE_DRAFT)[0] || '__csg__';
+  renderTnsCaissesParametrage();
+}
+function tnsParamSelectPoste(poste) { TNS_CAISSE_POSTE_ACTIF = poste; renderTnsCaissesParametrage(); }
+function tnsParamDefaut() {
+  if (!confirm(`Réinitialiser « ${TNS_CAISSE_DRAFT.label} » aux valeurs par défaut ?\n(Non enregistré tant que vous ne validez pas.)`)) return;
+  TNS_CAISSE_DRAFT = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT[TNS_CAISSE_PARAM_ID]));
+  renderTnsCaissesParametrage();
+}
+function tnsParamEnregistrer() {
+  sauvegarderCaisseOverride(TNS_CAISSE_PARAM_ID, TNS_CAISSE_DRAFT);
+  toast('Paramétrage de la caisse enregistré');
+  closeTnsCaissesParametrage();
+}
+function tnsParamAnnuler() { closeTnsCaissesParametrage(); }
+
+function tnsParamSetCsgTaux(key, raw) {
+  const v = parseFloat(raw);
+  TNS_CAISSE_DRAFT[key] = Number.isFinite(v) ? v / 100 : 0;
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetFormationPro(raw) {
+  const v = parseFloat(raw);
+  TNS_CAISSE_DRAFT.formationProTauxPASS = Number.isFinite(v) ? v / 100 : 0;
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetTrancheTaux(poste, idx, raw) {
+  const v = parseFloat(raw);
+  TNS_CAISSE_DRAFT.lignes[poste][idx].taux = Number.isFinite(v) ? v / 100 : 0;
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetTrancheJusqu(poste, idx, raw) {
+  const v = parseFloat(raw);
+  TNS_CAISSE_DRAFT.lignes[poste][idx].jusquPASS = raw === '' ? null : (Number.isFinite(v) ? v : TNS_CAISSE_DRAFT.lignes[poste][idx].jusquPASS);
+  renderTnsCaissesParametrage();
+}
+function tnsParamAjouterTranche(poste) {
+  const tranches = TNS_CAISSE_DRAFT.lignes[poste];
+  const avantDerniere = tranches[tranches.length - 2];
+  tranches.splice(tranches.length - 1, 0, { jusquPASS: (avantDerniere ? safe(avantDerniere.jusquPASS) : 0) + 1, taux: 0 });
+  renderTnsCaissesParametrage();
+}
+function tnsParamSupprimerTranche(poste, idx) {
+  if (TNS_CAISSE_DRAFT.lignes[poste].length <= 1) return;
+  TNS_CAISSE_DRAFT.lignes[poste].splice(idx, 1);
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetClasseMontant(poste, idx, raw) {
+  const v = parseFloat(raw);
+  TNS_CAISSE_DRAFT.postesClasses[poste].classes[idx].montant = Number.isFinite(v) ? v : 0;
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetClasseLabel(poste, idx, raw) {
+  TNS_CAISSE_DRAFT.postesClasses[poste].classes[idx].label = raw || 'Classe';
+  renderTnsCaissesParametrage();
+}
+function tnsParamAjouterClasse(poste) {
+  const classes = TNS_CAISSE_DRAFT.postesClasses[poste].classes;
+  classes.push({ code: 'classe_' + Date.now(), label: 'Nouvelle classe', montant: 0 });
+  renderTnsCaissesParametrage();
+}
+function tnsParamSupprimerClasse(poste, idx) {
+  const posteDef = TNS_CAISSE_DRAFT.postesClasses[poste];
+  if (posteDef.classes.length <= 1) return;
+  const removed = posteDef.classes[idx];
+  posteDef.classes.splice(idx, 1);
+  if (posteDef.classeParDefaut === removed.code) posteDef.classeParDefaut = posteDef.classes[0].code;
+  renderTnsCaissesParametrage();
+}
+function tnsParamSetClasseParDefaut(poste, code) {
+  TNS_CAISSE_DRAFT.postesClasses[poste].classeParDefaut = code;
+  renderTnsCaissesParametrage();
+}
+
+function renderTnsCaissesParametrage() {
+  const el = document.getElementById('tns-caisses-content');
+  if (!el || !TNS_CAISSE_DRAFT) return;
+  const caisse = TNS_CAISSE_DRAFT;
+  const postes = tnsParamPostesDe(caisse);
+
+  const header = `
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;flex:1;min-width:220px;">Régime
+        <select onchange="tnsParamSelectCaisse(this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+          ${Object.entries(TNS_CAISSES_DEFAUT).map(([id, c]) => `<option value="${id}" ${id === TNS_CAISSE_PARAM_ID ? 'selected' : ''}>${escHtml(c.label)}</option>`).join('')}
+        </select>
+      </label>
+      ${caisse.aParametrer ? `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff8e1;color:#8a6d1a;">À paramétrer</span>` : ''}
+      <button onclick="tnsParamDefaut()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;color:#1a1916;cursor:pointer;">↺ Défaut</button>
+    </div>`;
+
+  const posteNav = `
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      ${postes.map(p => `<div onclick="tnsParamSelectPoste('${p}')" style="padding:10px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;background:${TNS_CAISSE_POSTE_ACTIF === p ? '#185FA5' : 'transparent'};color:${TNS_CAISSE_POSTE_ACTIF === p ? '#fff' : '#1a1916'};">${escHtml(TNS_LABELS_POSTES[p] || p)}</div>`).join('')}
+      <div onclick="tnsParamSelectPoste('__csg__')" style="padding:10px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;background:${TNS_CAISSE_POSTE_ACTIF === '__csg__' ? '#185FA5' : 'transparent'};color:${TNS_CAISSE_POSTE_ACTIF === '__csg__' ? '#fff' : '#1a1916'};">CSG déductible / non déductible</div>
+    </div>`;
+
+  let posteEditor;
+  if (TNS_CAISSE_POSTE_ACTIF === '__csg__') {
+    posteEditor = `<div>
+      <h3 style="margin:0 0 12px;font-size:14px;">CSG déductible / CSG-CRDS non déductible</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">
+        ${pvField('Taux CSG déductible', caisse.csgDeductibleTaux, `tnsParamSetCsgTaux('csgDeductibleTaux',this.value)`, { pct: true })}
+        ${pvField('Taux CSG/CRDS non déductible', caisse.csgNonDeductibleTaux, `tnsParamSetCsgTaux('csgNonDeductibleTaux',this.value)`, { pct: true })}
+        ${caisse.mode === 'tranches' ? pvField('Formation professionnelle (% du PASS)', caisse.formationProTauxPASS, `tnsParamSetFormationPro(this.value)`, { pct: true }) : ''}
+      </div>
+    </div>`;
+  } else if (caisse.mode === 'tranches') {
+    const tranches = caisse.lignes[TNS_CAISSE_POSTE_ACTIF] || [];
+    posteEditor = `<div>
+      <h3 style="margin:0 0 4px;font-size:14px;">${escHtml(TNS_LABELS_POSTES[TNS_CAISSE_POSTE_ACTIF] || TNS_CAISSE_POSTE_ACTIF)}</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Tranches exprimées en multiples du PASS. Laissez le dernier « Jusqu'à » vide pour une tranche illimitée.</p>
+      <table class="dt"><thead><tr><th>Jusqu'à (× PASS)</th><th class="r">Taux</th><th></th></tr></thead><tbody>
+        ${tranches.map((tr, idx) => `<tr>
+          <td style="padding:7px 10px;"><input type="number" step="0.1" value="${tr.jusquPASS === null ? '' : tr.jusquPASS}" placeholder="illimité" onchange="tnsParamSetTrancheJusqu('${TNS_CAISSE_POSTE_ACTIF}',${idx},this.value)" style="width:90px;padding:5px 7px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;"></td>
+          <td class="r">${pvCellInput(tr.taux, `tnsParamSetTrancheTaux('${TNS_CAISSE_POSTE_ACTIF}',${idx},this.value)`, true)}</td>
+          <td><button onclick="tnsParamSupprimerTranche('${TNS_CAISSE_POSTE_ACTIF}',${idx})" style="border:none;background:none;color:#A32D2D;cursor:pointer;font-size:16px;line-height:1;">×</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      <button onclick="tnsParamAjouterTranche('${TNS_CAISSE_POSTE_ACTIF}')" style="margin-top:10px;border:1px dashed rgba(0,0,0,.2);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;color:#1a1916;cursor:pointer;">+ Ajouter une tranche</button>
+    </div>`;
+  } else {
+    const posteDef = caisse.postesClasses[TNS_CAISSE_POSTE_ACTIF] || { classes: [] };
+    posteEditor = `<div>
+      <h3 style="margin:0 0 12px;font-size:14px;">${escHtml(TNS_LABELS_POSTES[TNS_CAISSE_POSTE_ACTIF] || TNS_CAISSE_POSTE_ACTIF)}</h3>
+      <table class="dt"><thead><tr><th>Défaut</th><th>Classe</th><th class="r">Montant annuel</th><th></th></tr></thead><tbody>
+        ${posteDef.classes.map((c, idx) => `<tr>
+          <td style="padding:7px 10px;"><input type="radio" name="defaut-${TNS_CAISSE_POSTE_ACTIF}" ${posteDef.classeParDefaut === c.code ? 'checked' : ''} onchange="tnsParamSetClasseParDefaut('${TNS_CAISSE_POSTE_ACTIF}','${c.code}')" title="Classe par défaut"></td>
+          <td style="padding:7px 10px;"><input type="text" value="${escHtml(c.label)}" onchange="tnsParamSetClasseLabel('${TNS_CAISSE_POSTE_ACTIF}',${idx},this.value)" style="width:100%;padding:5px 7px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;"></td>
+          <td class="r"><input type="number" step="10" value="${round2(c.montant)}" onchange="tnsParamSetClasseMontant('${TNS_CAISSE_POSTE_ACTIF}',${idx},this.value)" style="width:100px;padding:5px 7px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;"></td>
+          <td><button onclick="tnsParamSupprimerClasse('${TNS_CAISSE_POSTE_ACTIF}',${idx})" style="border:none;background:none;color:#A32D2D;cursor:pointer;font-size:16px;line-height:1;">×</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      <button onclick="tnsParamAjouterClasse('${TNS_CAISSE_POSTE_ACTIF}')" style="margin-top:10px;border:1px dashed rgba(0,0,0,.2);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;color:#1a1916;cursor:pointer;">+ Ajouter une classe</button>
+      <p style="font-size:11px;color:#a09d96;margin-top:8px;">Le bouton « Défaut » indique la classe utilisée automatiquement lors d'une nouvelle simulation avec cette caisse.</p>
+    </div>`;
+  }
+
+  el.innerHTML = header + `<div class="drill-card" style="display:grid;grid-template-columns:240px 1fr;gap:0;overflow:hidden;padding:0;">
+    <div style="padding:16px 10px;border-right:1px solid rgba(0,0,0,.08);background:#faf9f7;">${posteNav}</div>
+    <div style="padding:20px;overflow-x:auto;">${posteEditor}</div>
+  </div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+    <button onclick="tnsParamAnnuler()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;color:#1a1916;cursor:pointer;">Annuler</button>
+    <button onclick="tnsParamEnregistrer()" style="border:none;background:#185FA5;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✓ Enregistrer</button>
+  </div>`;
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // ── MODULE RÉMUNÉRATION DIRIGEANT — RÈGLES (config versionnée) ──────────

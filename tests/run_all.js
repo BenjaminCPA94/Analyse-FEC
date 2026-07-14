@@ -103,6 +103,9 @@ reportResults('Rémunération dirigeant', require('./test_remuneration_engine.js
 section('15. IRPP — moteur de calcul et recherche de cases (IrppEngine / IRPP_CASES)');
 reportResults('IRPP', require('./test_irpp_engine.js').run(htmlPath));
 
+section('16. TNS — caisses professionnelles paramétrables (TNS_CAISSES_DEFAUT)');
+reportResults('TNS caisses', require('./test_tns_caisses.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

@@ -4,6 +4,57 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — TNS : caisses professionnelles paramétrables (16 régimes, classes/tranches éditables)
+
+- **Nouveau régime « Caisse professionnelle »** dans le module TNS, en
+  plus des 3 régimes existants (réel commerçant/artisan, réel libéral,
+  micro-entrepreneur — inchangés). Un sélecteur « Activité » propose 16
+  caisses : AVA-Artisan, ORGANIC-Commerçant, CARCDSF-Chirurgien-dentiste,
+  CARCDSF-Sage-femme, CARMF-Médecin, CARPIMKO-Auxiliaire médical,
+  CARPV-Vétérinaire, CAVEC-Expert-comptable, CAVP-Pharmacien,
+  CAVP-Biologiste, CIPAV-Libéral, CNBF-Avocat, CRN-Notaire,
+  CAVAMAC-Agent d'assurance, CAVOM-Officier ministériel, MSA.
+- **Deux modes de calcul unifiés** (`TnsEngine.calculerCotisationsCaisse`) :
+  tranches en % du revenu par rapport au PASS (comme les régimes déjà
+  existants) pour AVA/ORGANIC/CIPAV/MSA, et cotisation forfaitaire par
+  classe pour les caisses à système de classes (CNBF, CRN, professions
+  libérales réglementées) — l'utilisateur choisit une classe par poste de
+  cotisation, chaque classe portant un montant annuel fixe. La CSG est
+  désormais scindée en « CSG déductible » et « CSG/CRDS non déductible »
+  (au lieu d'un poste unique fusionné), plus fidèle à la déclaration
+  réelle et au résultat affiché par le simulateur cible.
+- **Écran « Paramétrage des caisses »** (nouveau, accessible depuis un
+  bouton ⚙ du régime Caisse) : sélection de la caisse à éditer, liste des
+  postes de cotisation à gauche, éditeur à droite (tranches PASS/taux, ou
+  classes/montants avec ajout/suppression et choix de la classe par
+  défaut), CSG déductible/non déductible éditable, bouton « ↺ Défaut »
+  (réinitialise sans enregistrer) et « ✓ Enregistrer » (persiste dans
+  `localStorage`, clé `fec_analyse_tns_caisses_v1`, en surcharge du
+  catalogue par défaut — jamais muté directement, toujours réinitialisable).
+- **Transparence sur la fiabilité des données** : cet environnement de
+  développement n'a pas d'accès réseau externe (politique du bac à
+  sable), il n'a donc pas été possible de vérifier les barèmes réels de
+  CARCDSF/CARMF/CARPIMKO/CARPV/CAVEC/CAVP/CNBF/CRN/CAVAMAC/CAVOM/MSA
+  auprès d'une source officielle. Ces 11 caisses sont livrées avec leur
+  structure complète (postes, classes, libellés — dont les 8 classes
+  réelles de la retraite de base CNBF telles que communiquées par
+  l'utilisateur) mais des montants/taux à 0, marquées `aParametrer: true`
+  et signalées par une alerte à l'écran, à compléter via l'écran de
+  paramétrage avant tout usage réel. AVA-Artisan, ORGANIC-Commerçant et
+  CIPAV-Libéral réutilisent en revanche les barèmes réels déjà vérifiés
+  du régime SSI/libéral existant (mêmes objets, aucune valeur dupliquée
+  divergente).
+- 24 nouveaux tests (`tests/test_tns_caisses.js`) — structure du
+  catalogue, non-duplication des barèmes réels, parité mode tranches vs
+  moteur historique, choix de classe, CSG scindée, ACRE, caisses « à
+  paramétrer » sans exception, cycle complet de persistance des
+  surcharges (enregistrement → lecture → réinitialisation) — 291 tests
+  au total, tous verts. Vérifié en navigateur headless (Playwright) :
+  sélection d'une caisse, ouverture du paramétrage, édition et
+  enregistrement d'une classe, persistance après réouverture,
+  réinitialisation aux valeurs par défaut, non-régression des 3 régimes
+  historiques.
+
 ## v6 — IRPP : mode simplifié / complet (à l'image du simulateur officiel des impôts)
 
 - **Bascule « Simplifié / Complet »** sur l'écran de déclaration IRPP
