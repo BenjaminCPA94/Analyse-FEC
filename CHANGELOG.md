@@ -4,6 +4,37 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — IRPP : mode simplifié / complet (à l'image du simulateur officiel des impôts)
+
+- **Bascule « Simplifié / Complet »** sur l'écran de déclaration IRPP
+  (même mécanique que le module Rémunération dirigeant), inspirée des
+  deux modes du simulateur officiel
+  (simulateur-ir-ifi.impots.gouv.fr). *Remarque de transparence :
+  l'environnement d'exécution de cette session bloque tout accès réseau
+  externe (politique du bac à sable) ; le mode simplifié n'a donc pas pu
+  être copié depuis la page officielle en direct, il a été reconstruit à
+  partir de sa structure connue (situation du foyer → salaires/pensions
+  uniquement → réductions/crédits courants → résultat) — à vérifier par
+  l'utilisateur au besoin.
+- **Nombre de parts fiscales calculé automatiquement** en mode simplifié
+  (`IrppEngine.calculerNbParts`) à partir de la situation familiale et du
+  nombre d'enfants à charge, selon la règle générale du quotient familial
+  (art. 194 CGI) : 1 part (ou 2 pour un couple) + 0,5 part pour chacun des
+  deux premiers enfants, puis 1 part entière à partir du 3ᵉ. Le mode
+  complet reste éditable manuellement (cas particuliers non modélisés :
+  parent isolé, invalidité, ancien combattant...).
+- **Mode simplifié** : se limite aux salaires/pensions (masque BIC/BNC,
+  revenus fonciers, capitaux mobiliers/plus-values) et aux réductions/
+  crédits les plus courants (dons, PER, emploi à domicile, garde
+  d'enfants — masque PME, Pinel, pension alimentaire versée), avec des
+  messages explicites renvoyant vers le mode complet pour les intégrer.
+  **Mode complet** : tous les champs déjà livrés précédemment, inchangés.
+- 9 nouveaux tests (`calculerNbParts` sur 9 combinaisons situation
+  familiale/nombre d'enfants) — 267 tests au total, tous verts. Vérifié
+  en navigateur headless (Playwright) : bascule des deux modes,
+  recalcul des parts à la saisie du nombre d'enfants, masquage/
+  affichage correct des champs selon le mode.
+
 ## v6 — Module « IRPP » (calcul de l'impôt sur le revenu + recherche de case déclarative)
 
 - **Nouvelle tuile d'accueil « IRPP »**, même architecture que les

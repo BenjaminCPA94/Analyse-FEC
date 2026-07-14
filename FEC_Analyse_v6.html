@@ -1853,7 +1853,13 @@
           style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:200px;">
         <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;" id="irpp-annee-badge"></span>
       </div>
-      <button class="params-btn-danger" onclick="deleteCurrentIrpp()" style="margin:0;">Supprimer</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;background:rgba(0,0,0,.05);border-radius:6px;padding:2px;gap:1px;">
+          <button id="irpp-mode-simplifie" onclick="setIrppMode('simplifie')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">Simplifié</button>
+          <button id="irpp-mode-complet" onclick="setIrppMode('complet')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">Complet</button>
+        </div>
+        <button class="params-btn-danger" onclick="deleteCurrentIrpp()" style="margin:0;">Supprimer</button>
+      </div>
     </div>
     <div style="background:#fff0e6;border:1px solid #e8643c;color:#e8643c;border-radius:8px;padding:8px 14px;font-size:11px;margin:12px 0;">
       ⚠ Simulation d'aide à la décision basée sur des barèmes indicatifs — ne remplace pas le simulateur officiel des impôts (simulateur-ir-ifi.impots.gouv.fr) ni un conseil fiscal personnalisé. À valider avant toute déclaration réelle.
@@ -6993,7 +6999,24 @@ const IrppEngine = (function () {
     return 0;
   }
 
-  return { calculerAbattementBorne, calculerDeclaration, tauxMarginalPourRevenu };
+  /**
+   * calculerNbParts(situationFamiliale, nbEnfantsACharge) — nombre de parts
+   * fiscales selon la règle générale du quotient familial (art. 194 CGI) :
+   * 1 part (célibataire/veuf/divorcé) ou 2 parts (couple) + 0,5 part pour
+   * chacun des deux premiers enfants à charge, puis 1 part entière à partir
+   * du troisième. Simplification assumée : ne modélise pas les majorations
+   * particulières (parent isolé case T, enfant/ex-conjoint invalide,
+   * ancien combattant...) — l'utilisateur peut toujours saisir un nombre de
+   * parts différent en mode complet.
+   */
+  function calculerNbParts(situationFamiliale, nbEnfantsACharge) {
+    const base = situationFamiliale === 'couple' ? 2 : 1;
+    const enfants = Math.max(0, Math.round(safe(nbEnfantsACharge)));
+    const partsEnfants = enfants <= 2 ? enfants * 0.5 : 1 + (enfants - 2) * 1;
+    return base + partsEnfants;
+  }
+
+  return { calculerAbattementBorne, calculerDeclaration, tauxMarginalPourRevenu, calculerNbParts };
 })();
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -7117,7 +7140,8 @@ function creerIrppVierge(name) {
     id: 'irpp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
     name: name || 'Nouvelle déclaration', createdAt: Date.now(), updatedAt: Date.now(),
     reglesSnapshot: JSON.parse(JSON.stringify(REGLES_IR_2025)),
-    situationFamiliale: 'celibataire', nbParts: 1,
+    mode: 'simplifie',
+    situationFamiliale: 'celibataire', nbParts: 1, nbEnfantsACharge: 0,
     revenus: {
       salairesDecl1: 0, salairesDecl2: 0, pensionsDecl1: 0, pensionsDecl2: 0, bic: 0, bnc: 0,
       fonciersBrut: 0, fonciersMicro: true, dividendes: 0, interets: 0, plusValuesMobilieres: 0, autresImposables: 0,
@@ -7188,6 +7212,21 @@ function deleteCurrentIrpp() {
 }
 function onIrppNameChange(v) { if (!IRPP_ACTIVE) return; IRPP_ACTIVE.name = v || 'Déclaration'; schedSaveIrpp(); }
 function schedSaveIrpp() { clearTimeout(_irppSaveTimer); _irppSaveTimer = setTimeout(() => { if (IRPP_ACTIVE) saveIrpp(IRPP_ACTIVE); }, 800); }
+/** updateIrppModeButtons — synchronise uniquement l'apparence du bascule simplifié/complet (jamais de re-rendu complet, pour éviter toute récursion avec renderIrpp()). */
+function updateIrppModeButtons(mode) {
+  const s = document.getElementById('irpp-mode-simplifie'), c = document.getElementById('irpp-mode-complet');
+  if (!s || !c) return;
+  s.style.background = mode === 'simplifie' ? '#185FA5' : 'transparent';
+  s.style.color = mode === 'simplifie' ? '#fff' : '#6b6960';
+  c.style.background = mode === 'complet' ? '#185FA5' : 'transparent';
+  c.style.color = mode === 'complet' ? '#fff' : '#6b6960';
+}
+function setIrppMode(mode) {
+  IRPP_ACTIVE.mode = mode;
+  if (mode === 'simplifie') IRPP_ACTIVE.nbParts = IrppEngine.calculerNbParts(IRPP_ACTIVE.situationFamiliale, IRPP_ACTIVE.nbEnfantsACharge);
+  updateIrppModeButtons(mode);
+  renderIrpp();
+}
 function showIrppTab(tab) {
   IRPP_TAB = tab;
   ['recherche', 'revenus', 'avantages', 'resultats'].forEach(t => {
@@ -7218,6 +7257,14 @@ function irField(label, code, value, onchangeExpr, opts) {
 /** irSetX — setters génériques déclenchant un re-rendu complet. */
 function irSetSituation(key, raw) {
   IRPP_ACTIVE[key] = key === 'situationFamiliale' ? raw : (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0);
+  // En mode simplifié, le nombre de parts fiscales est toujours dérivé de la
+  // situation familiale et du nombre d'enfants à charge (quotient familial
+  // standard) — jamais saisi directement, à l'image du simulateur officiel.
+  // Le mode complet permet en revanche un ajustement manuel (cas particuliers
+  // non modélisés : parent isolé, invalidité, ancien combattant...).
+  if (IRPP_ACTIVE.mode === 'simplifie' && (key === 'situationFamiliale' || key === 'nbEnfantsACharge')) {
+    IRPP_ACTIVE.nbParts = IrppEngine.calculerNbParts(IRPP_ACTIVE.situationFamiliale, IRPP_ACTIVE.nbEnfantsACharge);
+  }
   renderIrpp();
 }
 function irSetRevenu(key, raw, isBool) {
@@ -7235,6 +7282,7 @@ function renderIrpp() {
   if (nameEl && nameEl.value !== IRPP_ACTIVE.name) nameEl.value = IRPP_ACTIVE.name;
   const badge = document.getElementById('irpp-annee-badge');
   if (badge) badge.textContent = 'Barèmes ' + IRPP_ACTIVE.reglesSnapshot.annee;
+  updateIrppModeButtons(IRPP_ACTIVE.mode || 'simplifie');
 
   let compute;
   try { compute = IrppEngine.calculerDeclaration(IRPP_ACTIVE, IRPP_ACTIVE.reglesSnapshot); }
@@ -7305,17 +7353,24 @@ function renderIrRevenus() {
   const el = document.getElementById('irpanel-revenus');
   if (!el || !IRPP_ACTIVE) return;
   const s = IRPP_ACTIVE, r = s.revenus;
+  const simplifie = s.mode !== 'complet';
   el.innerHTML = `
     <div class="drill-card" style="padding:20px;margin-bottom:16px;">
-      <h3 style="margin:0 0 12px;font-size:14px;">Foyer fiscal</h3>
+      <h3 style="margin:0 0 12px;font-size:14px;">Votre situation</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Situation familiale
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Vous êtes
           <select onchange="irSetSituation('situationFamiliale',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
-            <option value="celibataire" ${s.situationFamiliale === 'celibataire' ? 'selected' : ''}>Célibataire / divorcé(e) / veuf(ve)</option>
+            <option value="celibataire" ${s.situationFamiliale === 'celibataire' ? 'selected' : ''}>Célibataire / divorcé(e) / séparé(e) / veuf(ve)</option>
             <option value="couple" ${s.situationFamiliale === 'couple' ? 'selected' : ''}>Marié(e) / pacsé(e)</option>
           </select></label>
-        ${irField('Nombre de parts fiscales', null, s.nbParts, `irSetSituation('nbParts',this.value)`, { suffix: 'parts', step: 0.5 })}
+        ${irField('Nombre d’enfants à charge', null, s.nbEnfantsACharge, `irSetSituation('nbEnfantsACharge',this.value)`, { suffix: '', step: 1 })}
+        ${simplifie
+          ? `<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Nombre de parts fiscales (calculé)
+              <div style="padding:6px 8px;border:1px solid rgba(0,0,0,.08);border-radius:6px;font-size:13px;background:#f4f3f0;color:#1a1916;font-weight:600;">${s.nbParts} part(s)</div>
+            </div>`
+          : irField('Nombre de parts fiscales', null, s.nbParts, `irSetSituation('nbParts',this.value)`, { suffix: 'parts', step: 0.5 })}
       </div>
+      ${simplifie ? `<p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Calculé selon la règle générale du quotient familial (1 part, ou 2 pour un couple, + 0,5 part pour chacun des deux premiers enfants puis 1 part entière à partir du 3ᵉ). Ne tient pas compte des cas particuliers (parent isolé, invalidité...) — passez en mode complet pour saisir un nombre de parts différent.</p>` : ''}
     </div>
     <div class="drill-card" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 12px;font-size:14px;">Traitements, salaires et pensions</h3>
@@ -7327,6 +7382,10 @@ function renderIrRevenus() {
       </div>
       <p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Montants nets imposables avant abattement — l'abattement de 10% (frais professionnels ou pensions) est appliqué automatiquement.</p>
     </div>
+    ${simplifie ? `
+    <div class="drill-card" style="padding:16px 20px;background:#f4f3f0;">
+      <p style="margin:0;font-size:12px;color:#6b6960;">Vous avez aussi des revenus fonciers, BIC/BNC, dividendes, intérêts ou plus-values ? Passez en <strong>mode complet</strong> (ci-dessus) pour les intégrer au calcul — le mode simplifié se limite aux salaires et pensions, comme le simulateur officiel des impôts.</p>
+    </div>` : `
     <div class="drill-card" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 12px;font-size:14px;">Revenus professionnels et fonciers</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
@@ -7350,7 +7409,7 @@ function renderIrRevenus() {
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:12px;">
         <input type="checkbox" ${s.optionBaremeRCM ? 'checked' : ''} onchange="irSetOptionBareme(this.checked)"> Opter pour le barème progressif sur les revenus de capitaux mobiliers (au lieu du PFU)
       </label>
-    </div>`;
+    </div>`}`;
 }
 
 // ── Onglet 3 : Déductions, réductions & crédits ──────────────────────────
@@ -7358,14 +7417,16 @@ function renderIrAvantages() {
   const el = document.getElementById('irpanel-avantages');
   if (!el || !IRPP_ACTIVE) return;
   const de = IRPP_ACTIVE.deductions, re = IRPP_ACTIVE.reductions, cr = IRPP_ACTIVE.credits;
+  const simplifie = IRPP_ACTIVE.mode !== 'complet';
   el.innerHTML = `
     <div class="drill-card" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 12px;font-size:14px;">Déductions du revenu global</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
-        ${irField('Pensions alimentaires versées', '6EL / 6GU', de.pensionsAlimentairesVersees, `irSetDeduction('pensionsAlimentairesVersees',this.value)`)}
+        ${simplifie ? '' : irField('Pensions alimentaires versées', '6EL / 6GU', de.pensionsAlimentairesVersees, `irSetDeduction('pensionsAlimentairesVersees',this.value)`)}
         ${irField('Versements sur un PER', '6NS', de.versementsPER, `irSetDeduction('versementsPER',this.value)`)}
         ${irField('Revenus professionnels de référence pour le plafond PER', null, de.revenuProfessionnelPourPER, `irSetDeduction('revenuProfessionnelPourPER',this.value)`)}
       </div>
+      ${simplifie ? `<p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Pensions alimentaires versées : disponible en mode complet.</p>` : ''}
     </div>
     <div class="drill-card" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 4px;font-size:14px;">Réductions d'impôt</h3>
@@ -7373,9 +7434,10 @@ function renderIrAvantages() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
         ${irField("Dons aux organismes d'aide aux personnes en difficulté", '7UD', re.donsOrganismesDifficulte, `irSetReduction('donsOrganismesDifficulte',this.value)`)}
         ${irField("Dons à d'autres organismes d'intérêt général", '7UF', re.donsAutresOrganismes, `irSetReduction('donsAutresOrganismes',this.value)`)}
-        ${irField('Souscription au capital de PME', '7CF', re.souscriptionPME, `irSetReduction('souscriptionPME',this.value)`)}
-        ${irField('Investissement locatif Pinel', '7QE', re.investissementPinel, `irSetReduction('investissementPinel',this.value)`)}
+        ${simplifie ? '' : irField('Souscription au capital de PME', '7CF', re.souscriptionPME, `irSetReduction('souscriptionPME',this.value)`)}
+        ${simplifie ? '' : irField('Investissement locatif Pinel', '7QE', re.investissementPinel, `irSetReduction('investissementPinel',this.value)`)}
       </div>
+      ${simplifie ? `<p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Souscription PME, Pinel et autres dispositifs d'investissement : disponibles en mode complet.</p>` : ''}
     </div>
     <div class="drill-card" style="padding:20px;">
       <h3 style="margin:0 0 4px;font-size:14px;">Crédits d'impôt</h3>

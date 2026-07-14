@@ -148,6 +148,19 @@ function run(htmlPath) {
     push('REGLES_IR_2025.bareme référence REGLES_REMUNERATION_2025.ir.bareme (même objet, jamais dupliqué)', memeBareme === true, memeBareme);
   }
 
+  // ── Cas 12bis : calculerNbParts — quotient familial standard (mode simplifié) ─
+  {
+    const attendus = [
+      ['celibataire', 0, 1], ['celibataire', 1, 1.5], ['celibataire', 2, 2],
+      ['celibataire', 3, 3], ['celibataire', 4, 4],
+      ['couple', 0, 2], ['couple', 1, 2.5], ['couple', 2, 3], ['couple', 3, 4],
+    ];
+    for (const [sit, n, attendu] of attendus) {
+      const r = getJSON(ctx, `${E}.calculerNbParts('${sit}', ${n})`);
+      push(`calculerNbParts('${sit}', ${n}) = ${attendu}`, close(r, attendu, 1e-9), r);
+    }
+  }
+
   // ── Cas 13 : recherche de case — demande explicite de l'utilisateur ("dons") ─
   {
     const resDons = getJSON(ctx, `rechercherCasesIrpp('dons')`);
