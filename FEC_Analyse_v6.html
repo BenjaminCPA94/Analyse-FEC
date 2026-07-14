@@ -1675,6 +1675,35 @@
   </div>
 </div><!-- /tns-list-screen -->
 
+<!-- ═══ TNS — écran de calcul ═══ -->
+<div id="tns-screen" style="display:none;background:#f7f6f3;min-height:100vh;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+      <div class="home-nav">
+        <button class="home-nav-btn" onclick="backToTnsList()">← Liste des calculs TNS</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:56px;padding:20px 32px 60px;max-width:900px;margin-left:auto;margin-right:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <input id="tns-name-input" type="text" oninput="onTnsNameChange(this.value)"
+        style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:180px;">
+      <button class="params-btn-danger" onclick="deleteCurrentTns()" style="margin:0;">Supprimer ce calcul</button>
+    </div>
+    <div style="background:#fff0e6;border:1px solid #e8643c;color:#e8643c;border-radius:8px;padding:8px 14px;font-size:11px;margin:12px 0;">
+      ⚠ Barème indicatif à titre de simulation — les cotisations réelles suivent des formules progressives officielles qui évoluent chaque année. Vérifiez toujours un calcul définitif auprès de l'URSSAF ou de votre expert-comptable.
+    </div>
+    <div id="tns-content"></div>
+  </div>
+</div><!-- /tns-screen -->
+
 <script>
 // ═══════════════════════════════════════════════════════════
 //  SINGLE SOURCE OF TRUTH — Active dossier state
@@ -5282,14 +5311,391 @@ function exportPrevTresorerieToCSV() {
   toast('Export CSV du Plan de trésorerie téléchargé');
 }
 
-// ── MODULE TNS — écran liste ─────────────────────────────────────────────
-function renderTnsList(){
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — MOTEUR (pur) + BARÈMES ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * TnsEngine — calcul des cotisations sociales des travailleurs non
+ * salariés. Fonctions pures, barèmes totalement séparés du calcul (cf.
+ * TNS_BAREME_REEL / TNS_BAREME_MICRO ci-dessous) — mettre à jour un taux
+ * légal est un changement de donnée, jamais de code.
+ *
+ * LIMITE IMPORTANTE : les barèmes URSSAF réels utilisent des formules
+ * progressives lissées (maladie, allocations familiales) recalculées
+ * chaque année. Ce moteur les approxime par un système de tranches
+ * simples (paliers), suffisant pour une simulation prévisionnelle mais
+ * PAS pour une déclaration officielle — avertissement affiché à
+ * l'utilisateur dans l'écran de calcul.
+ */
+const TnsEngine = (function () {
+  function safe(n) { return Number.isFinite(n) ? n : 0; }
+
+  /** cotisationParTranches(assiette, tranches) — tranches: [{jusqu, taux}], jusqu croissant, Infinity pour la dernière. */
+  function cotisationParTranches(assiette, tranches) {
+    let cotisation = 0, plancher = 0;
+    for (const t of tranches) {
+      const borne = Math.min(safe(assiette), t.jusqu);
+      if (borne > plancher) cotisation += (borne - plancher) * safe(t.taux);
+      plancher = t.jusqu;
+      if (safe(assiette) <= t.jusqu) break;
+    }
+    return safe(cotisation);
+  }
+
+  /** calculerTNSReel(revenu, bareme, options) — régime réel (commerçant/artisan ou profession libérale). */
+  function calculerTNSReel(revenu, bareme, options) {
+    options = options || {};
+    const r = safe(revenu);
+    const postes = {};
+    Object.keys(bareme.tranches).forEach(poste => {
+      postes[poste] = cotisationParTranches(r, bareme.tranches[poste]);
+    });
+    const formationPro = safe(bareme.formationProMontant);
+    const totalHorsCSG = Object.values(postes).reduce((s, v) => s + v, 0) + formationPro;
+    const assietteCSG = r + totalHorsCSG;
+    const csgCrds = assietteCSG * safe(bareme.tauxCSGCRDS);
+
+    const reductionACRE = options.acre ? safe(options.tauxReductionACRE !== undefined ? options.tauxReductionACRE : 0.5) : 0;
+    const facteur = 1 - reductionACRE;
+    const postesReduits = {};
+    Object.keys(postes).forEach(p => { postesReduits[p] = postes[p] * facteur; });
+    const total = (totalHorsCSG + csgCrds) * facteur;
+
+    return {
+      ...postesReduits, formationPro: formationPro * facteur, csgCrds: csgCrds * facteur,
+      total: safe(total), revenuNet: safe(r - total), tauxGlobal: r > 0 ? total / r : 0,
+    };
+  }
+
+  /** calculerTNSMicro(ca, bareme, options) — micro-entrepreneur : taux forfaitaire unique sur le CA encaissé. */
+  function calculerTNSMicro(ca, bareme, options) {
+    options = options || {};
+    const c = safe(ca);
+    const reductionACRE = options.acre ? safe(options.tauxReductionACRE !== undefined ? options.tauxReductionACRE : 0.5) : 0;
+    const cotisationsSociales = c * safe(bareme.tauxCotisations) * (1 - reductionACRE);
+    const cfp = c * safe(bareme.tauxCFP);
+    const versementLiberatoire = options.versementLiberatoire ? c * safe(bareme.tauxVersementLiberatoire) : 0;
+    const total = cotisationsSociales + cfp + versementLiberatoire;
+    return {
+      cotisationsSociales: safe(cotisationsSociales), cfp: safe(cfp), versementLiberatoire: safe(versementLiberatoire),
+      total: safe(total), revenuNet: safe(c - total), tauxGlobal: c > 0 ? total / c : 0,
+    };
+  }
+
+  return { safe, cotisationParTranches, calculerTNSReel, calculerTNSMicro };
+})();
+
+/**
+ * Barèmes de référence — indicatifs, année de référence 2025 (PASS =
+ * 47 100 €). Seuils exprimés en multiples du PASS (jusquPASS), comme les
+ * textes URSSAF officiels, pour rester cohérents si le PASS est ajusté.
+ * `null` = dernière tranche (jusqu'à l'infini).
+ */
+const TNS_PASS_REF = 47100;
+const TNS_BAREME_REEL_DEFAUT = {
+  commercant: {
+    label: 'Commerçant / artisan (SSI)',
+    tranches: {
+      retraiteBase: [{ jusquPASS: 1, taux: 0.1775 }, { jusquPASS: null, taux: 0.0060 }],
+      retraiteComplementaire: [{ jusquPASS: 0.85, taux: 0.07 }, { jusquPASS: 4, taux: 0.08 }],
+      invaliditeDeces: [{ jusquPASS: 1, taux: 0.013 }, { jusquPASS: null, taux: 0 }],
+      allocationsFamiliales: [{ jusquPASS: 1.1, taux: 0 }, { jusquPASS: null, taux: 0.031 }],
+      maladie: [{ jusquPASS: 0.4, taux: 0 }, { jusquPASS: null, taux: 0.065 }],
+      indemnitesJournalieres: [{ jusquPASS: 5, taux: 0.003 }, { jusquPASS: null, taux: 0 }],
+    },
+    formationProTauxPASS: 0.0025, tauxCSGCRDS: 0.097,
+  },
+  liberal: {
+    label: 'Profession libérale (CIPAV / URSSAF PL)',
+    tranches: {
+      retraiteBase: [{ jusquPASS: 1, taux: 0.1775 }, { jusquPASS: null, taux: 0.0060 }],
+      retraiteComplementaire: [{ jusquPASS: 4, taux: 0.09 }, { jusquPASS: null, taux: 0.09 }],
+      invaliditeDeces: [{ jusquPASS: 1, taux: 0.011 }, { jusquPASS: null, taux: 0 }],
+      allocationsFamiliales: [{ jusquPASS: 1.1, taux: 0 }, { jusquPASS: null, taux: 0.031 }],
+      maladie: [{ jusquPASS: 0.4, taux: 0 }, { jusquPASS: null, taux: 0.065 }],
+    },
+    formationProTauxPASS: 0.0025, tauxCSGCRDS: 0.097,
+  },
+};
+const TNS_BAREME_MICRO_DEFAUT = {
+  vente: { label: 'Vente de marchandises, restauration, hébergement (BIC vente)', tauxCotisations: 0.123, tauxCFP: 0.001, tauxVersementLiberatoire: 0.01 },
+  servicesBIC: { label: 'Prestations de services commerciales/artisanales (BIC)', tauxCotisations: 0.212, tauxCFP: 0.003, tauxVersementLiberatoire: 0.017 },
+  liberal: { label: 'Activité libérale (BNC)', tauxCotisations: 0.211, tauxCFP: 0.002, tauxVersementLiberatoire: 0.022 },
+};
+const TNS_LABELS_POSTES = {
+  retraiteBase: 'Retraite de base', retraiteComplementaire: 'Retraite complémentaire',
+  invaliditeDeces: 'Invalidité-décès', allocationsFamiliales: 'Allocations familiales',
+  maladie: 'Maladie-maternité', indemnitesJournalieres: 'Indemnités journalières',
+  formationPro: 'Formation professionnelle (CFP)', csgCrds: 'CSG-CRDS',
+};
+
+/** baremeReelAvecPass(bareme, pass) — convertit les seuils jusquPASS (multiples du PASS) en montants absolus € pour le moteur. */
+function baremeReelAvecPass(bareme, pass) {
+  const tranches = {};
+  Object.keys(bareme.tranches).forEach(poste => {
+    tranches[poste] = bareme.tranches[poste].map(t => ({ jusqu: t.jusquPASS === null ? Infinity : t.jusquPASS * pass, taux: t.taux }));
+  });
+  return { tranches, formationProMontant: bareme.formationProTauxPASS * pass, tauxCSGCRDS: bareme.tauxCSGCRDS };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — STOCKAGE ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+const TNS_STORE_KEY = 'fec_analyse_tns_v1';
+function loadTnsStore() {
+  try { return JSON.parse(localStorage.getItem(TNS_STORE_KEY) || '{}'); }
+  catch (e) {
+    console.warn('[TNS] localStorage illisible (JSON corrompu) :', e);
+    toast('Stockage des calculs TNS illisible', true);
+    return {};
+  }
+}
+function saveTnsStore(data) {
+  try { localStorage.setItem(TNS_STORE_KEY, JSON.stringify(data)); return true; }
+  catch (e) {
+    toast('Échec de sauvegarde du calcul TNS : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
+    console.error('[TNS] saveTnsStore() a échoué :', e);
+    return false;
+  }
+}
+function saveTns(record) {
+  record.updatedAt = Date.now();
+  const store = loadTnsStore();
+  store[record.id] = record;
+  saveTnsStore(store);
+}
+function deleteTnsById(id) {
+  const store = loadTnsStore();
+  delete store[id];
+  saveTnsStore(store);
+}
+function listTns() {
+  return Object.values(loadTnsStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+function creerTnsVierge() {
+  return {
+    id: 'tns-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: 'Nouveau calcul TNS', createdAt: Date.now(), updatedAt: Date.now(),
+    regime: 'reel_commercant', pass: TNS_PASS_REF,
+    revenu: 40000, ca: 40000, natureMicro: 'servicesBIC',
+    acre: false, tauxReductionACRE: 0.5, versementLiberatoire: false,
+    baremeReel: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant)),
+    baremeMicro: JSON.parse(JSON.stringify(TNS_BAREME_MICRO_DEFAUT.servicesBIC)),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — ÉCRAN LISTE ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+const TNS_REGIME_LABELS = { reel_commercant: 'Réel — Commerçant/artisan', reel_liberal: 'Réel — Profession libérale', micro: 'Micro-entrepreneur' };
+function renderTnsList() {
   const el = document.getElementById('tns-list-content');
   if (!el) return;
-  el.innerHTML = '<div class="std-empty">Aucun calcul pour l’instant. Cliquez sur « + Nouveau calcul » pour commencer.</div>';
+  const items = listTns();
+  if (!items.length) {
+    el.innerHTML = '<div class="std-empty">Aucun calcul pour l’instant. Cliquez sur « + Nouveau calcul » pour commencer.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="std-item-grid">${items.map(t => `
+    <div class="std-item-card" onclick="openTnsEditor('${t.id}')">
+      <div class="std-item-name">${escHtml(t.name)}</div>
+      <div class="std-item-meta">${escHtml(TNS_REGIME_LABELS[t.regime] || t.regime)}</div>
+    </div>`).join('')}</div>`;
 }
-function creerNouveauTns(){
-  toast('Le module TNS arrive dans un prochain incrément');
+function creerNouveauTns() {
+  const record = creerTnsVierge();
+  saveTns(record);
+  openTnsEditor(record.id);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE TNS — ÉCRAN DE CALCUL ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+let TNS_ACTIVE = null;
+let _tnsSaveTimer = null;
+
+function openTnsEditor(id) {
+  const store = loadTnsStore();
+  const record = store[id];
+  if (!record) { toast('Calcul TNS introuvable', true); return; }
+  TNS_ACTIVE = record;
+  ['home-screen', 'dashboard-screen', 'tns-list-screen'].forEach(sid => {
+    const e = document.getElementById(sid); if (e) e.style.display = 'none';
+  });
+  document.getElementById('tns-screen').style.display = 'block';
+  renderTns();
+}
+function backToTnsList() {
+  if (TNS_ACTIVE) saveTns(TNS_ACTIVE);
+  TNS_ACTIVE = null;
+  document.getElementById('tns-screen').style.display = 'none';
+  document.getElementById('tns-list-screen').style.display = 'block';
+  renderTnsList();
+}
+function deleteCurrentTns() {
+  if (!TNS_ACTIVE) return;
+  if (!confirm(`Supprimer définitivement « ${TNS_ACTIVE.name} » ?`)) return;
+  deleteTnsById(TNS_ACTIVE.id);
+  TNS_ACTIVE = null;
+  document.getElementById('tns-screen').style.display = 'none';
+  document.getElementById('tns-list-screen').style.display = 'block';
+  renderTnsList();
+  toast('Calcul TNS supprimé');
+}
+function onTnsNameChange(v) {
+  if (!TNS_ACTIVE) return;
+  TNS_ACTIVE.name = v || 'Calcul TNS';
+  schedSaveTns();
+}
+function schedSaveTns() {
+  clearTimeout(_tnsSaveTimer);
+  _tnsSaveTimer = setTimeout(() => { if (TNS_ACTIVE) saveTns(TNS_ACTIVE); }, 800);
+}
+function tnsSetRegime(regime) {
+  TNS_ACTIVE.regime = regime;
+  if (regime === 'reel_commercant') TNS_ACTIVE.baremeReel = JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant));
+  if (regime === 'reel_liberal') TNS_ACTIVE.baremeReel = JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.liberal));
+  renderTns();
+}
+function tnsSetNatureMicro(nature) {
+  TNS_ACTIVE.natureMicro = nature;
+  TNS_ACTIVE.baremeMicro = JSON.parse(JSON.stringify(TNS_BAREME_MICRO_DEFAUT[nature]));
+  renderTns();
+}
+function tnsSetField(key, raw, isBool) {
+  if (isBool) { TNS_ACTIVE[key] = !!raw; }
+  else { const v = parseFloat(raw); TNS_ACTIVE[key] = Number.isFinite(v) ? v : 0; }
+  renderTns();
+}
+function tnsSetTranche(poste, idx, raw) {
+  const v = parseFloat(raw);
+  TNS_ACTIVE.baremeReel.tranches[poste][idx].taux = Number.isFinite(v) ? v / 100 : 0;
+  renderTns();
+}
+function tnsSetMicroTaux(key, raw) {
+  const v = parseFloat(raw);
+  TNS_ACTIVE.baremeMicro[key] = Number.isFinite(v) ? v / 100 : 0;
+  renderTns();
+}
+
+function renderTns() {
+  if (!TNS_ACTIVE) return;
+  const nameEl = document.getElementById('tns-name-input');
+  if (nameEl && nameEl.value !== TNS_ACTIVE.name) nameEl.value = TNS_ACTIVE.name;
+
+  const el = document.getElementById('tns-content');
+  if (!el) return;
+  const t = TNS_ACTIVE;
+  const isMicro = t.regime === 'micro';
+  const isReel = !isMicro;
+
+  let resultat, assiette;
+  if (isReel) {
+    assiette = t.revenu;
+    resultat = TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
+  } else {
+    assiette = t.ca;
+    resultat = TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
+  }
+
+  const regimeTiles = [
+    ['reel_commercant', 'Réel — Commerçant / artisan'],
+    ['reel_liberal', 'Réel — Profession libérale'],
+    ['micro', 'Micro-entrepreneur'],
+  ].map(([id, label]) => `<button onclick="tnsSetRegime('${id}')" style="flex:1;padding:10px 8px;border-radius:8px;border:1.5px solid ${t.regime === id ? '#185FA5' : 'rgba(0,0,0,.12)'};background:${t.regime === id ? '#e6f1fb' : '#fff'};color:${t.regime === id ? '#185FA5' : '#1a1916'};font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`).join('');
+
+  let html = `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
+    <h3 style="margin:0 0 10px;font-size:14px;">Régime</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${regimeTiles}</div>
+  </div>`;
+
+  html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
+    <h3 style="margin:0 0 12px;font-size:14px;">Paramètres</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">`;
+  if (isReel) {
+    html += pvField('Revenu professionnel net annuel', t.revenu, `tnsSetField('revenu',this.value)`);
+    html += pvField('PASS de référence', t.pass, `tnsSetField('pass',this.value)`);
+  } else {
+    html += `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Nature d’activité
+      <select onchange="tnsSetNatureMicro(this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+        ${Object.entries(TNS_BAREME_MICRO_DEFAUT).map(([k, v]) => `<option value="${k}" ${t.natureMicro === k ? 'selected' : ''}>${escHtml(v.label)}</option>`).join('')}
+      </select></label>`;
+    html += pvField('Chiffre d’affaires encaissé annuel', t.ca, `tnsSetField('ca',this.value)`);
+    html += `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
+      <input type="checkbox" ${t.versementLiberatoire ? 'checked' : ''} onchange="tnsSetField('versementLiberatoire',this.checked,true)"> Versement fiscal libératoire de l’IR</label>`;
+  }
+  html += `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
+    <input type="checkbox" ${t.acre ? 'checked' : ''} onchange="tnsSetField('acre',this.checked,true)"> ACRE (1ʳᵉ année)</label>`;
+  if (t.acre) {
+    html += pvField('Taux de réduction ACRE', t.tauxReductionACRE, `tnsSetField('tauxReductionACRE',this.value/100)`, { pct: true });
+  }
+  html += `</div></div>`;
+
+  // Barème détaillé, éditable
+  if (isReel) {
+    html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;overflow-x:auto;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Barème (éditable)</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Seuils exprimés en multiples du PASS ci-dessus. Taux par tranche modifiables.</p>
+      <table class="dt"><thead><tr><th>Poste</th><th class="r">Taux tranche 1</th><th>Jusqu’à</th><th class="r">Taux tranche 2</th></tr></thead><tbody>
+        ${Object.keys(t.baremeReel.tranches).map(poste => {
+          const tr = t.baremeReel.tranches[poste];
+          return `<tr>
+            <td style="padding:7px 10px;">${TNS_LABELS_POSTES[poste] || poste}</td>
+            <td class="r">${pvCellInput(tr[0].taux, `tnsSetTranche('${poste}',0,this.value)`, true)}</td>
+            <td style="padding:7px 10px;font-size:11px;color:#a09d96;">${tr[0].jusquPASS} × PASS</td>
+            <td class="r">${tr[1] ? pvCellInput(tr[1].taux, `tnsSetTranche('${poste}',1,this.value)`, true) : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+    </div>`;
+  } else {
+    html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Taux (éditables)</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">
+        ${pvField('Taux de cotisations sociales', t.baremeMicro.tauxCotisations, `tnsSetMicroTaux('tauxCotisations',this.value)`, { pct: true })}
+        ${pvField('Taux CFP', t.baremeMicro.tauxCFP, `tnsSetMicroTaux('tauxCFP',this.value)`, { pct: true })}
+        ${pvField('Taux versement libératoire', t.baremeMicro.tauxVersementLiberatoire, `tnsSetMicroTaux('tauxVersementLiberatoire',this.value)`, { pct: true })}
+      </div>
+    </div>`;
+  }
+
+  // Résultat
+  const rows = isReel
+    ? Object.keys(resultat).filter(k => TNS_LABELS_POSTES[k]).map(k => [TNS_LABELS_POSTES[k], resultat[k]])
+    : [['Cotisations sociales', resultat.cotisationsSociales], ['Formation professionnelle (CFP)', resultat.cfp], ['Versement libératoire de l’IR', resultat.versementLiberatoire]];
+
+  html += pvExportBtn('exportTnsToCSV', 'Cotisations TNS') + `<div class="drill-card">
+    <table class="dt"><tbody>
+      ${rows.map(([label, v]) => `<tr><td style="padding:9px 16px;">${escHtml(label)}</td><td class="r" style="padding:9px 16px;">${fmtV(v)}</td></tr>`).join('')}
+      <tr style="font-weight:700;background:#f4f3f0;"><td style="padding:9px 16px;">= Total cotisations</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.total)}</td></tr>
+      <tr><td style="padding:9px 16px;">Taux global</td><td class="r" style="padding:9px 16px;">${(resultat.tauxGlobal * 100).toFixed(1)} %</td></tr>
+      <tr style="font-weight:700;"><td style="padding:9px 16px;">= Revenu net après cotisations</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.revenuNet)}</td></tr>
+    </tbody></table>
+  </div>`;
+
+  el.innerHTML = html;
+  schedSaveTns();
+}
+
+function exportTnsToCSV() {
+  if (!TNS_ACTIVE) return;
+  const t = TNS_ACTIVE;
+  const isReel = t.regime !== 'micro';
+  const resultat = isReel
+    ? TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE })
+    : TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
+  const rows = [['Poste', 'Montant (€)']];
+  if (isReel) {
+    Object.keys(resultat).filter(k => TNS_LABELS_POSTES[k]).forEach(k => rows.push([TNS_LABELS_POSTES[k], resultat[k].toFixed(2)]));
+  } else {
+    rows.push(['Cotisations sociales', resultat.cotisationsSociales.toFixed(2)]);
+    rows.push(['Formation professionnelle (CFP)', resultat.cfp.toFixed(2)]);
+    rows.push(['Versement libératoire de l’IR', resultat.versementLiberatoire.toFixed(2)]);
+  }
+  rows.push(['Total cotisations', resultat.total.toFixed(2)]);
+  rows.push(['Revenu net après cotisations', resultat.revenuNet.toFixed(2)]);
+  downloadTextFile(`TNS_${safeFilePart(t.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV du calcul TNS téléchargé');
 }
 
 // ── TOAST ──

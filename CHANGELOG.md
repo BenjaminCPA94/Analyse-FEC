@@ -4,6 +4,48 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Restructuration en page d'accueil « menu des modules » + Prévisionnel + TNS
+
+- **Nouvelle page d'accueil** : le logiciel démarre désormais sur un menu
+  de 3 tuiles (Dossiers / Prévisionnel / TNS) plutôt que directement sur
+  la liste des dossiers. La tuile « Dossiers » ouvre l'écran existant à
+  l'identique — aucune régression sur l'import FEC, le dashboard, ou les
+  onglets Compte de résultat/SIG/Bilan/Trésorerie.
+- **Module Prévisionnel** : moteur de calcul (`PrevisionnelEngine`,
+  fonctions pures) et écran de saisie/résultats, utilisés à l'identique
+  par les deux points d'entrée : le bouton « Lancer un prévisionnel » du
+  dashboard d'un dossier (amorce le compte de résultat et le bilan
+  d'ouverture depuis les données réelles) et la tuile « Prévisionnel » de
+  l'accueil (feuille vierge, aucune dépendance à un dossier). Isolation
+  stricte : le prévisionnel ne lit le dossier qu'une fois à sa création,
+  n'écrit jamais dans les exercices réels, et vit dans son propre
+  stockage (`fec_analyse_previsionnels_v1`), sauvegardé et listé comme
+  les dossiers. Sur l'horizon choisi (3 ans par défaut, 1 à 10) : compte
+  de résultat, bilan (équilibre actif=passif garanti par construction —
+  la trésorerie de clôture est la variable résiduelle du plan de
+  financement), plan d'investissement/amortissements, plan de
+  financement (emprunts à annuités constantes/capital constant/in fine),
+  plan de trésorerie mensuel (cohérence exacte avec les tableaux annuels,
+  testée), indicateurs (seuil de rentabilité, BFR, CAF, marges). Toutes
+  les hypothèses sont éditables, aucune valeur codée en dur. Export CSV
+  par tableau.
+- **Module TNS** : calcul des cotisations sociales des travailleurs non
+  salariés (`TnsEngine`), 3 régimes (réel commerçant/artisan SSI, réel
+  profession libérale CIPAV/URSSAF PL, micro-entrepreneur), options ACRE
+  et versement fiscal libératoire. Barèmes (taux, tranches exprimées en
+  multiples du PASS) isolés des calculs et entièrement éditables dans
+  l'écran — **indicatifs, année de référence 2025**, à vérifier avant tout
+  usage réel (formules progressives officielles simplifiées en paliers,
+  cf. avertissement affiché à l'utilisateur). Stockage indépendant
+  (`fec_analyse_tns_v1`), export CSV.
+- 49 nouveaux tests (`tests/test_previsionnel_engine.js`,
+  `tests/test_tns.js`), intégrés à `run_all.js` — 166 tests au total,
+  tous verts. Vérifié en navigateur headless (Playwright) : navigation
+  complète entre les 3 modules (un seul écran visible à la fois à chaque
+  étape), amorçage depuis un dossier réel, CRUD investissements/
+  emprunts/apports, sauvegarde/suppression, exports CSV, et
+  non-régression intégrale des onglets existants.
+
 ## v6 — Nouvel onglet « Compte de résultat » (présentation légale PCG)
 
 - **L'ancien onglet « Compte de résultat » devient « SIG »** (Soldes

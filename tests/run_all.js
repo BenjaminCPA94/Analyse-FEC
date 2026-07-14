@@ -94,6 +94,9 @@ reportResults('Grand livre', require('./test_grand_livre.js').run(htmlPath));
 section('12. Prévisionnel — moteur de calcul (PrevisionnelEngine)');
 reportResults('Prévisionnel', require('./test_previsionnel_engine.js').run(htmlPath));
 
+section('13. TNS — cotisations sociales des indépendants (TnsEngine)');
+reportResults('TNS', require('./test_tns.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
