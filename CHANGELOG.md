@@ -4,6 +4,68 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Module « Rémunération dirigeant » (optimisation rémunération/dividendes)
+
+- **Nouvelle tuile d'accueil « Rémunération dirigeant »**, même architecture
+  que les modules Prévisionnel/TNS (stockage indépendant
+  `fec_analyse_remuneration_v1`, liste + écran de simulation, sauvegarde
+  automatique, suppression).
+- **Barèmes versionnés et séparés du moteur** (`REGLES_REMUNERATION_2025`) :
+  IS (taux réduit/normal, seuil), IR (barème par tranches, décote,
+  quotient familial plafonné), PFU, abattement dividendes, cotisations
+  "assimilé salarié" (SASU/SAS) et TNS réel (réutilise le barème du
+  module TNS — jamais dupliqué). Chaque bloc porte sa source et sa date
+  de vérification ; un snapshot des règles est conservé par simulation
+  (`reglesSnapshot`) pour qu'un calcul déjà réalisé reste reproductible
+  même après une mise à jour ultérieure du barème par défaut. **Barème
+  indicatif 2025** — avertissement explicite affiché à l'écran.
+- **Moteur (`RemunerationEngine`)** : IS par tranches, IR (foyer complet,
+  quotient familial, décote), comparaison PFU vs barème pour les
+  dividendes (choix automatique du plus favorable), cotisations
+  "assimilé salarié" (SASU/SAS) et TNS (EURL/SARL/EI gérant majoritaire,
+  y compris la fraction de dividendes excédant le seuil de 10 %
+  capital+primes+CCA soumise aux cotisations sociales), et l'IR direct
+  pour les structures à l'IR (EURL/EI). 5 orchestrateurs par forme
+  juridique (SASU/SAS, EURL/SARL/EI-IS, EURL/EI-IR), un registre
+  d'architecture extensible pour ajouter SELAS/SELARL plus tard.
+- **Optimiseur** : balayage grossier puis recherche locale fine (pas de
+  boucle exhaustive coûteuse), scénarios 100% rémunération / 100%
+  dividendes / mix optimisé / coût société fixe, simulation inversée
+  (net mensuel cible → rémunération brute nécessaire, dichotomie),
+  comparateur de statuts juridiques à résultat économique identique.
+  **Non-régression notable corrigée pendant le développement** : les
+  scénarios dont le coût réel (brut + charges patronales) dépasse ce que
+  la société peut financer sont désormais explicitement écartés des
+  candidats de l'optimiseur (`filtrerFaisables`) — sans ce garde-fou,
+  l'algorithme pouvait recommander une rémunération séduisante sur le
+  seul plan personnel mais impayable par la société.
+- **Écran** : mode simplifié/expert, onglets Société / Dirigeant &
+  foyer / Hypothèses / Résultats (tableau comparatif, 2 graphiques,
+  recommandation textuelle prudente, gains 1/3/5 ans) / Comparateur de
+  statuts / Simulation inversée. Score de protection sociale indicatif
+  (jamais présenté comme un droit exact). Export CSV par tableau ;
+  export « PDF » via impression navigateur (comme le reste de
+  l'application, pas de service PDF dédié — aucun backend disponible).
+- **Périmètre non couvert dans cette livraison** (annoncé, pas simulé en
+  silence) : SELAS/SELARL (barèmes non implémentés, architecture prête à
+  les recevoir), pondération multicritère complète en interface,
+  projection pluriannuelle à 4 sous-stratégies, analyse de sensibilité
+  automatisée, écran d'administration dédié à l'édition des barèmes
+  (les barèmes restent modifiables en éditant `REGLES_REMUNERATION_2025`
+  ou le `reglesSnapshot` d'une simulation, mais sans interface graphique
+  dédiée).
+- 48 nouveaux tests (`tests/test_remuneration_engine.js`), couvrant les
+  15 cas du cahier des charges (SASU dividendes seuls / 60k rémunération
+  / arbitrage, EURL-IS gérant majoritaire, seuil des 10 % sur
+  dividendes, EURL/EI-IR, foyer avec autres revenus, IS taux
+  réduit/normal, résultat insuffisant/déficitaire, trésorerie
+  insuffisante, coût société fixe, revenu net cible, changement d'année
+  fiscale) + 2 tests de non-régression dédiés au correctif de
+  faisabilité — intégrés à `run_all.js`, 214 tests au total, tous
+  verts. Vérifié en navigateur headless (Playwright) : les 6 onglets,
+  bascule simplifié/expert, export CSV, cycle de vie complet, et
+  non-régression intégrale de tous les modules existants.
+
 ## v6 — Restructuration en page d'accueil « menu des modules » + Prévisionnel + TNS
 
 - **Nouvelle page d'accueil** : le logiciel démarre désormais sur un menu

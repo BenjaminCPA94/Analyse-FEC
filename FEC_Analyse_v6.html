@@ -136,7 +136,7 @@
   .module-menu-intro { text-align:center; max-width:520px; margin-bottom:40px; }
   .module-menu-intro h1 { font-size:24px; font-weight:800; color:#1a1916; margin:0 0 8px; }
   .module-menu-intro p { font-size:14px; color:#6b6960; margin:0; }
-  .module-tile-grid { display:grid; grid-template-columns:repeat(3, minmax(220px, 280px)); gap:20px; }
+  .module-tile-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 280px)); gap:20px; justify-content:center; max-width:1180px; }
   .module-tile {
     background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px;
     padding:28px 22px; cursor:pointer; transition:all .15s;
@@ -659,6 +659,11 @@
         <div class="module-tile-icon">🧮</div>
         <div class="module-tile-title">TNS</div>
         <div class="module-tile-sub">Calculez les cotisations sociales d'un travailleur non salarié (réel commerçant/artisan, profession libérale, micro-entrepreneur).</div>
+      </div>
+      <div class="module-tile" onclick="openModule('remuneration')">
+        <div class="module-tile-icon">⚖️</div>
+        <div class="module-tile-title">Rémunération dirigeant</div>
+        <div class="module-tile-sub">Comparez rémunération, dividendes et formes juridiques pour identifier la stratégie la plus adaptée au dirigeant et à son foyer fiscal.</div>
       </div>
     </div>
   </div>
@@ -1703,6 +1708,91 @@
     <div id="tns-content"></div>
   </div>
 </div><!-- /tns-screen -->
+
+<!-- ═══ RÉMUNÉRATION DIRIGEANT — écran liste ═══ -->
+<div id="remu-list-screen" style="display:none;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+    </div>
+  </div>
+  <div class="std-list-content" style="margin-top:56px;">
+    <div class="std-list-back" onclick="showModuleMenu()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      Accueil
+    </div>
+    <div class="std-list-header">
+      <div>
+        <h1>Rémunération dirigeant</h1>
+        <p>Optimisation de la rémunération du dirigeant : comparez rémunération, dividendes et statut juridique.</p>
+      </div>
+      <button class="params-btn-primary" onclick="creerNouvelleRemu()">+ Nouvelle simulation</button>
+    </div>
+    <div id="remu-list-content">
+      <div class="std-empty">Aucune simulation pour l'instant. Cliquez sur « + Nouvelle simulation » pour commencer.</div>
+    </div>
+  </div>
+</div><!-- /remu-list-screen -->
+
+<!-- ═══ RÉMUNÉRATION DIRIGEANT — écran de simulation ═══ -->
+<div id="remu-screen" style="display:none;background:#f7f6f3;min-height:100vh;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+      <div class="home-nav">
+        <button class="home-nav-btn" onclick="backToRemuList()">← Liste des simulations</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:56px;padding:20px 32px 60px;max-width:1180px;margin-left:auto;margin-right:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input id="remu-name-input" type="text" oninput="onRemuNameChange(this.value)"
+          style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:200px;">
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;" id="remu-annee-badge"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;background:rgba(0,0,0,.05);border-radius:6px;padding:2px;gap:1px;">
+          <button id="remu-mode-simplifie" onclick="setRemuMode('simplifie')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">Simplifié</button>
+          <button id="remu-mode-expert" onclick="setRemuMode('expert')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">Expert</button>
+        </div>
+        <button class="params-btn-danger" onclick="deleteCurrentRemu()" style="margin:0;">Supprimer</button>
+      </div>
+    </div>
+    <div style="background:#fff0e6;border:1px solid #e8643c;color:#e8643c;border-radius:8px;padding:8px 14px;font-size:11px;margin:12px 0;">
+      ⚠ Simulation d'aide à la décision basée sur des barèmes indicatifs — à valider au regard de la situation personnelle du dirigeant et des textes applicables avant toute décision. Ne constitue pas un conseil fiscal ou juridique définitif.
+    </div>
+    <div id="remu-warning-banner"></div>
+
+    <div class="params-tabs-top" style="margin-top:8px;">
+      <div class="params-tab active" id="rmtab-societe" onclick="showRemuTab('societe')">1. Société</div>
+      <div class="params-tab" id="rmtab-dirigeant" onclick="showRemuTab('dirigeant')">2. Dirigeant &amp; foyer</div>
+      <div class="params-tab" id="rmtab-hyp" onclick="showRemuTab('hyp')">3. Hypothèses</div>
+      <div class="params-tab" id="rmtab-resultats" onclick="showRemuTab('resultats')">4. Résultats</div>
+      <div class="params-tab" id="rmtab-comparateur" onclick="showRemuTab('comparateur')">Comparateur de statuts</div>
+      <div class="params-tab" id="rmtab-inverse" onclick="showRemuTab('inverse')">Simulation inversée</div>
+    </div>
+
+    <div id="rmpanel-societe" style="padding-top:16px;"></div>
+    <div id="rmpanel-dirigeant" style="display:none;padding-top:16px;"></div>
+    <div id="rmpanel-hyp" style="display:none;padding-top:16px;"></div>
+    <div id="rmpanel-resultats" style="display:none;padding-top:16px;"></div>
+    <div id="rmpanel-comparateur" style="display:none;padding-top:16px;"></div>
+    <div id="rmpanel-inverse" style="display:none;padding-top:16px;"></div>
+  </div>
+</div><!-- /remu-screen -->
 
 <script>
 // ═══════════════════════════════════════════════════════════
@@ -4007,7 +4097,7 @@ function goHome(){
  */
 function showModuleMenu(){
   if(ACTIVE.id) saveActiveDossier();
-  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen']
+  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen','remu-list-screen','remu-screen']
     .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   document.getElementById('module-menu-screen').style.display = 'flex';
 }
@@ -4015,9 +4105,10 @@ function showModuleMenu(){
 /**
  * openModule(mod)
  * Point d'entrée unique depuis les tuiles du menu des modules
- * ('dossiers' | 'previsionnel' | 'tns'). Le menu ne connaît rien du
- * contenu de chaque module — il se contente d'afficher l'écran racine
- * du module choisi, qui gère ensuite sa propre navigation interne.
+ * ('dossiers' | 'previsionnel' | 'tns' | 'remuneration'). Le menu ne
+ * connaît rien du contenu de chaque module — il se contente d'afficher
+ * l'écran racine du module choisi, qui gère ensuite sa propre navigation
+ * interne.
  */
 function openModule(mod){
   document.getElementById('module-menu-screen').style.display = 'none';
@@ -4029,6 +4120,9 @@ function openModule(mod){
   } else if (mod === 'tns') {
     renderTnsList();
     document.getElementById('tns-list-screen').style.display = 'block';
+  } else if (mod === 'remuneration') {
+    renderRemuList();
+    document.getElementById('remu-list-screen').style.display = 'block';
   }
 }
 
@@ -5696,6 +5790,965 @@ function exportTnsToCSV() {
   rows.push(['Revenu net après cotisations', resultat.revenuNet.toFixed(2)]);
   downloadTextFile(`TNS_${safeFilePart(t.name)}.csv`, csvFromRows(rows), 'text/csv');
   toast('Export CSV du calcul TNS téléchargé');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE RÉMUNÉRATION DIRIGEANT — RÈGLES (config versionnée) ──────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * REGLES_REMUNERATION_2025 — paramètres fiscaux et sociaux du module
+ * d'optimisation de la rémunération du dirigeant.
+ *
+ * Équivalent du /config/fiscal/2026.json demandé pour ce type d'outil :
+ * dans cette application mono-fichier sans backend, la configuration
+ * versionnée est un objet JS séparé du moteur (RemunerationEngine),
+ * jamais mélangé à la logique de calcul — un changement de barème est un
+ * changement de données ici, jamais une modification de fonction. Chaque
+ * bloc porte sa source et sa date de dernière vérification.
+ *
+ * BARÈME INDICATIF — année de référence 2025. À valider avant tout usage
+ * réel (BOFiP/URSSAF/expert-comptable) : cf. avertissement affiché à
+ * l'écran. Réutilise le barème TNS déjà défini pour le module TNS
+ * (TNS_BAREME_REEL_DEFAUT.commercant) — jamais dupliqué.
+ */
+const REGLES_REMUNERATION_2025 = {
+  annee: 2025, PASS: TNS_PASS_REF,
+  source: 'Barèmes 2025 (IS, IR, cotisations) — legifrance.gouv.fr, bofip.impots.gouv.fr, urssaf.fr',
+  derniereVerification: '2025-01-01',
+  is: {
+    tauxReduit: 0.15, seuilTauxReduit: 42500, tauxNormal: 0.25,
+    conditionsTauxReduit: { caMaxHT: 10000000, tauxDetentionMinPersonnesPhysiques: 0.75 },
+    source: 'art. 219 I b) CGI', derniereVerification: '2025-01-01',
+  },
+  ir: {
+    bareme: [
+      { jusqu: 11497, taux: 0 }, { jusqu: 29315, taux: 0.11 }, { jusqu: 83823, taux: 0.30 },
+      { jusqu: 180294, taux: 0.41 }, { jusqu: null, taux: 0.45 },
+    ],
+    decote: { seuilCelibataire: 1964, seuilCouple: 3248, taux: 0.4525, plafondCelibataire: 889, plafondCouple: 1470 },
+    abattementFraisPro: { taux: 0.10, min: 495, max: 14171 },
+    plafondParDemiPart: 1791,
+    source: 'art. 197 CGI, barème 2025 (revenus 2024)', derniereVerification: '2025-01-01',
+  },
+  pfu: { tauxIR: 0.128, tauxPS: 0.172, tauxGlobal: 0.30, source: 'art. 200 A CGI' },
+  bareme_dividendes: { abattement: 0.40, tauxPS: 0.172, csgDeductibleTaux: 0.068 },
+  socialAssimileSalarie: {
+    // Taux composites indicatifs (président SASU/SAS assimilé salarié,
+    // hors mandat cumulé avec contrat de travail) — simplification
+    // assumée, la réalité (AGIRC-ARRCO, GMP, prévoyance conventionnelle)
+    // varie selon la convention collective. Taux éditables à l'écran.
+    patronales: [{ jusquPASS: 1, taux: 0.45 }, { jusquPASS: null, taux: 0.42 }],
+    salariales: [{ jusquPASS: 1, taux: 0.22 }, { jusquPASS: null, taux: 0.20 }],
+    source: 'Estimation composite indicative — urssaf.fr', derniereVerification: '2025-01-01',
+  },
+  seuilDividendesTNS: 0.10,
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE RÉMUNÉRATION DIRIGEANT — MOTEUR (pur) ────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * RemunerationEngine — IS, IR (barème/quotient familial plafonné/décote),
+ * dividendes (PFU vs barème), cotisations sociales (assimilé salarié
+ * réutilisant le même principe de tranches que TnsEngine ; TNS réel
+ * réutilisant TnsEngine.calculerTNSReel directement), orchestrateurs par
+ * forme juridique, et optimiseur. Fonctions pures, testées indépendamment
+ * dans tests/test_remuneration_engine.js.
+ */
+const RemunerationEngine = (function () {
+  function safe(n) { return Number.isFinite(n) ? n : 0; }
+  /** Infinity est une sentinelle valide ("distribuer le maximum possible") — à ne jamais confondre avec une valeur invalide (NaN/undefined -> 0). */
+  function safeDividendeRequest(n) { return n === Infinity ? Infinity : (Number.isFinite(n) ? n : 0); }
+  const { cotisationParTranches } = TnsEngine;
+
+  function tranchesAbsolues(tranches, pass) {
+    return tranches.map(t => ({ jusqu: t.jusquPASS === null ? Infinity : t.jusquPASS * pass, taux: t.taux }));
+  }
+
+  // ── 1. Impôt sur les sociétés ────────────────────────────────────────
+  function calculerIS(resultatFiscal, reglesIS, eligibleTauxReduit) {
+    const rf = Math.max(0, safe(resultatFiscal));
+    if (eligibleTauxReduit === false) {
+      return { resultatFiscal: rf, partTauxReduit: 0, isTauxReduit: 0, partTauxNormal: rf, isTauxNormal: rf * reglesIS.tauxNormal, isTotal: rf * reglesIS.tauxNormal };
+    }
+    const partReduite = Math.min(rf, reglesIS.seuilTauxReduit);
+    const partNormale = Math.max(0, rf - reglesIS.seuilTauxReduit);
+    const isTauxReduit = partReduite * reglesIS.tauxReduit;
+    const isTauxNormal = partNormale * reglesIS.tauxNormal;
+    return { resultatFiscal: rf, partTauxReduit: partReduite, isTauxReduit, partTauxNormal: partNormale, isTauxNormal, isTotal: safe(isTauxReduit + isTauxNormal) };
+  }
+
+  // ── 2. Impôt sur le revenu (barème, décote, quotient familial plafonné) ─
+  function calculerIRBaremeParPart(revenuImposable, nbParts, bareme) {
+    const parts = Math.max(0.5, safe(nbParts));
+    const quotient = safe(revenuImposable) / parts;
+    const tranches = bareme.map(t => ({ jusqu: t.jusqu === null ? Infinity : t.jusqu, taux: t.taux }));
+    return cotisationParTranches(quotient, tranches) * parts;
+  }
+  function calculerDecote(irBrut, situationFamiliale, regles) {
+    const isCouple = situationFamiliale === 'couple';
+    const seuil = isCouple ? regles.decote.seuilCouple : regles.decote.seuilCelibataire;
+    const plafond = isCouple ? regles.decote.plafondCouple : regles.decote.plafondCelibataire;
+    if (irBrut >= seuil) return 0;
+    return Math.min(irBrut, Math.max(0, plafond - irBrut * regles.decote.taux));
+  }
+  /** calculerIRAvecPlafonnement — quotient familial plafonné par demi-part au-delà du foyer de référence (1 part céliba / 2 parts couple), puis décote. */
+  function calculerIRAvecPlafonnement(revenuImposable, nbParts, situationFamiliale, reglesIR) {
+    const partsBase = situationFamiliale === 'couple' ? 2 : 1;
+    const irAvecParts = calculerIRBaremeParPart(revenuImposable, nbParts, reglesIR.bareme);
+    let irFinal = irAvecParts;
+    if (nbParts > partsBase) {
+      const irBase = calculerIRBaremeParPart(revenuImposable, partsBase, reglesIR.bareme);
+      const nbDemiParts = (nbParts - partsBase) / 0.5;
+      const plafondTotal = nbDemiParts * reglesIR.plafondParDemiPart;
+      const gainQuotient = irBase - irAvecParts;
+      irFinal = gainQuotient > plafondTotal ? irBase - plafondTotal : irAvecParts;
+    }
+    const decote = calculerDecote(irFinal, situationFamiliale, reglesIR);
+    return Math.max(0, safe(irFinal - decote));
+  }
+  /** calculerRevenuImposableFoyer — foyer: {salaires, bic, bnc, fonciers, pensions, dividendesBaremeImposables, autresImposables}. */
+  function calculerRevenuImposableFoyer(foyer, reglesIR) {
+    const salaires = safe(foyer.salaires);
+    const abatt = Math.min(Math.max(salaires * reglesIR.abattementFraisPro.taux, reglesIR.abattementFraisPro.min), reglesIR.abattementFraisPro.max);
+    const salairesNet = Math.max(0, salaires - Math.min(abatt, salaires));
+    const pensionsNet = safe(foyer.pensions) * 0.9;
+    return Math.max(0, salairesNet + safe(foyer.bic) + safe(foyer.bnc) + safe(foyer.fonciers) + pensionsNet
+      + safe(foyer.dividendesBaremeImposables) + safe(foyer.autresImposables));
+  }
+  function calculerIRFoyer(foyer, nbParts, situationFamiliale, regles) {
+    const revenuImposable = calculerRevenuImposableFoyer(foyer, regles.ir);
+    const ir = calculerIRAvecPlafonnement(revenuImposable, nbParts, situationFamiliale, regles.ir);
+    return { revenuImposable, ir };
+  }
+
+  // ── 3. Dividendes : PFU vs barème ────────────────────────────────────
+  function calculerDividendesPFU(dividendesBruts, regles) {
+    const d = safe(dividendesBruts);
+    const ir = d * regles.pfu.tauxIR, ps = d * regles.pfu.tauxPS;
+    return { ir, ps, total: safe(ir + ps), net: safe(d - ir - ps) };
+  }
+  /** comparerPFUvsBareme — foyerHorsDividendes = revenus du foyer hors dividendes (déjà avec la rémunération du scénario incluse dans .salaires). */
+  function comparerPFUvsBareme(dividendesBruts, foyerHorsDividendes, nbParts, situationFamiliale, regles) {
+    const d = safe(dividendesBruts);
+    const pfu = calculerDividendesPFU(d, regles);
+    const irSansDiv = calculerIRFoyer({ ...foyerHorsDividendes, dividendesBaremeImposables: 0 }, nbParts, situationFamiliale, regles).ir;
+    const dividendesImposables = d * (1 - regles.bareme_dividendes.abattement);
+    const irAvecDiv = calculerIRFoyer({ ...foyerHorsDividendes, dividendesBaremeImposables: dividendesImposables }, nbParts, situationFamiliale, regles).ir;
+    const irMarginal = safe(irAvecDiv - irSansDiv);
+    const ps = d * regles.bareme_dividendes.tauxPS;
+    const bareme = { irMarginal, ps, total: safe(irMarginal + ps), net: safe(d - irMarginal - ps), dividendesImposables };
+    const meilleure = pfu.total <= bareme.total ? 'pfu' : 'bareme';
+    return { pfu, bareme, meilleure, retenu: meilleure === 'pfu' ? pfu : bareme };
+  }
+
+  // ── 4. Cotisations sociales — assimilé salarié (président SASU/SAS) ──
+  function calculerChargesAssimileSalarie(remunerationBrute, reglesSocial, pass) {
+    const rem = safe(remunerationBrute);
+    const patronales = cotisationParTranches(rem, tranchesAbsolues(reglesSocial.patronales, pass));
+    const salariales = cotisationParTranches(rem, tranchesAbsolues(reglesSocial.salariales, pass));
+    return { chargesPatronales: patronales, chargesSalariales: salariales, coutTotalEmployeur: safe(rem + patronales), netAvantImpot: safe(rem - salariales) };
+  }
+
+  // ── 5. Dividendes soumis aux cotisations TNS (gérant majoritaire) ────
+  function fractionDividendesTNS(dividendesBruts, capitalSocial, primesEmission, cca, regles) {
+    const seuil = safe(safe(capitalSocial) + safe(primesEmission) + safe(cca)) * regles.seuilDividendesTNS;
+    const fractionSoumise = Math.max(0, safe(dividendesBruts) - seuil);
+    const fractionExoneree = safe(dividendesBruts) - fractionSoumise;
+    return { seuil, fractionSoumise, fractionExoneree };
+  }
+  function calculerDistribuable(resultatApresRemuneration, isTotal, reservesDisponibles, deficitAnterieurNonImpute) {
+    return Math.max(0, safe(resultatApresRemuneration) - safe(isTotal) + safe(reservesDisponibles) - Math.max(0, safe(deficitAnterieurNonImpute)));
+  }
+
+  // ── 6. Orchestrateur SASU / SAS (IS, président assimilé salarié) ─────
+  function calculerSASU(entree, regles) {
+    const alertes = [];
+    const rem = safe(entree.remunerationBrute);
+    const charges = calculerChargesAssimileSalarie(rem, regles.socialAssimileSalarie, regles.PASS);
+    const resultatApresRemuneration = safe(entree.resultatAvantRemuneration) - charges.coutTotalEmployeur;
+    const deficitImputable = Math.min(Math.max(0, resultatApresRemuneration), Math.max(0, safe(entree.deficitReportable)));
+    const resultatFiscal = Math.max(0, resultatApresRemuneration - deficitImputable);
+    const isRes = calculerIS(resultatFiscal, regles.is, entree.eligibleTauxReduitIS !== false);
+    const resultatDistribuable = calculerDistribuable(resultatApresRemuneration, isRes.isTotal, entree.reservesDisponibles, 0);
+
+    let dividendesBrutsVerses = Math.min(safeDividendeRequest(entree.dividendesBrutsVerses), resultatDistribuable);
+    if (Number.isFinite(entree.dividendesBrutsVerses) && safe(entree.dividendesBrutsVerses) > resultatDistribuable + 1e-6) {
+      alertes.push(`Dividendes demandés supérieurs au résultat distribuable (${Math.round(resultatDistribuable)} €) — plafonnés automatiquement.`);
+    }
+    if (dividendesBrutsVerses > safe(entree.tresorerieDisponible) + 1e-6) {
+      alertes.push(`Le dividende distribuable excède la trésorerie disponible (${Math.round(safe(entree.tresorerieDisponible))} €) — tension de trésorerie probable.`);
+    }
+    if (resultatApresRemuneration < 0) {
+      alertes.push('La rémunération choisie excède la capacité financière de la société avant rémunération (résultat après rémunération négatif).');
+    }
+
+    const foyerAvecRem = { ...entree.foyer, salaires: safe(entree.foyer.salaires) + charges.netAvantImpot };
+    const foyerBaseline = { ...entree.foyer, dividendesBaremeImposables: 0 };
+    const irRemSeule = calculerIRFoyer({ ...foyerAvecRem, dividendesBaremeImposables: 0 }, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irBaseline = calculerIRFoyer(foyerBaseline, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irGenereParRemuneration = safe(irRemSeule - irBaseline);
+
+    const compDiv = comparerPFUvsBareme(dividendesBrutsVerses, foyerAvecRem, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles);
+    const coutFiscalDividendes = compDiv.retenu.total;
+    const dividendesNets = safe(dividendesBrutsVerses - coutFiscalDividendes);
+
+    const revenuNetPersonnelFinal = safe(charges.netAvantImpot - irGenereParRemuneration + dividendesNets);
+    const totalPrelevementsObligatoires = safe(charges.chargesSalariales + charges.chargesPatronales + isRes.isTotal + coutFiscalDividendes + irGenereParRemuneration);
+    const enveloppeTotale = Math.max(1, safe(entree.resultatAvantRemuneration));
+
+    return {
+      formeJuridique: 'sasu', remunerationBrute: rem, chargesSalariales: charges.chargesSalariales, chargesPatronales: charges.chargesPatronales,
+      coutTotalRemuneration: charges.coutTotalEmployeur, netAvantIRDirigeant: charges.netAvantImpot,
+      resultatApresRemuneration, resultatFiscal, is: isRes, resultatDistribuable,
+      dividendesBrutsVerses, dividendesSoumisCotisationsSociales: 0, chargesSocialesDividendes: 0,
+      choixFiscalDividendes: compDiv.meilleure, comparaisonDividendes: compDiv, coutFiscalDividendes, dividendesNets,
+      irFoyerBaseline: irBaseline, irGenereParRemuneration, irGenereParOperation: safe(irGenereParRemuneration + (compDiv.meilleure === 'bareme' ? compDiv.bareme.irMarginal : 0)),
+      revenuNetPersonnelFinal, totalPrelevementsObligatoires, tauxGlobalPrelevements: totalPrelevementsObligatoires / enveloppeTotale,
+      coutTotalSociete: safe(charges.coutTotalEmployeur + isRes.isTotal), tresorerieRestante: safe(safe(entree.tresorerieDisponible) - dividendesBrutsVerses),
+      alertes,
+    };
+  }
+
+  // ── 7. Orchestrateur EURL/SARL/EI à l'IS — gérant majoritaire (TNS) ──
+  function calculerEURL_IS(entree, regles) {
+    const alertes = [];
+    const rem = safe(entree.remunerationBrute);
+    const baremeTNS = baremeReelAvecPass(regles.socialTNS || TNS_BAREME_REEL_DEFAUT.commercant, regles.PASS);
+    const cotisTNS = TnsEngine.calculerTNSReel(rem, baremeTNS, { acre: entree.acre, tauxReductionACRE: entree.tauxReductionACRE });
+    const coutTotalRemuneration = safe(rem);
+    const resultatApresRemuneration = safe(entree.resultatAvantRemuneration) - rem;
+    const deficitImputable = Math.min(Math.max(0, resultatApresRemuneration), Math.max(0, safe(entree.deficitReportable)));
+    const resultatFiscal = Math.max(0, resultatApresRemuneration - deficitImputable);
+    const isRes = calculerIS(resultatFiscal, regles.is, entree.eligibleTauxReduitIS !== false);
+    const resultatDistribuable = calculerDistribuable(resultatApresRemuneration, isRes.isTotal, entree.reservesDisponibles, 0);
+
+    let dividendesBrutsVerses = Math.min(safeDividendeRequest(entree.dividendesBrutsVerses), resultatDistribuable);
+    if (Number.isFinite(entree.dividendesBrutsVerses) && safe(entree.dividendesBrutsVerses) > resultatDistribuable + 1e-6) {
+      alertes.push(`Dividendes demandés supérieurs au résultat distribuable (${Math.round(resultatDistribuable)} €) — plafonnés automatiquement.`);
+    }
+    if (dividendesBrutsVerses > safe(entree.tresorerieDisponible) + 1e-6) {
+      alertes.push(`Le dividende distribuable excède la trésorerie disponible (${Math.round(safe(entree.tresorerieDisponible))} €) — tension de trésorerie probable.`);
+    }
+
+    const fracTNS = fractionDividendesTNS(dividendesBrutsVerses, entree.capitalSocial, entree.primesEmission, entree.compteCourantAssocie, regles);
+    let cotisTNSDividendes = { total: 0 };
+    if (fracTNS.fractionSoumise > 0) {
+      cotisTNSDividendes = TnsEngine.calculerTNSReel(fracTNS.fractionSoumise, baremeTNS, {});
+      alertes.push(`${Math.round(fracTNS.fractionSoumise)} € de dividendes dépassent le seuil de 10 % (capital + primes + CCA) et supportent les cotisations TNS (${Math.round(cotisTNSDividendes.total)} €).`);
+    }
+    const dividendesApresCotisations = safe(dividendesBrutsVerses - cotisTNSDividendes.total);
+
+    const foyerAvecRem = { ...entree.foyer, salaires: safe(entree.foyer.salaires) + safe(rem - cotisTNS.total) };
+    const foyerBaseline = { ...entree.foyer, dividendesBaremeImposables: 0 };
+    const irRemSeule = calculerIRFoyer({ ...foyerAvecRem, dividendesBaremeImposables: 0 }, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irBaseline = calculerIRFoyer(foyerBaseline, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irGenereParRemuneration = safe(irRemSeule - irBaseline);
+
+    const compDiv = comparerPFUvsBareme(dividendesApresCotisations, foyerAvecRem, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles);
+    const coutFiscalDividendes = compDiv.retenu.total;
+    const dividendesNets = safe(dividendesApresCotisations - coutFiscalDividendes);
+
+    const netAvantIRDirigeant = safe(rem - cotisTNS.total);
+    const revenuNetPersonnelFinal = safe(netAvantIRDirigeant - irGenereParRemuneration + dividendesNets);
+    const totalPrelevementsObligatoires = safe(cotisTNS.total + cotisTNSDividendes.total + isRes.isTotal + coutFiscalDividendes + irGenereParRemuneration);
+    const enveloppeTotale = Math.max(1, safe(entree.resultatAvantRemuneration));
+
+    return {
+      formeJuridique: entree.formeJuridique || 'eurl_is', remunerationBrute: rem, chargesSalariales: 0, chargesPatronales: 0,
+      cotisationsTNS: cotisTNS, coutTotalRemuneration, netAvantIRDirigeant,
+      resultatApresRemuneration, resultatFiscal, is: isRes, resultatDistribuable,
+      dividendesBrutsVerses, dividendesSoumisCotisationsSociales: fracTNS.fractionSoumise, chargesSocialesDividendes: cotisTNSDividendes.total,
+      choixFiscalDividendes: compDiv.meilleure, comparaisonDividendes: compDiv, coutFiscalDividendes, dividendesNets,
+      irFoyerBaseline: irBaseline, irGenereParRemuneration, irGenereParOperation: safe(irGenereParRemuneration + (compDiv.meilleure === 'bareme' ? compDiv.bareme.irMarginal : 0)),
+      revenuNetPersonnelFinal, totalPrelevementsObligatoires, tauxGlobalPrelevements: totalPrelevementsObligatoires / enveloppeTotale,
+      coutTotalSociete: safe(rem + isRes.isTotal), tresorerieRestante: safe(safe(entree.tresorerieDisponible) - dividendesBrutsVerses),
+      alertes,
+    };
+  }
+
+  // ── 8. Orchestrateur EURL / EI à l'IR (pas de société fiscalement distincte) ─
+  function calculerIR_Direct(entree, regles) {
+    const alertes = [];
+    const benefice = safe(entree.resultatAvantRemuneration);
+    const baremeTNS = baremeReelAvecPass(regles.socialTNS || TNS_BAREME_REEL_DEFAUT.commercant, regles.PASS);
+    const cotisTNS = TnsEngine.calculerTNSReel(benefice, baremeTNS, { acre: entree.acre, tauxReductionACRE: entree.tauxReductionACRE });
+    const revenuProfessionnelImposable = Math.max(0, safe(benefice - cotisTNS.total));
+
+    const natureActivite = entree.natureActivite || 'bic';
+    const foyerAvec = { ...entree.foyer };
+    foyerAvec[natureActivite] = safe(foyerAvec[natureActivite]) + revenuProfessionnelImposable;
+    const foyerBaseline = { ...entree.foyer };
+
+    const irAvec = calculerIRFoyer(foyerAvec, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irBaseline = calculerIRFoyer(foyerBaseline, entree.foyer.nbParts, entree.foyer.situationFamiliale, regles).ir;
+    const irGenere = safe(irAvec - irBaseline);
+
+    const netDisponibleTheorique = safe(benefice - cotisTNS.total - irGenere);
+    alertes.push("Les prélèvements personnels effectifs ne sont pas nécessairement égaux au bénéfice imposable : l'imposition porte sur le bénéfice réalisé, indépendamment du montant réellement prélevé en trésorerie.");
+    if (safe(entree.prelevementsPersonnelsEnvisages) > safe(entree.tresorerieDisponible) + 1e-6) {
+      alertes.push('Les prélèvements personnels envisagés excèdent la trésorerie disponible.');
+    }
+
+    const totalPrelevementsObligatoires = safe(cotisTNS.total + irGenere);
+    const enveloppeTotale = Math.max(1, benefice);
+
+    return {
+      formeJuridique: entree.formeJuridique || 'eurl_ir', remunerationBrute: null, coutTotalRemuneration: benefice,
+      beneficeProfessionnel: benefice, cotisationsTNS: cotisTNS, revenuProfessionnelImposable,
+      resultatFiscal: revenuProfessionnelImposable, is: null, resultatDistribuable: null,
+      irFoyerBaseline: irBaseline, irGenereParRemuneration: irGenere, irGenereParOperation: irGenere,
+      revenuNetPersonnelFinal: netDisponibleTheorique, netDisponibleTheorique,
+      totalPrelevementsObligatoires, tauxGlobalPrelevements: totalPrelevementsObligatoires / enveloppeTotale,
+      coutTotalSociete: benefice, tresorerieRestante: safe(safe(entree.tresorerieDisponible) - safe(entree.prelevementsPersonnelsEnvisages)),
+      alertes,
+    };
+  }
+
+  function calculer(formeJuridique, entree, regles) {
+    switch (formeJuridique) {
+      case 'sasu': case 'sas': return calculerSASU({ ...entree, formeJuridique }, regles);
+      case 'eurl_is': case 'sarl_is': case 'ei_is': return calculerEURL_IS({ ...entree, formeJuridique }, regles);
+      case 'eurl_ir': case 'ei_ir': return calculerIR_Direct({ ...entree, formeJuridique }, regles);
+      default: throw new Error('Forme juridique inconnue : ' + formeJuridique);
+    }
+  }
+
+  // ── 9. Optimiseur ──────────────────────────────────────────────────────
+  /**
+   * filtrerFaisables — écarte les scénarios que la société ne peut pas
+   * réellement supporter (coût total de la rémunération supérieur au
+   * résultat avant rémunération, résultat après rémunération négatif).
+   * Sans ce filtre, l'optimiseur pourrait recommander une rémunération
+   * dont le COÛT EMPLOYEUR (brut + charges patronales) dépasse ce que la
+   * société a réellement les moyens de payer — la rémunération brute
+   * seule ne suffit pas à borner le coût réel (cf. SASU où coût = brut ×
+   * ~1,45). On ne garde ces scénarios que si AUCUN scénario du balayage
+   * n'est faisable (ex. société déjà déficitaire), pour ne jamais
+   * renvoyer une liste vide.
+   */
+  function filtrerFaisables(scenarios) {
+    const faisables = scenarios.filter(s => s.resultatApresRemuneration === undefined || s.resultatApresRemuneration >= -1e-6);
+    return faisables.length ? faisables : scenarios;
+  }
+
+  /**
+   * balayerRemuneration — calcule un scénario par niveau de rémunération
+   * entre 0 et le budget, par pas configurable, avec une stratégie de
+   * dividende donnée ('aucun' | 'maximal' | montant fixe). Renvoie la
+   * liste des scénarios financièrement faisables, triée par revenu net
+   * personnel final décroissant.
+   */
+  function balayerRemuneration(formeJuridique, entreeBase, regles, options) {
+    options = options || {};
+    const budget = safe(options.budget !== undefined ? options.budget : entreeBase.resultatAvantRemuneration);
+    const pas = Math.max(1, safe(options.pas) || Math.max(100, Math.round(budget / 100)));
+    const dividendeStrategy = options.dividendeStrategy || 'maximal';
+    const scenarios = [];
+    for (let rem = 0; rem <= budget + 1e-6; rem += pas) {
+      const dividendesBrutsVerses = dividendeStrategy === 'aucun' ? 0
+        : dividendeStrategy === 'maximal' ? Infinity
+        : safe(dividendeStrategy);
+      scenarios.push(calculer(formeJuridique, { ...entreeBase, remunerationBrute: rem, dividendesBrutsVerses }, regles));
+    }
+    const faisables = filtrerFaisables(scenarios);
+    faisables.sort((a, b) => b.revenuNetPersonnelFinal - a.revenuNetPersonnelFinal);
+    return faisables;
+  }
+  /** optimiser — balayage grossier puis recherche locale plus fine autour du meilleur point (évite une boucle exhaustive coûteuse à pas fin). */
+  function optimiser(formeJuridique, entreeBase, regles, options) {
+    options = options || {};
+    const budget = safe(options.budget !== undefined ? options.budget : entreeBase.resultatAvantRemuneration);
+    const grossier = balayerRemuneration(formeJuridique, entreeBase, regles, { ...options, pas: Math.max(500, Math.round(budget / 40)) });
+    const meilleurGrossier = grossier[0];
+    if (!meilleurGrossier) return null;
+    const centre = safe(meilleurGrossier.remunerationBrute);
+    const fin = balayerAutour(formeJuridique, entreeBase, regles, options, centre, Math.max(500, Math.round(budget / 40)), Math.max(50, Math.round(budget / 400)));
+    return fin[0] || meilleurGrossier;
+  }
+  function balayerAutour(formeJuridique, entreeBase, regles, options, centre, rayon, pas) {
+    const dividendeStrategy = options.dividendeStrategy || 'maximal';
+    const min = Math.max(0, centre - rayon), max = centre + rayon;
+    const scenarios = [];
+    for (let rem = min; rem <= max + 1e-6; rem += pas) {
+      const dividendesBrutsVerses = dividendeStrategy === 'aucun' ? 0 : dividendeStrategy === 'maximal' ? Infinity : safe(dividendeStrategy);
+      scenarios.push(calculer(formeJuridique, { ...entreeBase, remunerationBrute: rem, dividendesBrutsVerses }, regles));
+    }
+    const faisables = filtrerFaisables(scenarios);
+    faisables.sort((a, b) => b.revenuNetPersonnelFinal - a.revenuNetPersonnelFinal);
+    return faisables;
+  }
+  /**
+   * remunerationMaxFaisable — recherche par dichotomie la rémunération
+   * brute la plus élevée dont le COÛT TOTAL (brut + charges patronales
+   * le cas échéant) reste dans l'enveloppe donnée. Sert à définir
+   * correctement le scénario « 100% rémunération » : utiliser directement
+   * `rem = budget` ignorerait les charges patronales (SASU) et
+   * produirait une rémunération que la société ne peut pas réellement
+   * financer (cf. filtrerFaisables).
+   */
+  function remunerationMaxFaisable(formeJuridique, entreeBase, regles, budget) {
+    let lo = 0, hi = Math.max(0, safe(budget));
+    let meilleur = calculer(formeJuridique, { ...entreeBase, remunerationBrute: 0, dividendesBrutsVerses: 0 }, regles);
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      const res = calculer(formeJuridique, { ...entreeBase, remunerationBrute: mid, dividendesBrutsVerses: 0 }, regles);
+      if (res.coutTotalRemuneration <= safe(budget) + 1e-6) { meilleur = res; lo = mid; } else { hi = mid; }
+    }
+    return meilleur;
+  }
+  /** simulationInversee — dichotomie : trouve la rémunération brute donnant le net annuel cible (dividendes fixés, souvent 0). */
+  function simulationInversee(netMensuelCible, formeJuridique, entreeBase, regles, options) {
+    options = options || {};
+    const netAnnuelCible = safe(netMensuelCible) * 12;
+    let lo = 0, hi = Math.max(safe(entreeBase.resultatAvantRemuneration) * 2, netAnnuelCible * 3, 10000);
+    let meilleur = null;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      const res = calculer(formeJuridique, { ...entreeBase, remunerationBrute: mid, dividendesBrutsVerses: options.dividendesBrutsVerses || 0 }, regles);
+      meilleur = res;
+      if (Math.abs(res.revenuNetPersonnelFinal - netAnnuelCible) < 1) break;
+      if (res.revenuNetPersonnelFinal < netAnnuelCible) lo = mid; else hi = mid;
+    }
+    return meilleur;
+  }
+
+  return {
+    safe, cotisationParTranches, calculerIS, calculerIRBaremeParPart, calculerDecote,
+    calculerIRAvecPlafonnement, calculerRevenuImposableFoyer, calculerIRFoyer, calculerDividendesPFU,
+    comparerPFUvsBareme, calculerChargesAssimileSalarie, fractionDividendesTNS, calculerDistribuable,
+    calculerSASU, calculerEURL_IS, calculerIR_Direct, calculer, balayerRemuneration, optimiser, simulationInversee, remunerationMaxFaisable,
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE RÉMUNÉRATION DIRIGEANT — STOCKAGE ────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+const REMU_STORE_KEY = 'fec_analyse_remuneration_v1';
+const FORME_JURIDIQUE_LABELS = {
+  sasu: 'SASU (IS)', sas: 'SAS (IS)', eurl_is: 'EURL (IS, gérant majoritaire)', sarl_is: 'SARL (IS, gérant majoritaire)',
+  eurl_ir: 'EURL (IR)', ei_ir: 'Entreprise individuelle (IR)', ei_is: 'Entreprise individuelle (option IS)',
+};
+const FORMES_IR = ['eurl_ir', 'ei_ir'];
+function loadRemuStore() {
+  try { return JSON.parse(localStorage.getItem(REMU_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[Rémunération] localStorage illisible :', e); toast('Stockage des simulations de rémunération illisible', true); return {}; }
+}
+function saveRemuStore(data) {
+  try { localStorage.setItem(REMU_STORE_KEY, JSON.stringify(data)); return true; }
+  catch (e) { toast('Échec de sauvegarde de la simulation : ' + (e && e.message || 'erreur inconnue'), true); console.error('[Rémunération] saveRemuStore() a échoué :', e); return false; }
+}
+function saveRemu(record) { record.updatedAt = Date.now(); const store = loadRemuStore(); store[record.id] = record; saveRemuStore(store); }
+function deleteRemuById(id) { const store = loadRemuStore(); delete store[id]; saveRemuStore(store); }
+function listRemu() { return Object.values(loadRemuStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); }
+
+function creerRemuVierge(name) {
+  return {
+    id: 'remu-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: name || 'Nouvelle simulation', createdAt: Date.now(), updatedAt: Date.now(), mode: 'simplifie',
+    reglesSnapshot: JSON.parse(JSON.stringify(REGLES_REMUNERATION_2025)),
+    societe: {
+      formeJuridique: 'sasu', activite: '', ca: 0, resultatAvantRemuneration: 100000, remunerationActuelle: 0,
+      cotisationsActuelles: 0, resultatFiscalEstime: 0, tresorerieDisponible: 100000, capitauxPropres: 0,
+      capitalSocial: 1000, primesEmission: 0, compteCourantAssocie: 0, reservesDisponibles: 0, reportANouveau: 0,
+      deficitReportable: 0, eligibleTauxReduitIS: true, natureActivite: 'bic',
+    },
+    dirigeant: {
+      statut: 'president', age: null, situationFamiliale: 'celibataire', nbParts: 1, nbEnfants: 0,
+      besoinMensuelNet: 3000, objectifAnnuelDisponible: 0, acre: false, tauxReductionACRE: 0.5,
+    },
+    foyer: { salaires: 0, bic: 0, bnc: 0, fonciers: 0, pensions: 0, autresImposables: 0 },
+    hypotheses: { remunerationBrute: 40000, dividendesBrutsVerses: 0, pas: 1000, budgetOptimisation: 100000 },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE RÉMUNÉRATION DIRIGEANT — ÉCRAN LISTE ─────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+function renderRemuList() {
+  const el = document.getElementById('remu-list-content');
+  if (!el) return;
+  const items = listRemu();
+  if (!items.length) {
+    el.innerHTML = '<div class="std-empty">Aucune simulation pour l\'instant. Cliquez sur « + Nouvelle simulation » pour commencer.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="std-item-grid">${items.map(r => `
+    <div class="std-item-card" onclick="openRemuEditor('${r.id}')">
+      <div class="std-item-name">${escHtml(r.name)}</div>
+      <div class="std-item-meta">${escHtml(FORME_JURIDIQUE_LABELS[r.societe.formeJuridique] || r.societe.formeJuridique)} · exercice ${r.reglesSnapshot.annee}</div>
+    </div>`).join('')}</div>`;
+}
+function creerNouvelleRemu() {
+  const record = creerRemuVierge();
+  saveRemu(record);
+  openRemuEditor(record.id);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE RÉMUNÉRATION DIRIGEANT — ÉCRAN DE SIMULATION ─────────────────
+// ═══════════════════════════════════════════════════════════════════════
+let REMU_ACTIVE = null;
+let REMU_TAB = 'societe';
+let _remuSaveTimer = null;
+
+function openRemuEditor(id) {
+  const store = loadRemuStore();
+  const record = store[id];
+  if (!record) { toast('Simulation introuvable', true); return; }
+  REMU_ACTIVE = record;
+  ['home-screen', 'dashboard-screen', 'remu-list-screen'].forEach(sid => { const e = document.getElementById(sid); if (e) e.style.display = 'none'; });
+  document.getElementById('remu-screen').style.display = 'block';
+  showRemuTab('societe');
+  renderRemu();
+}
+function backToRemuList() {
+  if (REMU_ACTIVE) saveRemu(REMU_ACTIVE);
+  REMU_ACTIVE = null;
+  document.getElementById('remu-screen').style.display = 'none';
+  document.getElementById('remu-list-screen').style.display = 'block';
+  renderRemuList();
+}
+function deleteCurrentRemu() {
+  if (!REMU_ACTIVE) return;
+  if (!confirm(`Supprimer définitivement « ${REMU_ACTIVE.name} » ?`)) return;
+  deleteRemuById(REMU_ACTIVE.id);
+  REMU_ACTIVE = null;
+  document.getElementById('remu-screen').style.display = 'none';
+  document.getElementById('remu-list-screen').style.display = 'block';
+  renderRemuList();
+  toast('Simulation supprimée');
+}
+function onRemuNameChange(v) { if (!REMU_ACTIVE) return; REMU_ACTIVE.name = v || 'Simulation'; schedSaveRemu(); }
+function schedSaveRemu() { clearTimeout(_remuSaveTimer); _remuSaveTimer = setTimeout(() => { if (REMU_ACTIVE) saveRemu(REMU_ACTIVE); }, 800); }
+/** updateRemuModeButtons — synchronise uniquement l'apparence du bascule simplifié/expert (jamais de re-rendu complet, pour éviter toute récursion avec renderRemu()). */
+function updateRemuModeButtons(mode) {
+  const s = document.getElementById('remu-mode-simplifie'), e = document.getElementById('remu-mode-expert');
+  if (!s || !e) return;
+  s.style.background = mode === 'simplifie' ? '#185FA5' : 'transparent';
+  s.style.color = mode === 'simplifie' ? '#fff' : '#6b6960';
+  e.style.background = mode === 'expert' ? '#185FA5' : 'transparent';
+  e.style.color = mode === 'expert' ? '#fff' : '#6b6960';
+}
+function setRemuMode(mode) {
+  REMU_ACTIVE.mode = mode;
+  updateRemuModeButtons(mode);
+  renderRemu();
+}
+function showRemuTab(tab) {
+  REMU_TAB = tab;
+  ['societe', 'dirigeant', 'hyp', 'resultats', 'comparateur', 'inverse'].forEach(t => {
+    document.getElementById('rmtab-' + t)?.classList.toggle('active', t === tab);
+    const p = document.getElementById('rmpanel-' + t);
+    if (p) p.style.display = (t === tab) ? 'block' : 'none';
+  });
+}
+
+// ── Construction de l'entrée moteur depuis le formulaire ─────────────────
+function rmBuildFoyer(record) {
+  return {
+    salaires: RemunerationEngine.safe(record.foyer.salaires), bic: RemunerationEngine.safe(record.foyer.bic),
+    bnc: RemunerationEngine.safe(record.foyer.bnc), fonciers: RemunerationEngine.safe(record.foyer.fonciers),
+    pensions: RemunerationEngine.safe(record.foyer.pensions), autresImposables: RemunerationEngine.safe(record.foyer.autresImposables),
+    nbParts: RemunerationEngine.safe(record.dirigeant.nbParts) || 1, situationFamiliale: record.dirigeant.situationFamiliale || 'celibataire',
+  };
+}
+function rmBuildEntree(record, overrides) {
+  const s = record.societe;
+  const base = {
+    formeJuridique: s.formeJuridique, resultatAvantRemuneration: RemunerationEngine.safe(s.resultatAvantRemuneration),
+    remunerationBrute: RemunerationEngine.safe(record.hypotheses.remunerationBrute),
+    dividendesBrutsVerses: RemunerationEngine.safe(record.hypotheses.dividendesBrutsVerses),
+    reservesDisponibles: RemunerationEngine.safe(s.reservesDisponibles), tresorerieDisponible: RemunerationEngine.safe(s.tresorerieDisponible),
+    deficitReportable: RemunerationEngine.safe(s.deficitReportable), eligibleTauxReduitIS: s.eligibleTauxReduitIS !== false,
+    capitalSocial: RemunerationEngine.safe(s.capitalSocial), primesEmission: RemunerationEngine.safe(s.primesEmission),
+    compteCourantAssocie: RemunerationEngine.safe(s.compteCourantAssocie), acre: !!record.dirigeant.acre,
+    tauxReductionACRE: RemunerationEngine.safe(record.dirigeant.tauxReductionACRE) || 0.5, natureActivite: s.natureActivite || 'bic',
+    prelevementsPersonnelsEnvisages: RemunerationEngine.safe(record.hypotheses.remunerationBrute),
+    foyer: rmBuildFoyer(record),
+  };
+  return { ...base, ...(overrides || {}) };
+}
+/** rmScoreProtectionSociale — score qualitatif indicatif (jamais un droit exact) basé sur le niveau de rémunération/bénéfice rapporté au PASS. */
+function rmScoreProtectionSociale(res) {
+  const rem = res.remunerationBrute != null ? res.remunerationBrute : (res.beneficeProfessionnel || 0);
+  if (rem <= 0) return 'Très faible';
+  const ratio = rem / TNS_PASS_REF;
+  if (ratio < 0.5) return 'Faible';
+  if (ratio < 1) return 'Moyenne';
+  if (ratio < 2) return 'Bonne';
+  return 'Très bonne';
+}
+/**
+ * rmCompute — calcule les scénarios clés pour l'affichage : situation
+ * actuelle (rémunération actuellement versée), 100% rémunération, 100%
+ * dividendes (formes IS uniquement), mix optimisé (scénario D, moteur
+ * d'optimisation), et le calcul "instantané" reflétant les valeurs
+ * saisies dans l'onglet Hypothèses. Pour les formes à l'IR, il n'existe
+ * pas d'arbitrage rémunération/dividendes : les 4 colonnes convergent
+ * vers le même calcul (le bénéfice est taxé directement).
+ */
+function rmCompute(record) {
+  const entreeBase = rmBuildEntree(record);
+  const regles = record.reglesSnapshot;
+  const forme = record.societe.formeJuridique;
+  const isIR = FORMES_IR.includes(forme);
+  const budget = RemunerationEngine.safe(record.hypotheses.budgetOptimisation) || entreeBase.resultatAvantRemuneration;
+  const pas = RemunerationEngine.safe(record.hypotheses.pas) || Math.max(100, Math.round(budget / 100));
+
+  if (isIR) {
+    const unique = RemunerationEngine.calculer(forme, entreeBase, regles);
+    return { entreeBase, situationActuelle: unique, toutRem: unique, toutDiv: null, optimum: unique, instantane: unique, isIR: true };
+  }
+
+  const situationActuelle = RemunerationEngine.calculer(forme, { ...entreeBase, remunerationBrute: RemunerationEngine.safe(record.societe.remunerationActuelle), dividendesBrutsVerses: 0 }, regles);
+  const toutRem = RemunerationEngine.remunerationMaxFaisable(forme, entreeBase, regles, budget);
+  const toutDiv = RemunerationEngine.calculer(forme, { ...entreeBase, remunerationBrute: 0, dividendesBrutsVerses: Infinity }, regles);
+  const optimum = RemunerationEngine.optimiser(forme, entreeBase, regles, { budget, pas, dividendeStrategy: 'maximal' });
+  const instantane = RemunerationEngine.calculer(forme, entreeBase, regles);
+  return { entreeBase, situationActuelle, toutRem, toutDiv, optimum, instantane, isIR: false };
+}
+
+/** rmSetSociete/rmSetDirigeant/rmSetFoyer/rmSetHypotheses — setters génériques déclenchant un re-rendu complet. */
+function rmSetSociete(key, raw, isBool) {
+  REMU_ACTIVE.societe[key] = isBool ? !!raw : (key === 'formeJuridique' || key === 'activite' || key === 'natureActivite' ? raw : (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0));
+  // Le budget d'optimisation suit par défaut le résultat avant rémunération
+  // (évite un budget resté à sa valeur par défaut, sans rapport avec la
+  // situation réellement saisie) — un ajustement manuel ultérieur du
+  // budget dans l'onglet Hypothèses reste prioritaire tant que le résultat
+  // n'est pas modifié de nouveau.
+  if (key === 'resultatAvantRemuneration') REMU_ACTIVE.hypotheses.budgetOptimisation = REMU_ACTIVE.societe.resultatAvantRemuneration;
+  renderRemu();
+}
+function rmSetDirigeant(key, raw, isBool) {
+  REMU_ACTIVE.dirigeant[key] = isBool ? !!raw : (key === 'situationFamiliale' || key === 'statut' ? raw : (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0));
+  renderRemu();
+}
+function rmSetFoyer(key, raw) { const v = parseFloat(raw); REMU_ACTIVE.foyer[key] = Number.isFinite(v) ? v : 0; renderRemu(); }
+function rmSetHypotheses(key, raw) { const v = parseFloat(raw); REMU_ACTIVE.hypotheses[key] = Number.isFinite(v) ? v : 0; renderRemu(); }
+
+function renderRemu() {
+  if (!REMU_ACTIVE) return;
+  const nameEl = document.getElementById('remu-name-input');
+  if (nameEl && nameEl.value !== REMU_ACTIVE.name) nameEl.value = REMU_ACTIVE.name;
+  const badge = document.getElementById('remu-annee-badge');
+  if (badge) badge.textContent = 'Barèmes ' + REMU_ACTIVE.reglesSnapshot.annee;
+  updateRemuModeButtons(REMU_ACTIVE.mode || 'simplifie');
+
+  let compute;
+  try { compute = rmCompute(REMU_ACTIVE); }
+  catch (e) {
+    console.error('[Rémunération] Erreur de calcul', e);
+    toast('Erreur de calcul : ' + e.message, true);
+    return;
+  }
+
+  const warnEl = document.getElementById('remu-warning-banner');
+  const alertesUniques = [...new Set([...(compute.instantane.alertes || [])])];
+  if (warnEl) {
+    warnEl.innerHTML = alertesUniques.length
+      ? `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin:10px 0;">${alertesUniques.map(a => '⚠ ' + escHtml(a)).join('<br>')}</div>`
+      : '';
+  }
+
+  renderRmSociete();
+  renderRmDirigeant();
+  renderRmHyp();
+  renderRmResultats(compute);
+  renderRmComparateur();
+  renderRmInverse();
+  schedSaveRemu();
+}
+
+// ── Onglet 1 : Société ────────────────────────────────────────────────
+function renderRmSociete() {
+  const el = document.getElementById('rmpanel-societe');
+  if (!el || !REMU_ACTIVE) return;
+  const s = REMU_ACTIVE.societe;
+  const expert = REMU_ACTIVE.mode === 'expert';
+  const isIR = FORMES_IR.includes(s.formeJuridique);
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Forme juridique et régime fiscal</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Forme juridique
+          <select onchange="rmSetSociete('formeJuridique',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+            ${Object.entries(FORME_JURIDIQUE_LABELS).map(([k, v]) => `<option value="${k}" ${s.formeJuridique === k ? 'selected' : ''}>${escHtml(v)}</option>`).join('')}
+          </select>
+        </label>
+        ${expert ? `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Activité
+          <input type="text" value="${escHtml(s.activite)}" onchange="rmSetSociete('activite',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;"></label>` : ''}
+        ${!isIR && expert ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
+          <input type="checkbox" ${s.eligibleTauxReduitIS !== false ? 'checked' : ''} onchange="rmSetSociete('eligibleTauxReduitIS',this.checked,true)"> Éligible au taux réduit d'IS (15%)</label>` : ''}
+        ${isIR ? `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Nature de l'activité
+          <select onchange="rmSetSociete('natureActivite',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+            <option value="bic" ${s.natureActivite === 'bic' ? 'selected' : ''}>BIC (commerciale/artisanale)</option>
+            <option value="bnc" ${s.natureActivite === 'bnc' ? 'selected' : ''}>BNC (libérale)</option>
+          </select></label>` : ''}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Situation économique</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${expert ? pvField('Chiffre d’affaires', s.ca, `rmSetSociete('ca',this.value)`) : ''}
+        ${pvField('Résultat avant rémunération du dirigeant', s.resultatAvantRemuneration, `rmSetSociete('resultatAvantRemuneration',this.value)`)}
+        ${pvField('Rémunération actuelle du dirigeant', s.remunerationActuelle, `rmSetSociete('remunerationActuelle',this.value)`)}
+        ${expert ? pvField('Cotisations sociales actuellement comptabilisées', s.cotisationsActuelles, `rmSetSociete('cotisationsActuelles',this.value)`) : ''}
+        ${expert ? pvField('Résultat fiscal estimé', s.resultatFiscalEstime, `rmSetSociete('resultatFiscalEstime',this.value)`) : ''}
+        ${pvField('Trésorerie disponible', s.tresorerieDisponible, `rmSetSociete('tresorerieDisponible',this.value)`)}
+        ${expert ? pvField('Capitaux propres', s.capitauxPropres, `rmSetSociete('capitauxPropres',this.value)`) : ''}
+        ${!isIR ? pvField('Capital social', s.capitalSocial, `rmSetSociete('capitalSocial',this.value)`) : ''}
+        ${!isIR && expert ? pvField('Primes d’émission', s.primesEmission, `rmSetSociete('primesEmission',this.value)`) : ''}
+        ${!isIR && expert ? pvField('Compte courant d’associé', s.compteCourantAssocie, `rmSetSociete('compteCourantAssocie',this.value)`) : ''}
+        ${!isIR && expert ? pvField('Réserves disponibles', s.reservesDisponibles, `rmSetSociete('reservesDisponibles',this.value)`) : ''}
+        ${expert ? pvField('Report à nouveau', s.reportANouveau, `rmSetSociete('reportANouveau',this.value)`) : ''}
+        ${expert ? pvField('Déficits fiscaux reportables', s.deficitReportable, `rmSetSociete('deficitReportable',this.value)`) : ''}
+      </div>
+      ${!isIR ? `<p style="font-size:11px;color:#a09d96;margin:10px 0 0;">Le capital social (+ primes d'émission + compte courant d'associé) détermine le seuil de 10 % au-delà duquel les dividendes d'un gérant majoritaire supportent les cotisations TNS.</p>` : ''}
+    </div>`;
+}
+
+// ── Onglet 2 : Dirigeant & foyer fiscal ──────────────────────────────────
+function renderRmDirigeant() {
+  const el = document.getElementById('rmpanel-dirigeant');
+  if (!el || !REMU_ACTIVE) return;
+  const d = REMU_ACTIVE.dirigeant, f = REMU_ACTIVE.foyer;
+  const expert = REMU_ACTIVE.mode === 'expert';
+  const isTNS = !FORMES_IR.includes(REMU_ACTIVE.societe.formeJuridique) && REMU_ACTIVE.societe.formeJuridique !== 'sasu' && REMU_ACTIVE.societe.formeJuridique !== 'sas';
+  const isIRForme = FORMES_IR.includes(REMU_ACTIVE.societe.formeJuridique);
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Dirigeant</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Situation familiale
+          <select onchange="rmSetDirigeant('situationFamiliale',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+            <option value="celibataire" ${d.situationFamiliale === 'celibataire' ? 'selected' : ''}>Célibataire / divorcé(e) / veuf(ve)</option>
+            <option value="couple" ${d.situationFamiliale === 'couple' ? 'selected' : ''}>Marié(e) / pacsé(e)</option>
+          </select></label>
+        ${pvField('Nombre de parts fiscales', d.nbParts, `rmSetDirigeant('nbParts',this.value)`, { suffix: 'parts', step: 0.5 })}
+        ${expert ? pvField('Nombre d’enfants', d.nbEnfants, `rmSetDirigeant('nbEnfants',this.value)`, { suffix: '', step: 1 }) : ''}
+        ${expert ? pvField('Âge', d.age || 0, `rmSetDirigeant('age',this.value)`, { suffix: 'ans', step: 1 }) : ''}
+        ${pvField('Besoin personnel mensuel net', d.besoinMensuelNet, `rmSetDirigeant('besoinMensuelNet',this.value)`)}
+        ${expert ? pvField('Objectif annuel de revenu disponible', d.objectifAnnuelDisponible, `rmSetDirigeant('objectifAnnuelDisponible',this.value)`) : ''}
+        ${isTNS && !isIRForme ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1a1916;margin-top:18px;">
+          <input type="checkbox" ${d.acre ? 'checked' : ''} onchange="rmSetDirigeant('acre',this.checked,true)"> ACRE (1ʳᵉ année)</label>` : ''}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:20px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Foyer fiscal — autres revenus</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Revenus du foyer hors rémunération et dividendes issus de cette simulation (conjoint, autres activités...).</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${pvField('Traitements et salaires (conjoint, etc.)', f.salaires, `rmSetFoyer('salaires',this.value)`)}
+        ${expert ? pvField('BIC', f.bic, `rmSetFoyer('bic',this.value)`) : ''}
+        ${expert ? pvField('BNC', f.bnc, `rmSetFoyer('bnc',this.value)`) : ''}
+        ${expert ? pvField('Revenus fonciers', f.fonciers, `rmSetFoyer('fonciers',this.value)`) : ''}
+        ${expert ? pvField('Pensions', f.pensions, `rmSetFoyer('pensions',this.value)`) : ''}
+        ${expert ? pvField('Autres revenus imposables', f.autresImposables, `rmSetFoyer('autresImposables',this.value)`) : ''}
+      </div>
+    </div>`;
+}
+
+// ── Onglet 3 : Hypothèses ─────────────────────────────────────────────
+function renderRmHyp() {
+  const el = document.getElementById('rmpanel-hyp');
+  if (!el || !REMU_ACTIVE) return;
+  const h = REMU_ACTIVE.hypotheses;
+  const isIR = FORMES_IR.includes(REMU_ACTIVE.societe.formeJuridique);
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Hypothèses de calcul</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+        ${!isIR ? pvField('Rémunération brute envisagée', h.remunerationBrute, `rmSetHypotheses('remunerationBrute',this.value)`) : ''}
+        ${!isIR ? pvField('Dividendes bruts envisagés', h.dividendesBrutsVerses, `rmSetHypotheses('dividendesBrutsVerses',this.value)`) : ''}
+        ${pvField('Budget d’optimisation (enveloppe balayée)', h.budgetOptimisation, `rmSetHypotheses('budgetOptimisation',this.value)`)}
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">Pas de simulation
+          <select onchange="rmSetHypotheses('pas',this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+            <option value="100" ${h.pas == 100 ? 'selected' : ''}>100 €</option>
+            <option value="500" ${h.pas == 500 ? 'selected' : ''}>500 €</option>
+            <option value="1000" ${h.pas == 1000 ? 'selected' : ''}>1 000 €</option>
+          </select></label>
+      </div>
+      ${isIR ? `<p style="font-size:12px;color:#6b6960;margin:12px 0 0;">Cette forme juridique est soumise à l'IR : il n'existe pas d'arbitrage rémunération/dividendes, le bénéfice est imposé directement (cf. onglet Résultats).</p>` : ''}
+    </div>`;
+}
+
+// ── Onglet 4 : Résultats (tableau comparatif + graphiques + recommandation) ─
+const RM_COMPARISON_ROWS = [
+  ['Rémunération brute / bénéfice', r => r.remunerationBrute != null ? r.remunerationBrute : (r.beneficeProfessionnel || 0)],
+  ['Charges salariales', r => r.chargesSalariales || 0],
+  ['Charges patronales / cotisations sociales', r => r.chargesPatronales || (r.cotisationsTNS ? r.cotisationsTNS.total : 0)],
+  ['Coût total rémunération', r => r.coutTotalRemuneration || 0],
+  ['Dividendes bruts', r => r.dividendesBrutsVerses || 0],
+  ['Cotisations sociales sur dividendes', r => r.chargesSocialesDividendes || 0],
+  ['Résultat fiscal', r => r.resultatFiscal || 0],
+  ['IS', r => r.is ? r.is.isTotal : 0],
+  ['IR généré par l’opération', r => r.irGenereParOperation || r.irGenereParRemuneration || 0],
+  ['Total prélèvements obligatoires', r => r.totalPrelevementsObligatoires || 0, true],
+  ['Taux global de prélèvements', r => ((r.tauxGlobalPrelevements || 0) * 100).toFixed(1) + ' %'],
+  ['= Revenu net personnel final (annuel)', r => r.revenuNetPersonnelFinal || 0, true],
+  ['Revenu net mensuel', r => (r.revenuNetPersonnelFinal || 0) / 12],
+  ['Trésorerie restante société', r => r.tresorerieRestante != null ? r.tresorerieRestante : ''],
+  ['Protection sociale (estimée)', r => rmScoreProtectionSociale(r)],
+];
+function rmComparisonTable(rows, scenarios) {
+  return `<div class="drill-card" style="overflow-x:auto;"><table class="dt"><thead><tr><th style="width:26%">Indicateur</th>${scenarios.map(s => `<th class="r">${escHtml(s.label)}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(([label, fn, bold]) => `<tr${bold ? ' style="font-weight:700;background:#f4f3f0;"' : ''}>
+      <td style="padding:9px 16px;">${escHtml(label)}</td>
+      ${scenarios.map(s => { const v = fn(s.res); return `<td class="r" style="padding:9px 16px;">${typeof v === 'string' ? v : fmtV(v)}</td>`; }).join('')}
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+function renderRmResultats(compute) {
+  const el = document.getElementById('rmpanel-resultats');
+  if (!el || !REMU_ACTIVE) return;
+  const scenarios = compute.isIR
+    ? [{ label: 'Résultat (bénéfice imposé directement)', res: compute.instantane }]
+    : [
+        { label: 'Situation actuelle', res: compute.situationActuelle },
+        { label: '100% rémunération', res: compute.toutRem },
+        { label: '100% dividendes', res: compute.toutDiv },
+        { label: 'Mix optimisé', res: compute.optimum },
+      ];
+
+  const gain = compute.isIR ? 0 : safe(compute.optimum.revenuNetPersonnelFinal - compute.situationActuelle.revenuNetPersonnelFinal);
+  const kpis = compute.isIR ? [] : [
+    { label: 'Gain d’optimisation annuel', val: fmtV(gain), sub: 'vs situation actuelle', c: gain >= 0 ? 'green' : 'red' },
+    { label: 'Gain mensuel', val: fmtV(gain / 12), sub: '', c: gain >= 0 ? 'green' : 'red' },
+    { label: 'Gain sur 3 ans', val: fmtV(gain * 3), sub: 'à situation constante', c: gain >= 0 ? 'green' : 'red' },
+    { label: 'Gain sur 5 ans', val: fmtV(gain * 5), sub: 'à situation constante', c: gain >= 0 ? 'green' : 'red' },
+  ];
+
+  const recommandation = compute.isIR
+    ? `Cette structure ne permet pas d'arbitrage rémunération/dividendes : le bénéfice de ${fmtV(compute.entreeBase.resultatAvantRemuneration)} est imposé directement au nom du dirigeant, indépendamment du montant effectivement prélevé.`
+    : `Sur la base des hypothèses saisies, la stratégie « Mix optimisé » consistant en une rémunération brute d'environ ${fmtV(compute.optimum.remunerationBrute)} complétée par des dividendes de ${fmtV(compute.optimum.dividendesBrutsVerses)} ferait ressortir un revenu net personnel estimé à ${fmtV(compute.optimum.revenuNetPersonnelFinal)}, contre ${fmtV(compute.situationActuelle.revenuNetPersonnelFinal)} dans la situation actuelle déclarée — soit un gain potentiel estimé de ${fmtV(gain)} par an. Ce maximum mathématique doit être mis en balance avec la protection sociale générée (${rmScoreProtectionSociale(compute.optimum)}) et la trésorerie restant dans la société (${fmtV(compute.optimum.tresorerieRestante)}) : cette simulation doit être appréciée au regard de la situation personnelle du dirigeant, de ses besoins de protection sociale et des règles fiscales et sociales applicables à la date effective de l'opération.`;
+
+  el.innerHTML = `
+    ${kpis.length ? `<div class="kpi-grid">${kpis.map(k => `<div class="kpi ${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val}</div>${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}</div>`).join('')}</div>` : ''}
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;background:#f0f7ff;border-color:#b5d4f4;">
+      <h3 style="margin:0 0 8px;font-size:13px;color:#185FA5;">Recommandation</h3>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#1a1916;">${escHtml(recommandation)}</p>
+    </div>
+    ${pvExportBtn('exportRemuComparisonToCSV', 'Comparatif')}
+    ${rmComparisonTable(RM_COMPARISON_ROWS, scenarios)}
+    ${!compute.isIR ? `
+    <div class="chart-row" style="margin-top:16px;">
+      <div class="chart-card"><div class="chart-header"><span class="chart-title">Rémunération brute → revenu net final</span></div><div class="canvas-wrap" style="height:220px"><canvas id="rmChartCourbe"></canvas></div></div>
+      <div class="chart-card"><div class="chart-header"><span class="chart-title">Répartition du coût total (mix optimisé)</span></div><div class="canvas-wrap" style="height:220px"><canvas id="rmChartRepartition"></canvas></div></div>
+    </div>` : ''}
+  `;
+  if (!compute.isIR) rmRenderCharts(compute);
+}
+function rmRenderCharts(compute) {
+  const forme = REMU_ACTIVE.societe.formeJuridique;
+  const regles = REMU_ACTIVE.reglesSnapshot;
+  const budget = safe(REMU_ACTIVE.hypotheses.budgetOptimisation) || compute.entreeBase.resultatAvantRemuneration;
+  const serie = RemunerationEngine.balayerRemuneration(forme, compute.entreeBase, regles, { budget, pas: Math.max(500, Math.round(budget / 30)), dividendeStrategy: 'maximal' })
+    .slice().sort((a, b) => a.remunerationBrute - b.remunerationBrute);
+  mkChart('rmChartCourbe', 'line', {
+    labels: serie.map(s => fmtK(s.remunerationBrute)),
+    datasets: [{ data: serie.map(s => Math.round(s.revenuNetPersonnelFinal)), borderColor: '#185FA5', backgroundColor: 'rgba(24,95,165,.08)', fill: true, tension: .3, pointRadius: 2 }],
+  }, { plugins: { tooltip: { callbacks: { label: c => fmtV(c.raw) } } } });
+
+  const opt = compute.optimum;
+  const repartition = [
+    { l: 'Net dirigeant', v: opt.revenuNetPersonnelFinal, c: '#9FE1CB' },
+    { l: 'Cotisations sociales', v: (opt.chargesSalariales || 0) + (opt.chargesPatronales || 0) + (opt.cotisationsTNS ? opt.cotisationsTNS.total : 0) + (opt.chargesSocialesDividendes || 0), c: '#B5D4F4' },
+    { l: 'IS', v: opt.is ? opt.is.isTotal : 0, c: '#FAC775' },
+    { l: 'IR', v: opt.irGenereParOperation || 0, c: '#F5C4B3' },
+  ].filter(x => x.v > 0.5);
+  mkChart('rmChartRepartition', 'doughnut', {
+    labels: repartition.map(x => x.l), datasets: [{ data: repartition.map(x => Math.round(x.v)), backgroundColor: repartition.map(x => x.c), borderWidth: 2, borderColor: '#fff' }],
+  }, { plugins: { legend: { display: true, position: 'right', labels: { font: { size: 11 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => fmtV(c.raw) } } } });
+}
+function safe(n) { return RemunerationEngine.safe(n); }
+
+// ── Comparateur de statuts juridiques ────────────────────────────────────
+function renderRmComparateur() {
+  const el = document.getElementById('rmpanel-comparateur');
+  if (!el || !REMU_ACTIVE) return;
+  const regles = REMU_ACTIVE.reglesSnapshot;
+  const entreeBase = rmBuildEntree(REMU_ACTIVE);
+  const budget = safe(REMU_ACTIVE.hypotheses.budgetOptimisation) || entreeBase.resultatAvantRemuneration;
+  const formes = ['sasu', 'eurl_is', 'eurl_ir', 'ei_ir', 'ei_is'];
+  const scenarios = formes.map(forme => {
+    const isIR = FORMES_IR.includes(forme);
+    const res = isIR
+      ? RemunerationEngine.calculer(forme, entreeBase, regles)
+      : RemunerationEngine.optimiser(forme, { ...entreeBase, formeJuridique: forme }, regles, { budget, pas: Math.max(500, Math.round(budget / 40)), dividendeStrategy: 'maximal' });
+    return { label: FORME_JURIDIQUE_LABELS[forme], res };
+  });
+  el.innerHTML = `
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:14px;">
+      <p style="margin:0;font-size:12px;color:#6b6960;line-height:1.6;">Pour un même résultat économique de départ (${fmtV(entreeBase.resultatAvantRemuneration)}) et les mêmes hypothèses de foyer fiscal, comparaison du revenu net final selon la forme juridique — chaque forme utilise sa propre stratégie « mix optimisé ». <strong>Cette comparaison ne prend pas en compte les différences de régime juridique, de responsabilité, de fonctionnement (formalisme, coûts de structure) ni les particularités de la protection sociale au-delà du score indicatif ci-dessous.</strong></p>
+    </div>
+    ${pvExportBtn('exportRemuComparateurToCSV', 'Comparateur de statuts')}
+    ${rmComparisonTable(RM_COMPARISON_ROWS, scenarios)}
+  `;
+}
+
+// ── Simulation inversée ────────────────────────────────────────────────
+function renderRmInverse() {
+  const el = document.getElementById('rmpanel-inverse');
+  if (!el || !REMU_ACTIVE) return;
+  const netCible = safe(REMU_ACTIVE.dirigeant.besoinMensuelNet) || 3000;
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">« Je souhaite percevoir X € nets par mois, combien cela coûte-t-il ? »</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Basé sur le besoin personnel mensuel net saisi dans l’onglet Dirigeant &amp; foyer (dividendes à 0, rémunération seule).</p>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;max-width:220px;">Net mensuel cible
+        <input type="number" step="100" value="${netCible}" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;" onchange="rmSetDirigeant('besoinMensuelNet',this.value)">
+      </label>
+    </div>
+    <div id="rm-inverse-result"></div>`;
+  const regles = REMU_ACTIVE.reglesSnapshot;
+  const entreeBase = rmBuildEntree(REMU_ACTIVE);
+  const resSasu = RemunerationEngine.simulationInversee(netCible, 'sasu', entreeBase, regles);
+  const resEurl = RemunerationEngine.simulationInversee(netCible, 'eurl_is', { ...entreeBase, formeJuridique: 'eurl_is' }, regles);
+  const rows = [
+    ['Rémunération brute nécessaire', r => r.remunerationBrute],
+    ['Charges salariales / cotisations sociales', r => r.chargesSalariales || (r.cotisationsTNS ? r.cotisationsTNS.total : 0)],
+    ['Charges patronales', r => r.chargesPatronales || 0],
+    ['Coût total société', r => r.coutTotalSociete],
+    ['IS', r => r.is ? r.is.isTotal : 0],
+    ['IR généré', r => r.irGenereParOperation || 0],
+    ['= Net personnel final obtenu (annuel)', r => r.revenuNetPersonnelFinal, true],
+    ['Net mensuel obtenu', r => r.revenuNetPersonnelFinal / 12],
+  ];
+  document.getElementById('rm-inverse-result').innerHTML = rmComparisonTable(rows, [
+    { label: 'SASU (assimilé salarié)', res: resSasu }, { label: 'EURL/SARL-IS (gérant majoritaire)', res: resEurl },
+  ]);
+}
+
+// ── Exports CSV ────────────────────────────────────────────────────────
+function rmScenariosToCsv(rows, scenarios) {
+  const csvRows = [['Indicateur', ...scenarios.map(s => s.label)]];
+  rows.forEach(([label, fn]) => csvRows.push([label, ...scenarios.map(s => { const v = fn(s.res); return typeof v === 'string' ? v : v.toFixed(2); })]));
+  return csvRows;
+}
+function exportRemuComparisonToCSV() {
+  if (!REMU_ACTIVE) return;
+  const compute = rmCompute(REMU_ACTIVE);
+  const scenarios = compute.isIR ? [{ label: 'Résultat', res: compute.instantane }] : [
+    { label: 'Situation actuelle', res: compute.situationActuelle }, { label: '100% rémunération', res: compute.toutRem },
+    { label: '100% dividendes', res: compute.toutDiv }, { label: 'Mix optimisé', res: compute.optimum },
+  ];
+  downloadTextFile(`Remuneration_${safeFilePart(REMU_ACTIVE.name)}.csv`, csvFromRows(rmScenariosToCsv(RM_COMPARISON_ROWS, scenarios)), 'text/csv');
+  toast('Export CSV du comparatif téléchargé');
+}
+function exportRemuComparateurToCSV() {
+  if (!REMU_ACTIVE) return;
+  const regles = REMU_ACTIVE.reglesSnapshot;
+  const entreeBase = rmBuildEntree(REMU_ACTIVE);
+  const budget = safe(REMU_ACTIVE.hypotheses.budgetOptimisation) || entreeBase.resultatAvantRemuneration;
+  const formes = ['sasu', 'eurl_is', 'eurl_ir', 'ei_ir', 'ei_is'];
+  const scenarios = formes.map(forme => {
+    const isIR = FORMES_IR.includes(forme);
+    const res = isIR ? RemunerationEngine.calculer(forme, entreeBase, regles)
+      : RemunerationEngine.optimiser(forme, { ...entreeBase, formeJuridique: forme }, regles, { budget, pas: Math.max(500, Math.round(budget / 40)), dividendeStrategy: 'maximal' });
+    return { label: FORME_JURIDIQUE_LABELS[forme], res };
+  });
+  downloadTextFile(`Comparateur_statuts_${safeFilePart(REMU_ACTIVE.name)}.csv`, csvFromRows(rmScenariosToCsv(RM_COMPARISON_ROWS, scenarios)), 'text/csv');
+  toast('Export CSV du comparateur de statuts téléchargé');
 }
 
 // ── TOAST ──

@@ -97,6 +97,9 @@ reportResults('Prévisionnel', require('./test_previsionnel_engine.js').run(html
 section('13. TNS — cotisations sociales des indépendants (TnsEngine)');
 reportResults('TNS', require('./test_tns.js').run(htmlPath));
 
+section('14. Rémunération dirigeant — moteur d\'optimisation (RemunerationEngine)');
+reportResults('Rémunération dirigeant', require('./test_remuneration_engine.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
