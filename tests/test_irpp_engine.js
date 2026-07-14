@@ -191,6 +191,49 @@ function run(htmlPath) {
     push('decote(1000, célibataire) > 0 (< seuil 1964)', d2 > 0, d2);
   }
 
+  // ── Cas 15 : multi-années — chargerReglesIrppEffectives / irDupliquerAnnee ─
+  {
+    getJSON(ctx, `(() => { localStorage.removeItem(REGLES_IR_STORE_KEY); return true; })()`);
+
+    const annees0 = getJSON(ctx, `anneesIrppDisponibles()`);
+    push('anneesIrppDisponibles() ne contient que 2025 sans surcharge', JSON.stringify(annees0) === JSON.stringify([2025]), annees0);
+
+    const res2030 = getJSON(ctx, `chargerReglesIrppEffectives(2030)`);
+    push('Demander 2030 (inconnue) replie sur 2025 (anneeUtilisee)', res2030.anneeUtilisee === 2025, res2030.anneeUtilisee);
+    push('Le repli 2030->2025 renvoie le plafond de dons renforcé 2025 (1000)', res2030.regles.dons.plafondRenforce === 1000, res2030.regles.dons.plafondRenforce);
+
+    const dupliqueOk = getJSON(ctx, `irDupliquerAnnee(2025, 2030)`);
+    push('irDupliquerAnnee(2025, 2030) réussit', dupliqueOk === true, dupliqueOk);
+    const annees1 = getJSON(ctx, `anneesIrppDisponibles()`);
+    push('anneesIrppDisponibles() inclut désormais 2030', annees1.includes(2030), annees1);
+    const res2030bis = getJSON(ctx, `chargerReglesIrppEffectives(2030)`);
+    push('Après duplication, 2030 est résolue exactement (plus de repli)', res2030bis.anneeUtilisee === 2030, res2030bis.anneeUtilisee);
+
+    getJSON(ctx, `(() => {
+      const overrides = loadReglesIrppOverrides();
+      overrides[2030].dons.plafondRenforce = 2500;
+      localStorage.setItem(REGLES_IR_STORE_KEY, JSON.stringify(overrides));
+      return true;
+    })()`);
+    const plafondOriginalIntact = getJSON(ctx, `${G}.dons.plafondRenforce`);
+    push('Modifier la surcharge 2030 n’affecte pas REGLES_IR_2025 (isolation)', plafondOriginalIntact === 1000, plafondOriginalIntact);
+    const res2030ter = getJSON(ctx, `chargerReglesIrppEffectives(2030).regles.dons.plafondRenforce`);
+    push('La modification 2030 est bien prise en compte pour 2030 (2500)', res2030ter === 2500, res2030ter);
+
+    // Le barème IR (partagé avec la Rémunération) reste identique quelle que soit la surcharge IRPP propre
+    const baremeIdentique = getJSON(ctx, `JSON.stringify(chargerReglesIrppEffectives(2030).regles.bareme) === JSON.stringify(chargerReglesRemunerationEffectives(2030).regles.ir.bareme)`);
+    push('Le barème IR de la déclaration 2030 reste identique à celui de la Rémunération 2030 (jamais dupliqué/divergent)', baremeIdentique === true, baremeIdentique);
+
+    getJSON(ctx, `(() => { localStorage.removeItem(REGLES_IR_STORE_KEY); return true; })()`);
+  }
+
+  // ── Cas 16 : creerIrppVierge() initialise anneeDemandee et un reglesSnapshot cohérent ─
+  {
+    const vierge = getJSON(ctx, `creerIrppVierge()`);
+    push('creerIrppVierge() initialise anneeDemandee à 2025', vierge.anneeDemandee === 2025, vierge.anneeDemandee);
+    push('creerIrppVierge() initialise un reglesSnapshot avec annee 2025', vierge.reglesSnapshot && vierge.reglesSnapshot.annee === 2025, vierge.reglesSnapshot && vierge.reglesSnapshot.annee);
+  }
+
   return results;
 }
 

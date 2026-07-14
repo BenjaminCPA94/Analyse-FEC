@@ -4,6 +4,69 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Barèmes multi-années (TNS, Rémunération dirigeant, IRPP) + tentative de sourcing externe
+
+- **Tentative d'automatisation par source externe** : avant de construire
+  cette fonctionnalité, vérification de l'accès réseau à plusieurs sources
+  faisant autorité (urssaf.fr, service-public.fr, legifrance.gouv.fr,
+  cnbf.fr, carmf.fr, data.gouv.fr, simulateur-ir-ifi.impots.gouv.fr) :
+  toutes bloquées (`403`, politique du bac à sable de l'environnement
+  d'exécution). L'automatisation de la récupération des barèmes n'est donc
+  pas possible depuis cet environnement — seule une saisie manuelle (par
+  l'utilisateur, ou par collage de données dans la conversation) permet de
+  compléter des barèmes réels.
+- **Sélecteur d'année** sur les trois modules à barèmes fiscaux/sociaux
+  (TNS, Rémunération dirigeant, IRPP) : chaque simulation/déclaration
+  porte désormais une année demandée, avec resynchronisation automatique
+  des barèmes appliqués (`anneeResolue`, mécanisme unique partagé par les
+  trois modules) — année exacte si des données lui sont propres, sinon
+  repli transparent sur l'année connue la plus proche (jamais
+  d'extrapolation silencieuse : un bandeau « ℹ repli {année} » informe
+  explicitement l'utilisateur quand un repli a lieu).
+- **`PASS_PAR_ANNEE`** (nouveau, partagé) : Plafond Annuel de la Sécurité
+  Sociale pour 2023 (43 992 €), 2024 (46 368 €) et 2025 (47 100 €) — valeurs
+  publiques et stables (arrêtés annuels, Journal Officiel). Les tranches
+  déjà exprimées en multiples du PASS (`jusquPASS`) s'ajustent
+  automatiquement à l'année choisie pour le régime réel TNS et les caisses
+  en mode tranches (AVA/ORGANIC/CIPAV/MSA) — un changement d'année produit
+  déjà un résultat correctement différent pour ces seuils, même sans
+  saisie supplémentaire.
+- **« Dupliquer vers une nouvelle année »** sur les trois modules : copie
+  l'intégralité des barèmes effectifs de l'année source vers une nouvelle
+  année (surcharge complète en `localStorage`, jamais fusionnée champ à
+  champ), immédiatement modifiable sans plus aucun repli. Pour TNS, disponible
+  depuis l'écran « Paramétrage des caisses » (copie les 16 caisses en une
+  fois). Pour Rémunération dirigeant et IRPP, un bouton ⎘ à côté du champ
+  Année sur l'écran de simulation/déclaration.
+- **Barème IR jamais dupliqué entre les trois modules** : IRPP réutilise
+  toujours en direct `chargerReglesRemunerationEffectives()` pour son
+  barème/décote/quotient/PFU/abattement dividendes, quelle que soit
+  l'année demandée — une surcharge IRPP ne porte jamais sur le barème
+  lui-même, seulement sur les paramètres propres à l'IRPP (dons, PER,
+  plafond niches fiscales, emploi à domicile, frais de garde...). Vérifié
+  par test : le barème résolu pour une même année est strictement
+  identique entre les deux modules.
+- **Migration rétrocompatible** des surcharges de caisses TNS déjà
+  enregistrées avant cette version (format à plat `{ [caisseId]: caisse }`)
+  vers le nouveau format par année — aucune perte de paramétrage déjà
+  saisi par un utilisateur.
+- **Une seule année réellement vérifiée par module** (2025, déjà livrée) :
+  cette livraison construit l'architecture multi-années et permet de la
+  peupler, mais ne fabrique aucune donnée pour d'autres années sans les
+  avoir reçues (mêmes principes de transparence que les 11 caisses « à
+  paramétrer » de la livraison précédente). Créer une année réelle
+  supplémentaire (2024, 2026...) nécessite de dupliquer puis de corriger
+  les valeurs — manuellement pour l'instant, ou avec mon aide si des
+  chiffres sources sont fournis dans la conversation.
+- 20 nouveaux tests (résolveur `anneeResolue` couvert indirectement par
+  les 3 modules, `PASS_PAR_ANNEE`, duplication/isolation/repli pour
+  chaque module, non-duplication du barème IR entre Rémunération et
+  IRPP, migration de l'ancien format de surcharges TNS) — 321 tests au
+  total, tous verts. Vérifié en navigateur headless (Playwright) :
+  changement d'année avec resynchronisation du PASS, duplication vers une
+  nouvelle année, bandeau de repli, non-régression de la navigation
+  croisée des 5 modules.
+
 ## v6 — TNS : caisses professionnelles paramétrables (16 régimes, classes/tranches éditables)
 
 - **Nouveau régime « Caisse professionnelle »** dans le module TNS, en

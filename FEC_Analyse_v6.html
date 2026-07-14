@@ -1789,7 +1789,7 @@
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <input id="remu-name-input" type="text" oninput="onRemuNameChange(this.value)"
           style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:200px;">
-        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;" id="remu-annee-badge"></span>
+        <span id="remu-annee-container" style="display:flex;align-items:center;gap:6px;"></span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="display:flex;background:rgba(0,0,0,.05);border-radius:6px;padding:2px;gap:1px;">
@@ -1874,7 +1874,7 @@
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <input id="irpp-name-input" type="text" oninput="onIrppNameChange(this.value)"
           style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:200px;">
-        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;" id="irpp-annee-badge"></span>
+        <span id="irpp-annee-container" style="display:flex;align-items:center;gap:6px;"></span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="display:flex;background:rgba(0,0,0,.05);border-radius:6px;padding:2px;gap:1px;">
@@ -5653,13 +5653,53 @@ const TnsEngine = (function () {
   return { safe, cotisationParTranches, calculerTNSReel, calculerTNSMicro, calculerCotisationsCaisse };
 })();
 
+// ═══════════════════════════════════════════════════════════════════════
+// ── BARÈMES MULTI-ANNÉES (utilitaire partagé TNS / Rémunération / IRPP) ──
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * anneeResolue(catalogue, anneeDemandee) — résout l'année à utiliser dans un
+ * catalogue de barèmes versionné par année (clés = années) : l'année exacte
+ * si elle existe, sinon l'année connue la plus proche en-dessous (le
+ * dernier barème encore applicable), sinon la plus ancienne connue si la
+ * demande est antérieure à tout ce qui est disponible. Ne fabrique jamais
+ * de données par extrapolation — retourne null seulement si le catalogue
+ * est vide. Réutilisée par PASS_PAR_ANNEE, les caisses TNS, les règles de
+ * rémunération et les règles IRPP : un seul mécanisme de résolution
+ * d'année dans toute l'application.
+ */
+function anneeResolue(catalogue, anneeDemandee) {
+  const annees = Object.keys(catalogue).map(Number).sort((a, b) => a - b);
+  if (!annees.length) return null;
+  if (catalogue[anneeDemandee]) return anneeDemandee;
+  const inferieures = annees.filter(a => a <= anneeDemandee);
+  return inferieures.length ? inferieures[inferieures.length - 1] : annees[0];
+}
+/**
+ * PASS_PAR_ANNEE — Plafond Annuel de la Sécurité Sociale par année.
+ * Valeurs publiées au Journal Officiel (arrêté annuel), stables et
+ * publiques. 2025 = valeur déjà utilisée dans l'application avant
+ * l'introduction du multi-années (aucune duplication de valeur).
+ * Extensible via l'écran de paramétrage (« Dupliquer vers une nouvelle
+ * année ») pour les années non listées ici — voir aParametrer.
+ */
+const PASS_PAR_ANNEE = {
+  2023: { valeur: 43992, source: 'Arrêté du 26/12/2022 (JORF) — PASS 2023', derniereVerification: '2025-01-01' },
+  2024: { valeur: 46368, source: 'Arrêté du 26/12/2023 (JORF) — PASS 2024', derniereVerification: '2025-01-01' },
+  2025: { valeur: 47100, source: 'Arrêté du 27/12/2024 (JORF) — PASS 2025', derniereVerification: '2025-01-01' },
+};
+/** passPourAnnee(annee) — PASS résolu pour l'année demandée (repli sur l'année connue la plus proche). */
+function passPourAnnee(annee) {
+  const a = anneeResolue(PASS_PAR_ANNEE, annee);
+  return a !== null ? PASS_PAR_ANNEE[a].valeur : 47100;
+}
+
 /**
  * Barèmes de référence — indicatifs, année de référence 2025 (PASS =
  * 47 100 €). Seuils exprimés en multiples du PASS (jusquPASS), comme les
  * textes URSSAF officiels, pour rester cohérents si le PASS est ajusté.
  * `null` = dernière tranche (jusqu'à l'infini).
  */
-const TNS_PASS_REF = 47100;
+const TNS_PASS_REF = PASS_PAR_ANNEE[2025].valeur;
 const TNS_BAREME_REEL_DEFAUT = {
   commercant: {
     label: 'Commerçant / artisan (SSI)',
@@ -5815,27 +5855,75 @@ const TNS_CAISSES_DEFAUT = {
   msa: tnsCaisseTranchesVide('MSA', 'MSA', 'Agricole'),
 };
 const TNS_CAISSES_STORE_KEY = 'fec_analyse_tns_caisses_v1';
-/** chargerCaissesEffectives() — barèmes par défaut + surcharges utilisateur enregistrées via l'écran de paramétrage (par caisse entière, jamais fusionné champ à champ pour rester prévisible). */
-function chargerCaissesEffectives() {
-  const caisses = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT));
-  let overrides = {};
-  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); }
-  catch (e) { console.warn('[TNS] Surcharges de caisses illisibles :', e); }
-  Object.keys(overrides).forEach(id => { if (caisses[id]) caisses[id] = overrides[id]; });
-  return caisses;
+/** TNS_ANNEE_DEFAUT — seule année dont les caisses disposent d'un barème par défaut construit dans l'application (2025, déjà vérifié) ; les autres années se créent via « Dupliquer vers une nouvelle année ». */
+const TNS_ANNEE_DEFAUT = 2025;
+/**
+ * loadTnsCaissesOverridesRaw() / migrerOverridesSiAncienFormat() — les
+ * surcharges de caisses étaient initialement enregistrées à plat
+ * ({ [caisseId]: caisse }), avant l'introduction du multi-années. Pour ne
+ * pas perdre un paramétrage déjà enregistré par un utilisateur, l'ancien
+ * format est détecté (clés non numériques) et traité comme les surcharges
+ * de TNS_ANNEE_DEFAUT.
+ */
+function loadTnsCaissesOverridesRaw() {
+  try { return JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[TNS] Surcharges de caisses illisibles :', e); return {}; }
 }
-function sauvegarderCaisseOverride(id, caisse) {
-  let overrides = {};
-  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); } catch (e) { /* ignore */ }
-  overrides[id] = caisse;
-  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overrides)); return true; }
+function migrerOverridesSiAncienFormat(raw) {
+  const cles = Object.keys(raw);
+  if (!cles.length) return raw;
+  const toutesAnnees = cles.every(k => /^\d{4}$/.test(k));
+  return toutesAnnees ? raw : { [TNS_ANNEE_DEFAUT]: raw };
+}
+/** anneesTnsDisponibles() — TNS_ANNEE_DEFAUT (toujours disponible) + toute année dupliquée par l'utilisateur. */
+function anneesTnsDisponibles() {
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  const set = new Set([TNS_ANNEE_DEFAUT, ...Object.keys(overridesParAnnee).map(Number)]);
+  return [...set].sort((a, b) => a - b);
+}
+/**
+ * chargerCaissesEffectives(annee) — barèmes par défaut (TNS_CAISSES_DEFAUT,
+ * année 2025) + surcharges utilisateur de l'année résolue (par caisse
+ * entière, jamais fusionné champ à champ, pour rester prévisible). Retourne
+ * aussi l'année réellement utilisée (anneeUtilisee), qui peut différer de
+ * l'année demandée si aucune donnée spécifique n'a été créée pour elle —
+ * l'appelant doit en informer l'utilisateur plutôt que de le laisser croire
+ * à des chiffres propres à une année qu'il n'a pas encore paramétrée.
+ */
+function chargerCaissesEffectives(annee) {
+  annee = annee || TNS_ANNEE_DEFAUT;
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  const catalogueAnnees = {}; anneesTnsDisponibles().forEach(a => { catalogueAnnees[a] = true; });
+  const anneeUtilisee = anneeResolue(catalogueAnnees, annee);
+  const caisses = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT));
+  const overrides = overridesParAnnee[anneeUtilisee] || {};
+  Object.keys(overrides).forEach(id => { if (caisses[id]) caisses[id] = overrides[id]; });
+  return { caisses, anneeUtilisee };
+}
+function sauvegarderCaisseOverride(annee, id, caisse) {
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  overridesParAnnee[annee] = overridesParAnnee[annee] || {};
+  overridesParAnnee[annee][id] = caisse;
+  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overridesParAnnee)); return true; }
   catch (e) { toast('Échec de sauvegarde du paramétrage : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
-function reinitialiserCaisseOverride(id) {
-  let overrides = {};
-  try { overrides = JSON.parse(localStorage.getItem(TNS_CAISSES_STORE_KEY) || '{}'); } catch (e) { /* ignore */ }
-  delete overrides[id];
-  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overrides)); } catch (e) { /* ignore */ }
+function reinitialiserCaisseOverride(annee, id) {
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  if (overridesParAnnee[annee]) delete overridesParAnnee[annee][id];
+  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overridesParAnnee)); } catch (e) { /* ignore */ }
+}
+/** tnsDupliquerAnneeCaisses(anneeSource, anneeCible) — copie les 16 caisses effectives de anneeSource vers anneeCible (nouvelle année indépendante, immédiatement éditable sans repli). */
+function tnsDupliquerAnneeCaisses(anneeSource, anneeCible) {
+  if (!Number.isInteger(anneeCible) || anneeCible < 2000 || anneeCible > 2100) { toast('Année cible invalide', true); return false; }
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  if (overridesParAnnee[anneeCible] && !confirm(`Les caisses de l'année ${anneeCible} existent déjà et seront remplacées par une copie de ${anneeSource}. Continuer ?`)) return false;
+  const { caisses } = chargerCaissesEffectives(anneeSource);
+  overridesParAnnee[anneeCible] = JSON.parse(JSON.stringify(caisses));
+  try {
+    localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overridesParAnnee));
+    toast(`Année ${anneeCible} créée à partir de ${anneeSource}`);
+    return true;
+  } catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
 
 
@@ -5877,7 +5965,7 @@ function creerTnsVierge() {
   return {
     id: 'tns-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
     name: 'Nouveau calcul TNS', createdAt: Date.now(), updatedAt: Date.now(),
-    regime: 'reel_commercant', pass: TNS_PASS_REF,
+    regime: 'reel_commercant', pass: TNS_PASS_REF, annee: TNS_ANNEE_DEFAUT,
     revenu: 40000, ca: 40000, natureMicro: 'servicesBIC',
     acre: false, tauxReductionACRE: 0.5, versementLiberatoire: false,
     baremeReel: JSON.parse(JSON.stringify(TNS_BAREME_REEL_DEFAUT.commercant)),
@@ -5985,9 +6073,16 @@ function tnsSetClasseChoisie(poste, code) {
   TNS_ACTIVE.classesChoisies[poste] = code;
   renderTns();
 }
+/** tnsSetAnnee — change l'année de référence : resynchronise automatiquement le PASS (seuils déjà exprimés en multiples du PASS, l'utilisateur garde la main pour l'ajuster manuellement ensuite). */
+function tnsSetAnnee(raw) {
+  const v = parseInt(raw, 10);
+  TNS_ACTIVE.annee = Number.isFinite(v) ? v : TNS_ANNEE_DEFAUT;
+  TNS_ACTIVE.pass = passPourAnnee(TNS_ACTIVE.annee);
+  renderTns();
+}
 function tnsOuvrirParametrageCaisses() {
   if (TNS_ACTIVE) saveTns(TNS_ACTIVE);
-  openTnsCaissesParametrage(TNS_ACTIVE ? TNS_ACTIVE.caisseId : null);
+  openTnsCaissesParametrage(TNS_ACTIVE ? TNS_ACTIVE.caisseId : null, TNS_ACTIVE ? (TNS_ACTIVE.annee || TNS_ANNEE_DEFAUT) : TNS_ANNEE_DEFAUT);
 }
 function tnsSetMicroTaux(key, raw) {
   const v = parseFloat(raw);
@@ -6007,7 +6102,8 @@ function renderTns() {
   const isCaisse = t.regime === 'caisse';
   const isReel = !isMicro && !isCaisse;
 
-  const caisses = isCaisse ? chargerCaissesEffectives() : null;
+  const caissesRes = isCaisse ? chargerCaissesEffectives(t.annee) : null;
+  const caisses = isCaisse ? caissesRes.caisses : null;
   const caisse = isCaisse ? (caisses[t.caisseId] || caisses.ava_artisan) : null;
 
   let resultat, assiette;
@@ -6036,7 +6132,8 @@ function renderTns() {
 
   html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;">
     <h3 style="margin:0 0 12px;font-size:14px;">Paramètres</h3>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">`;
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;">
+      ${pvField('Année', t.annee || TNS_ANNEE_DEFAUT, `tnsSetAnnee(this.value)`, { suffix: '', step: 1 })}`;
   if (isReel || isCaisse) {
     html += pvField('Revenu professionnel net annuel', t.revenu, `tnsSetField('revenu',this.value)`);
     html += pvField('PASS de référence', t.pass, `tnsSetField('pass',this.value)`);
@@ -6066,6 +6163,9 @@ function renderTns() {
   }
   html += `</div>`;
 
+  if (isCaisse && Number(t.annee || TNS_ANNEE_DEFAUT) !== caissesRes.anneeUtilisee) {
+    html += `<div style="background:#e6f1fb;border:1px solid #185FA5;color:#185FA5;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">ℹ Aucune donnée de caisse spécifique à l'année ${t.annee} — les barèmes ${caissesRes.anneeUtilisee} sont appliqués. Utilisez « Paramétrage des caisses » pour créer l'année ${t.annee} (« Dupliquer vers une nouvelle année »).</div>`;
+  }
   if (isCaisse && caisse.aParametrer) {
     html += `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">⚠ La caisse « ${escHtml(caisse.label)} » n'est pas encore paramétrée (montants/taux à 0) — ouvrez « Paramétrage des caisses » pour saisir les valeurs réelles avant d'utiliser ce résultat.</div>`;
   }
@@ -6145,7 +6245,7 @@ function exportTnsToCSV() {
   let resultat;
   if (isReel) resultat = TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
   else if (isCaisse) {
-    const caisses = chargerCaissesEffectives();
+    const { caisses } = chargerCaissesEffectives(t.annee);
     resultat = TnsEngine.calculerCotisationsCaisse(caisses[t.caisseId] || caisses.ava_artisan, t.revenu, t.classesChoisies, t.pass, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
   } else resultat = TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
   const rows = [['Poste', 'Montant (€)']];
@@ -6167,15 +6267,17 @@ function exportTnsToCSV() {
 // ── MODULE TNS — PARAMÉTRAGE DES CAISSES ─────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
 let TNS_CAISSE_PARAM_ID = null;
+let TNS_CAISSE_PARAM_ANNEE = TNS_ANNEE_DEFAUT;
 let TNS_CAISSE_DRAFT = null;
 let TNS_CAISSE_POSTE_ACTIF = null;
 
 function tnsParamPostesDe(caisse) {
   return caisse.mode === 'tranches' ? Object.keys(caisse.lignes) : Object.keys(caisse.postesClasses);
 }
-function openTnsCaissesParametrage(caisseId) {
+function openTnsCaissesParametrage(caisseId, annee) {
   ['home-screen', 'dashboard-screen', 'tns-list-screen', 'tns-screen'].forEach(sid => { const e = document.getElementById(sid); if (e) e.style.display = 'none'; });
   document.getElementById('tns-caisses-screen').style.display = 'block';
+  TNS_CAISSE_PARAM_ANNEE = annee || TNS_ANNEE_DEFAUT;
   tnsParamSelectCaisse(caisseId || Object.keys(TNS_CAISSES_DEFAUT)[0]);
 }
 function closeTnsCaissesParametrage() {
@@ -6183,22 +6285,35 @@ function closeTnsCaissesParametrage() {
   if (TNS_ACTIVE) { document.getElementById('tns-screen').style.display = 'block'; renderTns(); }
   else { document.getElementById('tns-list-screen').style.display = 'block'; renderTnsList(); }
 }
+function tnsParamSelectAnnee(raw) {
+  const v = parseInt(raw, 10);
+  TNS_CAISSE_PARAM_ANNEE = Number.isFinite(v) ? v : TNS_ANNEE_DEFAUT;
+  tnsParamSelectCaisse(TNS_CAISSE_PARAM_ID);
+}
+function tnsParamDupliquerAnnee() {
+  const cible = parseInt(prompt(`Dupliquer les 16 caisses de l'année ${TNS_CAISSE_PARAM_ANNEE} vers quelle nouvelle année ?`, String(TNS_CAISSE_PARAM_ANNEE + 1)), 10);
+  if (!Number.isFinite(cible)) return;
+  if (tnsDupliquerAnneeCaisses(TNS_CAISSE_PARAM_ANNEE, cible)) {
+    TNS_CAISSE_PARAM_ANNEE = cible;
+    tnsParamSelectCaisse(TNS_CAISSE_PARAM_ID);
+  }
+}
 function tnsParamSelectCaisse(caisseId) {
   TNS_CAISSE_PARAM_ID = caisseId;
-  const effectives = chargerCaissesEffectives();
-  TNS_CAISSE_DRAFT = JSON.parse(JSON.stringify(effectives[caisseId]));
+  const { caisses } = chargerCaissesEffectives(TNS_CAISSE_PARAM_ANNEE);
+  TNS_CAISSE_DRAFT = JSON.parse(JSON.stringify(caisses[caisseId]));
   TNS_CAISSE_POSTE_ACTIF = tnsParamPostesDe(TNS_CAISSE_DRAFT)[0] || '__csg__';
   renderTnsCaissesParametrage();
 }
 function tnsParamSelectPoste(poste) { TNS_CAISSE_POSTE_ACTIF = poste; renderTnsCaissesParametrage(); }
 function tnsParamDefaut() {
-  if (!confirm(`Réinitialiser « ${TNS_CAISSE_DRAFT.label} » aux valeurs par défaut ?\n(Non enregistré tant que vous ne validez pas.)`)) return;
+  if (!confirm(`Réinitialiser « ${TNS_CAISSE_DRAFT.label} » aux valeurs par défaut de l'application ?\n(Non enregistré tant que vous ne validez pas.)`)) return;
   TNS_CAISSE_DRAFT = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT[TNS_CAISSE_PARAM_ID]));
   renderTnsCaissesParametrage();
 }
 function tnsParamEnregistrer() {
-  sauvegarderCaisseOverride(TNS_CAISSE_PARAM_ID, TNS_CAISSE_DRAFT);
-  toast('Paramétrage de la caisse enregistré');
+  sauvegarderCaisseOverride(TNS_CAISSE_PARAM_ANNEE, TNS_CAISSE_PARAM_ID, TNS_CAISSE_DRAFT);
+  toast(`Paramétrage de la caisse enregistré pour l'année ${TNS_CAISSE_PARAM_ANNEE}`);
   closeTnsCaissesParametrage();
 }
 function tnsParamAnnuler() { closeTnsCaissesParametrage(); }
@@ -6267,6 +6382,8 @@ function renderTnsCaissesParametrage() {
   const caisse = TNS_CAISSE_DRAFT;
   const postes = tnsParamPostesDe(caisse);
 
+  const anneesConnues = anneesTnsDisponibles();
+  const anneeUtilisee = anneeResolue(Object.fromEntries(anneesConnues.map(a => [a, true])), TNS_CAISSE_PARAM_ANNEE);
   const header = `
     <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;flex:1;min-width:220px;">Régime
@@ -6274,9 +6391,15 @@ function renderTnsCaissesParametrage() {
           ${Object.entries(TNS_CAISSES_DEFAUT).map(([id, c]) => `<option value="${id}" ${id === TNS_CAISSE_PARAM_ID ? 'selected' : ''}>${escHtml(c.label)}</option>`).join('')}
         </select>
       </label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;width:100px;">Année
+        <input type="number" step="1" value="${TNS_CAISSE_PARAM_ANNEE}" onchange="tnsParamSelectAnnee(this.value)" style="padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;">
+      </label>
       ${caisse.aParametrer ? `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff8e1;color:#8a6d1a;">À paramétrer</span>` : ''}
+      <button onclick="tnsParamDupliquerAnnee()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;color:#1a1916;cursor:pointer;">⎘ Dupliquer vers une nouvelle année</button>
       <button onclick="tnsParamDefaut()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;color:#1a1916;cursor:pointer;">↺ Défaut</button>
-    </div>`;
+    </div>
+    ${anneeUtilisee !== TNS_CAISSE_PARAM_ANNEE ? `<div style="background:#e6f1fb;border:1px solid #185FA5;color:#185FA5;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">ℹ Aucune donnée propre à l'année ${TNS_CAISSE_PARAM_ANNEE} — vous éditez actuellement une copie des barèmes ${anneeUtilisee}. Enregistrer créera des données spécifiques à ${TNS_CAISSE_PARAM_ANNEE} pour cette caisse (les autres caisses resteront héritées de ${anneeUtilisee} tant qu'elles n'auront pas été éditées ou dupliquées).</div>` : ''}
+    <div style="font-size:11px;color:#a09d96;margin-bottom:16px;">Années disponibles : ${anneesConnues.join(', ')}</div>`;
 
   const posteNav = `
     <div style="display:flex;flex-direction:column;gap:2px;">
@@ -6387,6 +6510,46 @@ const REGLES_REMUNERATION_2025 = {
   },
   seuilDividendesTNS: 0.10,
 };
+
+/**
+ * REGLES_REMUNERATION_ANNEE_DEFAUT / chargerReglesRemunerationEffectives —
+ * même mécanisme multi-années que les caisses TNS (cf. anneeResolue) :
+ * REGLES_REMUNERATION_2025 est la seule année vérifiée livrée avec
+ * l'application ; les autres années se créent via « Dupliquer vers une
+ * nouvelle année » sur l'écran de simulation, puis s'enregistrent dans
+ * localStorage en surcharge complète (jamais de fusion champ à champ).
+ */
+const REGLES_REMUNERATION_ANNEE_DEFAUT = 2025;
+const REGLES_REMUNERATION_STORE_KEY = 'fec_analyse_regles_remuneration_par_annee_v1';
+function loadReglesRemunerationOverrides() {
+  try { return JSON.parse(localStorage.getItem(REGLES_REMUNERATION_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[Rémunération] Surcharges de barèmes illisibles :', e); return {}; }
+}
+function anneesRemunerationDisponibles() {
+  const overrides = loadReglesRemunerationOverrides();
+  const set = new Set([REGLES_REMUNERATION_ANNEE_DEFAUT, ...Object.keys(overrides).map(Number)]);
+  return [...set].sort((a, b) => a - b);
+}
+/** chargerReglesRemunerationEffectives(annee) -> { regles, anneeUtilisee } — repli sur l'année connue la plus proche si l'année demandée n'a pas de barème propre. */
+function chargerReglesRemunerationEffectives(annee) {
+  annee = annee || REGLES_REMUNERATION_ANNEE_DEFAUT;
+  const overrides = loadReglesRemunerationOverrides();
+  const catalogue = {}; anneesRemunerationDisponibles().forEach(a => { catalogue[a] = true; });
+  const anneeUtilisee = anneeResolue(catalogue, annee);
+  const base = overrides[anneeUtilisee] || REGLES_REMUNERATION_2025;
+  return { regles: JSON.parse(JSON.stringify(base)), anneeUtilisee };
+}
+/** rmDupliquerAnnee(anneeSource, anneeCible) — copie les barèmes effectifs de anneeSource vers anneeCible (nouvelle année indépendante, immédiatement éditable sans repli). */
+function rmDupliquerAnnee(anneeSource, anneeCible) {
+  if (!Number.isInteger(anneeCible) || anneeCible < 2000 || anneeCible > 2100) { toast('Année cible invalide', true); return false; }
+  const overrides = loadReglesRemunerationOverrides();
+  if (overrides[anneeCible] && !confirm(`Les barèmes de l'année ${anneeCible} existent déjà et seront remplacés par une copie de ${anneeSource}. Continuer ?`)) return false;
+  const { regles } = chargerReglesRemunerationEffectives(anneeSource);
+  regles.annee = anneeCible;
+  overrides[anneeCible] = regles;
+  try { localStorage.setItem(REGLES_REMUNERATION_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource}`); return true; }
+  catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // ── MODULE RÉMUNÉRATION DIRIGEANT — MOTEUR (pur) ────────────────────────
@@ -6790,7 +6953,8 @@ function creerRemuVierge(name) {
   return {
     id: 'remu-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
     name: name || 'Nouvelle simulation', createdAt: Date.now(), updatedAt: Date.now(), mode: 'simplifie',
-    reglesSnapshot: JSON.parse(JSON.stringify(REGLES_REMUNERATION_2025)),
+    anneeDemandee: REGLES_REMUNERATION_ANNEE_DEFAUT,
+    reglesSnapshot: chargerReglesRemunerationEffectives(REGLES_REMUNERATION_ANNEE_DEFAUT).regles,
     societe: {
       formeJuridique: 'sasu', activite: '', ca: 0, resultatAvantRemuneration: 100000, remunerationActuelle: 0,
       cotisationsActuelles: 0, resultatFiscalEstime: 0, tresorerieDisponible: 100000, capitauxPropres: 0,
@@ -6970,13 +7134,34 @@ function rmSetDirigeant(key, raw, isBool) {
 }
 function rmSetFoyer(key, raw) { const v = parseFloat(raw); REMU_ACTIVE.foyer[key] = Number.isFinite(v) ? v : 0; renderRemu(); }
 function rmSetHypotheses(key, raw) { const v = parseFloat(raw); REMU_ACTIVE.hypotheses[key] = Number.isFinite(v) ? v : 0; renderRemu(); }
+/** rmSetAnnee — resnapshote les barèmes de la simulation depuis l'année demandée (repli transparent si elle n'a pas de barème propre). */
+function rmSetAnnee(raw) {
+  const v = parseInt(raw, 10);
+  REMU_ACTIVE.anneeDemandee = Number.isFinite(v) ? v : REGLES_REMUNERATION_ANNEE_DEFAUT;
+  REMU_ACTIVE.reglesSnapshot = chargerReglesRemunerationEffectives(REMU_ACTIVE.anneeDemandee).regles;
+  renderRemu();
+}
+function rmDupliquerAnneeCourante() {
+  const anneeSource = REMU_ACTIVE.reglesSnapshot.annee;
+  const cible = parseInt(prompt(`Dupliquer les barèmes de l'année ${anneeSource} vers quelle nouvelle année ?`, String(anneeSource + 1)), 10);
+  if (!Number.isFinite(cible)) return;
+  if (rmDupliquerAnnee(anneeSource, cible)) { REMU_ACTIVE.anneeDemandee = cible; REMU_ACTIVE.reglesSnapshot = chargerReglesRemunerationEffectives(cible).regles; renderRemu(); }
+}
 
 function renderRemu() {
   if (!REMU_ACTIVE) return;
   const nameEl = document.getElementById('remu-name-input');
   if (nameEl && nameEl.value !== REMU_ACTIVE.name) nameEl.value = REMU_ACTIVE.name;
-  const badge = document.getElementById('remu-annee-badge');
-  if (badge) badge.textContent = 'Barèmes ' + REMU_ACTIVE.reglesSnapshot.annee;
+  const anneeContainer = document.getElementById('remu-annee-container');
+  if (anneeContainer) {
+    const anneeDemandee = REMU_ACTIVE.anneeDemandee || REGLES_REMUNERATION_ANNEE_DEFAUT;
+    const anneeUtilisee = REMU_ACTIVE.reglesSnapshot.annee;
+    anneeContainer.innerHTML = `
+      <input type="number" step="1" value="${anneeDemandee}" onchange="rmSetAnnee(this.value)" title="Année des barèmes appliqués"
+        style="width:70px;padding:3px 6px;border:1px solid rgba(0,0,0,.14);border-radius:20px;font-size:11px;font-weight:700;color:#185FA5;background:#e6f1fb;text-align:center;">
+      <button onclick="rmDupliquerAnneeCourante()" title="Dupliquer les barèmes vers une nouvelle année" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:#1a1916;cursor:pointer;">⎘</button>
+      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}`;
+  }
   updateRemuModeButtons(REMU_ACTIVE.mode || 'simplifie');
 
   let compute;
@@ -7331,6 +7516,57 @@ const REGLES_IR_2025 = {
   pensionAlimentaireEnfantMajeur: { plafondParEnfant: 6794, source: 'art. 156-II-2° CGI' },
 };
 
+/**
+ * IRPP_ANNEE_DEFAUT / chargerReglesIrppEffectives — même mécanisme
+ * multi-années que la Rémunération et les caisses TNS (cf. anneeResolue).
+ * Le barème/décote/quotient/PFU/abattement dividendes sont TOUJOURS repris
+ * en direct de chargerReglesRemunerationEffectives() pour l'année résolue
+ * (jamais figés dans une surcharge IRPP, jamais dupliqués) ; seuls les
+ * paramètres propres à l'IRPP (dons, PER, plafond niches fiscales,
+ * emploi à domicile, frais de garde...) sont versionnés et dupliqués
+ * indépendamment via cette surcharge.
+ */
+const IRPP_ANNEE_DEFAUT = 2025;
+const REGLES_IR_STORE_KEY = 'fec_analyse_regles_irpp_par_annee_v1';
+function loadReglesIrppOverrides() {
+  try { return JSON.parse(localStorage.getItem(REGLES_IR_STORE_KEY) || '{}'); }
+  catch (e) { console.warn('[IRPP] Surcharges de barèmes illisibles :', e); return {}; }
+}
+function anneesIrppDisponibles() {
+  const overrides = loadReglesIrppOverrides();
+  const set = new Set([IRPP_ANNEE_DEFAUT, ...Object.keys(overrides).map(Number)]);
+  return [...set].sort((a, b) => a - b);
+}
+/** chargerReglesIrppEffectives(annee) -> { regles, anneeUtilisee } */
+function chargerReglesIrppEffectives(annee) {
+  annee = annee || IRPP_ANNEE_DEFAUT;
+  const overrides = loadReglesIrppOverrides();
+  const catalogue = {}; anneesIrppDisponibles().forEach(a => { catalogue[a] = true; });
+  const anneeUtilisee = anneeResolue(catalogue, annee);
+  const base = overrides[anneeUtilisee] || REGLES_IR_2025;
+  const regles = JSON.parse(JSON.stringify(base));
+  const { regles: reglesRemuneration } = chargerReglesRemunerationEffectives(anneeUtilisee);
+  regles.bareme = reglesRemuneration.ir.bareme;
+  regles.decote = reglesRemuneration.ir.decote;
+  regles.plafondParDemiPart = reglesRemuneration.ir.plafondParDemiPart;
+  regles.abattementFraisPro = reglesRemuneration.ir.abattementFraisPro;
+  regles.pfu = reglesRemuneration.pfu;
+  regles.abattementDividendes = reglesRemuneration.bareme_dividendes.abattement;
+  regles.annee = anneeUtilisee;
+  return { regles, anneeUtilisee };
+}
+/** irDupliquerAnnee(anneeSource, anneeCible) — copie les paramètres IRPP propres (dons/PER/niches/...) de anneeSource vers anneeCible ; le barème/décote reste toujours celui résolu en direct depuis la Rémunération. */
+function irDupliquerAnnee(anneeSource, anneeCible) {
+  if (!Number.isInteger(anneeCible) || anneeCible < 2000 || anneeCible > 2100) { toast('Année cible invalide', true); return false; }
+  const overrides = loadReglesIrppOverrides();
+  if (overrides[anneeCible] && !confirm(`Les barèmes IRPP de l'année ${anneeCible} existent déjà et seront remplacés par une copie de ${anneeSource}. Continuer ?`)) return false;
+  const { regles } = chargerReglesIrppEffectives(anneeSource);
+  regles.annee = anneeCible;
+  overrides[anneeCible] = regles;
+  try { localStorage.setItem(REGLES_IR_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource}`); return true; }
+  catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // ── MODULE IRPP — MOTEUR (pur) ───────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
@@ -7594,7 +7830,8 @@ function creerIrppVierge(name) {
   return {
     id: 'irpp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
     name: name || 'Nouvelle déclaration', createdAt: Date.now(), updatedAt: Date.now(),
-    reglesSnapshot: JSON.parse(JSON.stringify(REGLES_IR_2025)),
+    anneeDemandee: IRPP_ANNEE_DEFAUT,
+    reglesSnapshot: chargerReglesIrppEffectives(IRPP_ANNEE_DEFAUT).regles,
     mode: 'simplifie',
     situationFamiliale: 'celibataire', nbParts: 1, nbEnfantsACharge: 0,
     revenus: {
@@ -7730,13 +7967,34 @@ function irSetOptionBareme(checked) { IRPP_ACTIVE.optionBaremeRCM = !!checked; r
 function irSetDeduction(key, raw) { IRPP_ACTIVE.deductions[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
 function irSetReduction(key, raw) { IRPP_ACTIVE.reductions[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
 function irSetCredit(key, raw) { IRPP_ACTIVE.credits[key] = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0; renderIrpp(); }
+/** irSetAnnee — resnapshote les barèmes de la déclaration depuis l'année demandée (repli transparent si elle n'a pas de barème propre). */
+function irSetAnnee(raw) {
+  const v = parseInt(raw, 10);
+  IRPP_ACTIVE.anneeDemandee = Number.isFinite(v) ? v : IRPP_ANNEE_DEFAUT;
+  IRPP_ACTIVE.reglesSnapshot = chargerReglesIrppEffectives(IRPP_ACTIVE.anneeDemandee).regles;
+  renderIrpp();
+}
+function irDupliquerAnneeCourante() {
+  const anneeSource = IRPP_ACTIVE.reglesSnapshot.annee;
+  const cible = parseInt(prompt(`Dupliquer les barèmes IRPP de l'année ${anneeSource} vers quelle nouvelle année ?`, String(anneeSource + 1)), 10);
+  if (!Number.isFinite(cible)) return;
+  if (irDupliquerAnnee(anneeSource, cible)) { IRPP_ACTIVE.anneeDemandee = cible; IRPP_ACTIVE.reglesSnapshot = chargerReglesIrppEffectives(cible).regles; renderIrpp(); }
+}
 
 function renderIrpp() {
   if (!IRPP_ACTIVE) return;
   const nameEl = document.getElementById('irpp-name-input');
   if (nameEl && nameEl.value !== IRPP_ACTIVE.name) nameEl.value = IRPP_ACTIVE.name;
-  const badge = document.getElementById('irpp-annee-badge');
-  if (badge) badge.textContent = 'Barèmes ' + IRPP_ACTIVE.reglesSnapshot.annee;
+  const anneeContainer = document.getElementById('irpp-annee-container');
+  if (anneeContainer) {
+    const anneeDemandee = IRPP_ACTIVE.anneeDemandee || IRPP_ANNEE_DEFAUT;
+    const anneeUtilisee = IRPP_ACTIVE.reglesSnapshot.annee;
+    anneeContainer.innerHTML = `
+      <input type="number" step="1" value="${anneeDemandee}" onchange="irSetAnnee(this.value)" title="Année des barèmes appliqués"
+        style="width:70px;padding:3px 6px;border:1px solid rgba(0,0,0,.14);border-radius:20px;font-size:11px;font-weight:700;color:#185FA5;background:#e6f1fb;text-align:center;">
+      <button onclick="irDupliquerAnneeCourante()" title="Dupliquer les barèmes vers une nouvelle année" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:#1a1916;cursor:pointer;">⎘</button>
+      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}`;
+  }
   updateIrppModeButtons(IRPP_ACTIVE.mode || 'simplifie');
 
   let compute;

@@ -90,34 +90,75 @@ function run(htmlPath) {
     }
   }
 
-  // ── 7. Persistance des surcharges (paramétrage utilisateur) ───────────
+  // ── 7. Persistance des surcharges, désormais par année (paramétrage utilisateur) ─
   {
     // Nettoie un éventuel état résiduel puis vérifie le cycle complet override -> reset
     getJSON(ctx, `(() => { localStorage.removeItem(TNS_CAISSES_STORE_KEY); return true; })()`);
-    const avantOverride = getJSON(ctx, `chargerCaissesEffectives().ava_artisan.csgDeductibleTaux`);
-    push('Avant surcharge : caisse effective = valeur par défaut (0.068)', close(avantOverride, 0.068, 0.0001), avantOverride);
+    const avantOverride = getJSON(ctx, `chargerCaissesEffectives(2025).caisses.ava_artisan.csgDeductibleTaux`);
+    push('Avant surcharge : caisse effective 2025 = valeur par défaut (0.068)', close(avantOverride, 0.068, 0.0001), avantOverride);
 
     getJSON(ctx, `(() => {
       const c = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT.ava_artisan));
       c.csgDeductibleTaux = 0.10;
-      sauvegarderCaisseOverride('ava_artisan', c);
+      sauvegarderCaisseOverride(2025, 'ava_artisan', c);
       return true;
     })()`);
-    const apresOverride = getJSON(ctx, `chargerCaissesEffectives().ava_artisan.csgDeductibleTaux`);
-    push('Après surcharge enregistrée : caisse effective reflète la modification (0.10)', close(apresOverride, 0.10, 0.0001), apresOverride);
+    const apresOverride = getJSON(ctx, `chargerCaissesEffectives(2025).caisses.ava_artisan.csgDeductibleTaux`);
+    push('Après surcharge 2025 enregistrée : caisse effective 2025 reflète la modification (0.10)', close(apresOverride, 0.10, 0.0001), apresOverride);
 
     const defautInchange = getJSON(ctx, `TNS_CAISSES_DEFAUT.ava_artisan.csgDeductibleTaux`);
     push('Le catalogue par défaut TNS_CAISSES_DEFAUT reste inchangé (jamais muté directement)', close(defautInchange, 0.068, 0.0001), defautInchange);
 
-    getJSON(ctx, `(() => { reinitialiserCaisseOverride('ava_artisan'); return true; })()`);
-    const apresReset = getJSON(ctx, `chargerCaissesEffectives().ava_artisan.csgDeductibleTaux`);
-    push('Après réinitialisation : caisse effective revient à la valeur par défaut', close(apresReset, 0.068, 0.0001), apresReset);
+    getJSON(ctx, `(() => { reinitialiserCaisseOverride(2025, 'ava_artisan'); return true; })()`);
+    const apresReset = getJSON(ctx, `chargerCaissesEffectives(2025).caisses.ava_artisan.csgDeductibleTaux`);
+    push('Après réinitialisation : caisse effective 2025 revient à la valeur par défaut', close(apresReset, 0.068, 0.0001), apresReset);
+
+    getJSON(ctx, `(() => { localStorage.removeItem(TNS_CAISSES_STORE_KEY); return true; })()`);
   }
 
   // ── 8. Enregistrement TNS avec regime "caisse" — champs du dossier ────
   {
     const vierge = getJSON(ctx, `creerTnsVierge()`);
-    push('creerTnsVierge() initialise caisseId et classesChoisies', vierge.caisseId === 'ava_artisan' && typeof vierge.classesChoisies === 'object', vierge);
+    push('creerTnsVierge() initialise caisseId, classesChoisies et annee', vierge.caisseId === 'ava_artisan' && typeof vierge.classesChoisies === 'object' && vierge.annee === 2025, vierge);
+  }
+
+  // ── 9. Multi-années — repli, duplication, migration de l'ancien format ─
+  {
+    getJSON(ctx, `(() => { localStorage.removeItem(TNS_CAISSES_STORE_KEY); return true; })()`);
+
+    const annees0 = getJSON(ctx, `anneesTnsDisponibles()`);
+    push('anneesTnsDisponibles() ne contient que 2025 (TNS_ANNEE_DEFAUT) sans surcharge', JSON.stringify(annees0) === JSON.stringify([2025]), annees0);
+
+    const res2027 = getJSON(ctx, `chargerCaissesEffectives(2027)`);
+    push('Demander 2027 (inconnue) replie sur 2025 (anneeUtilisee)', res2027.anneeUtilisee === 2025, res2027.anneeUtilisee);
+    push('Le repli 2027->2025 renvoie bien les barèmes 2025 (AVA csgDeductibleTaux 0.068)', close(res2027.caisses.ava_artisan.csgDeductibleTaux, 0.068, 0.0001), res2027.caisses.ava_artisan.csgDeductibleTaux);
+
+    const dupliqueOk = getJSON(ctx, `tnsDupliquerAnneeCaisses(2025, 2027)`);
+    push('tnsDupliquerAnneeCaisses(2025, 2027) réussit', dupliqueOk === true, dupliqueOk);
+
+    const annees1 = getJSON(ctx, `anneesTnsDisponibles()`);
+    push('anneesTnsDisponibles() inclut désormais 2027', annees1.includes(2027), annees1);
+
+    const res2027bis = getJSON(ctx, `chargerCaissesEffectives(2027)`);
+    push('Après duplication, 2027 est résolue exactement (anneeUtilisee=2027, plus de repli)', res2027bis.anneeUtilisee === 2027, res2027bis.anneeUtilisee);
+
+    getJSON(ctx, `(() => {
+      const c = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT.ava_artisan));
+      c.csgDeductibleTaux = 0.15;
+      sauvegarderCaisseOverride(2027, 'ava_artisan', c);
+      return true;
+    })()`);
+    const res2025Intact = getJSON(ctx, `chargerCaissesEffectives(2025).caisses.ava_artisan.csgDeductibleTaux`);
+    push("Modifier l'année 2027 n'affecte pas l'année 2025 (isolation par année)", close(res2025Intact, 0.068, 0.0001), res2025Intact);
+    const res2027Modifie = getJSON(ctx, `chargerCaissesEffectives(2027).caisses.ava_artisan.csgDeductibleTaux`);
+    push('La modification 2027 est bien prise en compte pour 2027', close(res2027Modifie, 0.15, 0.0001), res2027Modifie);
+
+    // Migration de l'ancien format à plat ({ [caisseId]: caisse }) vers le format par année
+    getJSON(ctx, `(() => { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify({ ava_artisan: (() => { const c = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT.ava_artisan)); c.csgDeductibleTaux = 0.20; return c; })() })); return true; })()`);
+    const resMigre = getJSON(ctx, `chargerCaissesEffectives(2025).caisses.ava_artisan.csgDeductibleTaux`);
+    push('Ancien format à plat (pré-multi-années) migré et traité comme surcharges 2025', close(resMigre, 0.20, 0.0001), resMigre);
+
+    getJSON(ctx, `(() => { localStorage.removeItem(TNS_CAISSES_STORE_KEY); return true; })()`);
   }
 
   return results;

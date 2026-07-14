@@ -219,6 +219,45 @@ function run(htmlPath) {
     push('Changement d’année fiscale : le jeu de règles original reste inchangé', Math.abs(tauxOriginal - 0.25) < 0.001, tauxOriginal);
   }
 
+  // ── Multi-années — chargerReglesRemunerationEffectives / rmDupliquerAnnee ─
+  {
+    getJSON(ctx, `(() => { localStorage.removeItem(REGLES_REMUNERATION_STORE_KEY); return true; })()`);
+
+    const annees0 = getJSON(ctx, `anneesRemunerationDisponibles()`);
+    push('anneesRemunerationDisponibles() ne contient que 2025 sans surcharge', JSON.stringify(annees0) === JSON.stringify([2025]), annees0);
+
+    const res2030 = getJSON(ctx, `chargerReglesRemunerationEffectives(2030)`);
+    push('Demander 2030 (inconnue) replie sur 2025 (anneeUtilisee)', res2030.anneeUtilisee === 2025, res2030.anneeUtilisee);
+    push('Le repli 2030->2025 renvoie le taux IS normal 2025 (0.25)', Math.abs(res2030.regles.is.tauxNormal - 0.25) < 0.001, res2030.regles.is.tauxNormal);
+
+    const dupliqueOk = getJSON(ctx, `rmDupliquerAnnee(2025, 2030)`);
+    push('rmDupliquerAnnee(2025, 2030) réussit', dupliqueOk === true, dupliqueOk);
+    const annees1 = getJSON(ctx, `anneesRemunerationDisponibles()`);
+    push('anneesRemunerationDisponibles() inclut désormais 2030', annees1.includes(2030), annees1);
+    const res2030bis = getJSON(ctx, `chargerReglesRemunerationEffectives(2030)`);
+    push('Après duplication, 2030 est résolue exactement (plus de repli)', res2030bis.anneeUtilisee === 2030, res2030bis.anneeUtilisee);
+
+    getJSON(ctx, `(() => {
+      const overrides = loadReglesRemunerationOverrides();
+      overrides[2030].is.tauxNormal = 0.99;
+      localStorage.setItem(REGLES_REMUNERATION_STORE_KEY, JSON.stringify(overrides));
+      return true;
+    })()`);
+    const tauxOriginalIntact = getJSON(ctx, `${G}.is.tauxNormal`);
+    push("Modifier la surcharge 2030 n'affecte pas REGLES_REMUNERATION_2025 (isolation)", Math.abs(tauxOriginalIntact - 0.25) < 0.001, tauxOriginalIntact);
+    const res2030ter = getJSON(ctx, `chargerReglesRemunerationEffectives(2030).regles.is.tauxNormal`);
+    push('La modification 2030 est bien prise en compte pour 2030 (0.99)', Math.abs(res2030ter - 0.99) < 0.001, res2030ter);
+
+    getJSON(ctx, `(() => { localStorage.removeItem(REGLES_REMUNERATION_STORE_KEY); return true; })()`);
+  }
+
+  // ── creerRemuVierge() initialise anneeDemandee et un reglesSnapshot cohérent ─
+  {
+    const vierge = getJSON(ctx, `creerRemuVierge()`);
+    push('creerRemuVierge() initialise anneeDemandee à 2025', vierge.anneeDemandee === 2025, vierge.anneeDemandee);
+    push('creerRemuVierge() initialise un reglesSnapshot avec annee 2025', vierge.reglesSnapshot && vierge.reglesSnapshot.annee === 2025, vierge.reglesSnapshot && vierge.reglesSnapshot.annee);
+  }
+
   return results;
 }
 
