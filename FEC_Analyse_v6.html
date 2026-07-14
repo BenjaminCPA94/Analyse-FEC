@@ -95,6 +95,7 @@
   .dc.has-pct{grid-template-columns:20px 1fr 120px 80px;}
   .dc.no-pct{grid-template-columns:20px 1fr 120px;}
   .dc.cmp3{grid-template-columns:20px 1fr 110px 110px 110px;}
+  .dc.cmp4{grid-template-columns:20px 1fr 95px 95px 95px 70px;}
   .dc-bold{font-weight:700;background:#f4f3f0!important;}
   .dc-bold:hover{background:#eeede9!important;}
   .dr-sub{display:none;}
@@ -103,6 +104,7 @@
   .dcs.has-pct{grid-template-columns:64px 1fr 120px 80px;}
   .dcs.no-pct{grid-template-columns:64px 1fr 120px;}
   .dcs.cmp3{grid-template-columns:64px 1fr 110px 110px 110px;}
+  .dcs.cmp4{grid-template-columns:64px 1fr 95px 95px 95px 70px;}
   .dcs:hover{background:#eeede9;}
   .dcs-acct{cursor:pointer;}
   .dcs-acct .num-code{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;}
@@ -839,8 +841,11 @@
     <button class="nav-item active" onclick="nav('synthese',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Synthèse
     </button>
+    <button class="nav-item" onclick="nav('legalcr',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="4" x2="4" y2="20"/><line x1="4" y1="20" x2="20" y2="20"/><path d="M4 15h4v5H4zM10 10h4v10h-4zM16 6h4v14h-4z"/></svg>Compte de résultat
+    </button>
     <button class="nav-item" onclick="nav('resultat',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Compte de résultat
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>SIG
     </button>
     <button class="nav-item" onclick="nav('bilan',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Bilan
@@ -915,13 +920,27 @@
       </div>
     </div>
 
-    <!-- COMPTE DE RÉSULTAT page -->
+    <!-- COMPTE DE RÉSULTAT page (présentation légale PCG, type liasse fiscale) -->
+    <div class="page" id="page-legalcr">
+      <div style="padding:20px 32px;">
+        <div class="drill-card">
+          <div class="drill-card-header">
+            <div><h2>Compte de résultat · <span id="legalcr-year">Exercice</span></h2><p>Présentation légale (PCG) · Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
+            <button class="no-print" onclick="exportLegalCRToCSV()" title="Exporter le Compte de résultat au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
+            <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
+          </div>
+          <table class="dt"><thead id="thead-legalcr"><tr><th style="width:55%">Postes</th><th class="r">Montant</th><th class="r">%</th></tr></thead><tbody id="tbLegalCR"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIG page (Soldes Intermédiaires de Gestion) -->
     <div class="page" id="page-resultat">
       <div style="padding:20px 32px;">
         <div class="drill-card">
           <div class="drill-card-header">
-            <div><h2>Compte de résultat · <span id="cr-year">Exercice</span></h2><p>Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
-            <button class="no-print" onclick="exportCRToCSV()" title="Exporter le CR au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
+            <div><h2>SIG · <span id="cr-year">Exercice</span></h2><p>Soldes Intermédiaires de Gestion · Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
+            <button class="no-print" onclick="exportCRToCSV()" title="Exporter la SIG au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
             <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
           </div>
           <div class="no-print" id="cr-exercice-bar" style="display:none;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid rgba(0,0,0,.06);"></div>
@@ -1357,7 +1376,7 @@
     <div style="display:flex;min-height:calc(100vh - 48px);">
       <div style="width:185px;flex-shrink:0;background:#fff;border-right:1px solid rgba(0,0,0,0.08);padding:12px 0;overflow-y:auto;">
         <div style="padding:10px 14px 4px;font-size:11px;font-weight:700;color:#1a1916;margin-top:4px;">Mapping</div>
-        <button class="affec-nav active" id="anav-cr"    onclick="showAffecPanel('cr',this)">Compte de résultat</button>
+        <button class="affec-nav active" id="anav-cr"    onclick="showAffecPanel('cr',this)">SIG</button>
         <button class="affec-nav"        id="anav-bilan" onclick="showAffecPanel('bilan',this)">Bilan</button>
         <button class="affec-nav"        id="anav-encaiss" onclick="showAffecPanel('encaiss',this)">Encaiss. / Décaiss.</button>
         <button class="affec-nav"        id="anav-liste"   onclick="showAffecPanel('liste',this)">Liste détaillée</button>
@@ -1424,7 +1443,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <div>
           <h2 style="font-size:18px;font-weight:700;color:#1a1916;margin:0;">Suivi des imports</h2>
-          <p style="font-size:12px;color:#a09d96;margin:4px 0 0;">Un dossier peut regrouper plusieurs exercices (ex: 2024 et 2025) pour permettre une comparaison N/N-1 sur le Compte de résultat et le Bilan.</p>
+          <p style="font-size:12px;color:#a09d96;margin:4px 0 0;">Un dossier peut regrouper plusieurs exercices (ex: 2024 et 2025) pour permettre une comparaison N/N-1 sur le Compte de résultat, la SIG et le Bilan.</p>
         </div>
         <button class="params-btn-secondary" onclick="openAjouterExercice()" style="white-space:nowrap;">+ Ajouter un exercice</button>
       </div>
@@ -2156,6 +2175,7 @@ function renderDashboard() {
 
   // ── COMPTE DE RÉSULTAT ──
   if (_compareExIdCR && ACTIVE.exercices && ACTIVE.exercices[_compareExIdCR]) buildCRTableCompare(); else buildCRTable();
+  buildLegalCRTable();
   if (_compareExIdBilan && ACTIVE.exercices && ACTIVE.exercices[_compareExIdBilan]) buildBilanTablesCompare(); else buildBilanTables();
 
   // ── RANGE SLIDER ──
@@ -2612,6 +2632,416 @@ function buildCRTableCompare() {
   });
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── COMPTE DE RÉSULTAT (présentation légale PCG « en liste ») ──────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * Contrairement à la page "SIG" (dont les postes dépendent du mapping
+ * éditable ACTIVE.mps.cr, personnalisable dans "Affectation des
+ * comptes"), cette page reconstitue le Compte de Résultat légal du PCG
+ * (art. 512-2 et s., modèle "en liste") directement depuis les comptes
+ * du FEC, par préfixe de compte — à l'identique de ce que produit un
+ * logiciel de comptabilité (ex. Pennylane) pour l'export "Compte de
+ * résultat" de la liasse. Aucune affectation manuelle n'est nécessaire :
+ * chaque compte 6x/7x du FEC est routé automatiquement vers son poste.
+ *
+ * LEGAL_CR_ROUTING : [préfixe, posteId], le plus long préfixe l'emporte
+ * (table triée par longueur décroissante avant utilisation, même
+ * principe que la table ROUTING de autoAffectOrphans()).
+ */
+const LEGAL_CR_ROUTING = [
+  // Ventes / production
+  ['7097','vente_marchandises'], ['707','vente_marchandises'],
+  ['7091','prod_vendue_biens'], ['7092','prod_vendue_biens'],
+  ['701','prod_vendue_biens'], ['702','prod_vendue_biens'], ['703','prod_vendue_biens'],
+  ['7094','prod_vendue_services'], ['7095','prod_vendue_services'], ['7096','prod_vendue_services'], ['7098','prod_vendue_services'],
+  ['704','prod_vendue_services'], ['705','prod_vendue_services'], ['706','prod_vendue_services'], ['708','prod_vendue_services'],
+  ['709','prod_vendue_services'], ['70','prod_vendue_services'],
+  ['7133','prod_stockee'], ['7134','prod_stockee'], ['7135','prod_stockee'], ['713','prod_stockee'], ['71','prod_stockee'],
+  ['721','prod_immobilisee'], ['722','prod_immobilisee'], ['72','prod_immobilisee'],
+  ['741','subventions_exploit'], ['742','subventions_exploit'], ['747','subventions_exploit'], ['74','subventions_exploit'],
+  ['7811','reprises_transferts_exploit'], ['7815','reprises_transferts_exploit'],
+  ['7816','reprises_transferts_exploit'], ['7817','reprises_transferts_exploit'],
+  ['781','reprises_transferts_exploit'], ['791','reprises_transferts_exploit'],
+  ['78','reprises_transferts_exploit'], ['79','reprises_transferts_exploit'],
+  ['755','benefice_attribue'],
+  ['751','autres_produits'], ['752','autres_produits'], ['753','autres_produits'],
+  ['754','autres_produits'], ['756','autres_produits'], ['757','autres_produits'], ['758','autres_produits'], ['75','autres_produits'],
+
+  // Achats / charges d'exploitation
+  ['607','achats_marchandises'],
+  ['6037','variation_stocks_marchandises'],
+  ['601','achats_matieres'], ['602','achats_matieres'],
+  ['6031','variation_stocks'], ['6032','variation_stocks'], ['603','variation_stocks'],
+  ['604','autres_achats_charges_ext'], ['605','autres_achats_charges_ext'], ['606','autres_achats_charges_ext'],
+  ['608','autres_achats_charges_ext'], ['609','autres_achats_charges_ext'], ['60','autres_achats_charges_ext'],
+  ['61','autres_achats_charges_ext'], ['62','autres_achats_charges_ext'],
+  ['631','impots_taxes'], ['633','impots_taxes'], ['635','impots_taxes'], ['637','impots_taxes'], ['638','impots_taxes'], ['63','impots_taxes'],
+  ['6411','salaires_traitements'], ['6412','salaires_traitements'], ['6413','salaires_traitements'],
+  ['6414','salaires_traitements'], ['6415','salaires_traitements'],
+  ['641','salaires_traitements'], ['642','salaires_traitements'], ['644','salaires_traitements'], ['64','salaires_traitements'],
+  ['645','charges_sociales'], ['646','charges_sociales'], ['647','charges_sociales'], ['648','charges_sociales'], ['649','charges_sociales'],
+  ['6811','dot_immo'], ['6816','dot_circ'], ['6815','dot_risques'], ['6817','dot_risques'], ['681','dot_immo'], ['68','dot_immo'],
+  ['655','perte_supportee'],
+  ['651','autres_charges'], ['653','autres_charges'], ['654','autres_charges'],
+  ['656','autres_charges'], ['657','autres_charges'], ['658','autres_charges'], ['65','autres_charges'],
+
+  // Financier
+  ['761','produits_participations'],
+  ['762','produits_autres_vm'], ['763','produits_autres_vm'],
+  ['764','autres_interets'], ['765','autres_interets'], ['768','autres_interets'],
+  ['7865','reprises_transferts_fin'], ['7866','reprises_transferts_fin'],
+  ['786','reprises_transferts_fin'], ['796','reprises_transferts_fin'],
+  ['766','diff_positives_change'],
+  ['767','produits_cessions_vmp'],
+  ['76','autres_interets'],
+  ['686','dotations_fin'],
+  ['661','interets_charges'], ['664','interets_charges'], ['665','interets_charges'], ['668','interets_charges'],
+  ['666','diff_neg_change'],
+  ['667','charges_cessions_vmp'],
+  ['66','interets_charges'],
+
+  // Exceptionnel
+  ['771','except_gestion_prod'], ['772','except_gestion_prod'],
+  ['775','except_capital_prod'], ['777','except_capital_prod'], ['778','except_capital_prod'],
+  ['7872','except_reprises'], ['7873','except_reprises'], ['7874','except_reprises'],
+  ['7875','except_reprises'], ['7876','except_reprises'], ['787','except_reprises'], ['797','except_reprises'],
+  ['77','except_gestion_prod'],
+  ['671','except_gestion_charge'], ['672','except_gestion_charge'],
+  ['675','except_capital_charge'], ['678','except_capital_charge'],
+  ['687','except_dotations'],
+  ['67','except_gestion_charge'],
+
+  // Participation / IS
+  ['691','participation_salaries'],
+  ['695','impots_benefices'], ['696','impots_benefices'], ['698','impots_benefices'], ['699','impots_benefices'],
+  ['69','impots_benefices'],
+];
+LEGAL_CR_ROUTING.sort((a, b) => b[0].length - a[0].length);
+
+/** legalCRPosteAccounts(bal) — regroupe les comptes 6x/7x de `bal` par posteId légal (cf. LEGAL_CR_ROUTING). */
+function legalCRPosteAccounts(bal) {
+  const map = {};
+  Object.keys(bal || {}).forEach(num => {
+    const cl = num[0];
+    if (cl !== '6' && cl !== '7') return;
+    for (const [pfx, posteId] of LEGAL_CR_ROUTING) {
+      if (num.startsWith(pfx)) { (map[posteId] = map[posteId] || []).push(num); return; }
+    }
+  });
+  return map;
+}
+
+/**
+ * LEGAL_CR_STRUCTURE — ordre d'affichage du Compte de Résultat légal.
+ * kind: 'section' (titre, non cliquable) · 'poste' (ligne détail,
+ * dépliable sur les comptes) · 'group' (poste avec sous-catégories,
+ * ex. Dotations) · 'subtotal'/'total' (somme d'ids) · 'result'
+ * (produits − charges d'une section, cf. plus/minus).
+ * Convention de signe : chaque poste affiche le montant "naturel" du
+ * compte (charge positive, produit positif), comme sur une liasse —
+ * à la différence de la SIG qui affiche les charges en négatif.
+ */
+const LEGAL_CR_STRUCTURE = [
+  {k:'section', label:'PRODUITS D’EXPLOITATION'},
+  {k:'poste', id:'vente_marchandises', label:'Vente de marchandises'},
+  {k:'poste', id:'prod_vendue_biens', label:'Production vendue de biens'},
+  {k:'poste', id:'prod_vendue_services', label:'Production vendue de services'},
+  {k:'subtotal', id:'ca_net', label:'MONTANT NET DU CHIFFRE D’AFFAIRES', sum:['vente_marchandises','prod_vendue_biens','prod_vendue_services']},
+  {k:'poste', id:'prod_stockee', label:'Production stockée'},
+  {k:'poste', id:'prod_immobilisee', label:'Production immobilisée'},
+  {k:'poste', id:'subventions_exploit', label:'Subventions d’exploitation'},
+  {k:'poste', id:'reprises_transferts_exploit', label:'Reprises sur provisions et amortissements, transferts de charges'},
+  {k:'poste', id:'autres_produits', label:'Autres produits'},
+  {k:'total', id:'total_prod_exploit', label:'TOTAL PRODUITS D’EXPLOITATION (I)',
+    sum:['ca_net','prod_stockee','prod_immobilisee','subventions_exploit','reprises_transferts_exploit','autres_produits']},
+
+  {k:'section', label:'CHARGES D’EXPLOITATION'},
+  {k:'poste', id:'achats_marchandises', label:'Achats de marchandises'},
+  {k:'poste', id:'variation_stocks_marchandises', label:'Variation des stocks de marchandises'},
+  {k:'poste', id:'achats_matieres', label:'Achats de matières premières et autres approvisionnements'},
+  {k:'poste', id:'variation_stocks', label:'Variation de stocks'},
+  {k:'poste', id:'autres_achats_charges_ext', label:'Autres achats et charges externes'},
+  {k:'poste', id:'impots_taxes', label:'Impôts, taxes, et versements assimilés'},
+  {k:'poste', id:'salaires_traitements', label:'Salaires et traitements'},
+  {k:'poste', id:'charges_sociales', label:'Charges sociales'},
+  {k:'group', id:'dotations_exploit', label:'Dotations aux amortissements et aux provisions', subs:[
+      {id:'dot_immo', label:'Sur immobilisations : dotations aux amortissements'},
+      {id:'dot_circ', label:'Sur actif circulant : dotations aux provisions'},
+      {id:'dot_risques', label:'Pour risques et charges : dotations aux provisions'},
+  ]},
+  {k:'poste', id:'autres_charges', label:'Autres charges'},
+  {k:'total', id:'total_charges_exploit', label:'TOTAL CHARGES D’EXPLOITATION (II)',
+    sum:['achats_marchandises','variation_stocks_marchandises','achats_matieres','variation_stocks','autres_achats_charges_ext','impots_taxes','salaires_traitements','charges_sociales','dotations_exploit','autres_charges']},
+
+  {k:'result', id:'resultat_exploit', label:'RÉSULTAT D’EXPLOITATION (I - II)', plus:['total_prod_exploit'], minus:['total_charges_exploit']},
+
+  {k:'section', label:'QUOTES-PART DE RÉSULTAT SUR OPÉRATIONS FAITES EN COMMUN'},
+  {k:'poste', id:'benefice_attribue', label:'Bénéfice attribué ou perte transférée (III)'},
+  {k:'poste', id:'perte_supportee', label:'Perte supportée ou bénéfice transféré (IV)'},
+
+  {k:'section', label:'PRODUITS FINANCIERS'},
+  {k:'poste', id:'produits_participations', label:'De participations'},
+  {k:'poste', id:'produits_autres_vm', label:'D’autres valeurs mobilières et créances de l’actif immobilisé'},
+  {k:'poste', id:'autres_interets', label:'Autres intérêts et produits assimilés'},
+  {k:'poste', id:'reprises_transferts_fin', label:'Reprises sur provisions et transferts de charges'},
+  {k:'poste', id:'diff_positives_change', label:'Différences positives de change'},
+  {k:'poste', id:'produits_cessions_vmp', label:'Produits nets sur cessions de valeurs mobilières de placement et d’instruments de trésorerie'},
+  {k:'total', id:'total_prod_fin', label:'TOTAL PRODUITS FINANCIERS (V)',
+    sum:['produits_participations','produits_autres_vm','autres_interets','reprises_transferts_fin','diff_positives_change','produits_cessions_vmp']},
+
+  {k:'section', label:'CHARGES FINANCIÈRES'},
+  {k:'poste', id:'dotations_fin', label:'Dotations aux amortissements et aux provisions'},
+  {k:'poste', id:'interets_charges', label:'Intérêts et charges assimilées'},
+  {k:'poste', id:'diff_neg_change', label:'Différences négatives de change'},
+  {k:'poste', id:'charges_cessions_vmp', label:'Charges nettes sur cessions de valeurs mobilières de placement'},
+  {k:'total', id:'total_charges_fin', label:'TOTAL CHARGES FINANCIÈRES (VI)',
+    sum:['dotations_fin','interets_charges','diff_neg_change','charges_cessions_vmp']},
+
+  {k:'result', id:'resultat_fin', label:'RÉSULTAT FINANCIER (V - VI)', plus:['total_prod_fin'], minus:['total_charges_fin']},
+  {k:'result', id:'resultat_courant', label:'RÉSULTAT COURANT AVANT IMPÔT (I - II + III - IV + V - VI)',
+    plus:['total_prod_exploit','benefice_attribue','total_prod_fin'], minus:['total_charges_exploit','perte_supportee','total_charges_fin']},
+
+  {k:'section', label:'PRODUITS EXCEPTIONNELS'},
+  {k:'poste', id:'except_gestion_prod', label:'Sur opérations de gestion'},
+  {k:'poste', id:'except_capital_prod', label:'Sur opérations en capital'},
+  {k:'poste', id:'except_reprises', label:'Reprises sur provisions et transferts de charges'},
+  {k:'total', id:'total_prod_except', label:'TOTAL PRODUITS EXCEPTIONNELS (VII)',
+    sum:['except_gestion_prod','except_capital_prod','except_reprises']},
+
+  {k:'section', label:'CHARGES EXCEPTIONNELLES'},
+  {k:'poste', id:'except_gestion_charge', label:'Sur opérations de gestion'},
+  {k:'poste', id:'except_capital_charge', label:'Sur opérations en capital'},
+  {k:'poste', id:'except_dotations', label:'Dotations aux amortissements, aux dépréciations et aux provisions'},
+  {k:'total', id:'total_charges_except', label:'TOTAL CHARGES EXCEPTIONNELLES (VIII)',
+    sum:['except_gestion_charge','except_capital_charge','except_dotations']},
+
+  {k:'result', id:'resultat_except', label:'RÉSULTAT EXCEPTIONNEL (VII - VIII)', plus:['total_prod_except'], minus:['total_charges_except']},
+
+  {k:'poste', id:'participation_salaries', label:'Participation des salariés aux résultats de l’entreprise (IX)'},
+  {k:'poste', id:'impots_benefices', label:'Impôts sur les bénéfices (X)'},
+
+  {k:'total', id:'total_produits', label:'TOTAL DES PRODUITS (I + III + V + VII)',
+    sum:['total_prod_exploit','benefice_attribue','total_prod_fin','total_prod_except']},
+  {k:'total', id:'total_charges_g', label:'TOTAL DES CHARGES (II + IV + VI + VIII + IX + X)',
+    sum:['total_charges_exploit','perte_supportee','total_charges_fin','total_charges_except','participation_salaries','impots_benefices']},
+
+  {k:'result', id:'resultat_exercice', label:'RÉSULTAT DE L’EXERCICE',
+    plus:['total_produits'], minus:['total_charges_g'], final:true},
+];
+
+/** computeLegalCR(bal, accts) — calcule le montant de chaque poste/sous-total/résultat, dans une map plate {id: montant}. */
+function computeLegalCR(bal, accts) {
+  const amt = {};
+  LEGAL_CR_STRUCTURE.forEach(row => {
+    if (row.k === 'poste') {
+      amt[row.id] = (accts[row.id] || []).reduce((s, n) => s + (bal[n] || 0), 0);
+    } else if (row.k === 'group') {
+      let t = 0;
+      row.subs.forEach(sub => {
+        const v = (accts[sub.id] || []).reduce((s, n) => s + (bal[n] || 0), 0);
+        amt[sub.id] = v; t += v;
+      });
+      amt[row.id] = t;
+    } else if (row.k === 'subtotal' || row.k === 'total') {
+      amt[row.id] = (row.sum || []).reduce((s, id) => s + (amt[id] || 0), 0);
+    } else if (row.k === 'result') {
+      let t = 0;
+      (row.plus || []).forEach(id => { t += (amt[id] || 0); });
+      (row.minus || []).forEach(id => { t -= (amt[id] || 0); });
+      amt[row.id] = t;
+    }
+  });
+  return amt;
+}
+
+/** pickAutoCompareExercice() — sélectionne automatiquement l'exercice antérieur le plus récent du dossier (comparaison N/N-1), ou null si absent. */
+function pickAutoCompareExercice() {
+  const list = Object.values(ACTIVE.exercices || {})
+    .filter(ex => ex.id !== ACTIVE.activeExerciceId)
+    .sort((a, b) => (b.periodEnd || '').localeCompare(a.periodEnd || ''));
+  return list[0] || null;
+}
+
+/**
+ * buildLegalCRTable()
+ * Construit le tableau HTML du Compte de Résultat légal (page "Compte de
+ * résultat"). Affiche automatiquement une comparaison N/N-1 (Postes |
+ * Exercice courant | Exercice précédent | Var. € | Var. %), à l'image de
+ * l'export Pennylane, dès qu'un exercice antérieur existe dans le
+ * dossier ; sinon un simple montant + % du total des produits
+ * d'exploitation. Chaque poste se déplie pour révéler les comptes du
+ * FEC qui le composent (clic sur un compte → grand livre, cf.
+ * openGrandLivre()).
+ */
+function buildLegalCRTable() {
+  const tb = document.getElementById('tbLegalCR');
+  if (!tb) return;
+  const thead = document.getElementById('thead-legalcr');
+  const bal = ACTIVE.bal || {};
+  const curAccts = legalCRPosteAccounts(bal);
+  const amtCur = computeLegalCR(bal, curAccts);
+
+  const compareEx = pickAutoCompareExercice();
+  let amtCmp = {}, cmpAccts = {};
+  if (compareEx) {
+    cmpAccts = legalCRPosteAccounts(compareEx.bal || {});
+    amtCmp = computeLegalCR(compareEx.bal || {}, cmpAccts);
+  }
+
+  const year = ACTIVE.periodEnd ? ACTIVE.periodEnd.slice(0, 4) : new Date().getFullYear();
+  const yearEl = document.getElementById('legalcr-year');
+  if (yearEl) yearEl.textContent = `Exercice ${year}`;
+
+  const curLabel = (ACTIVE.exercices && ACTIVE.exercices[ACTIVE.activeExerciceId]?.label) || `Exercice ${year}`;
+  const cmpLabel = compareEx ? compareEx.label : null;
+  const totalBase = amtCur.total_prod_exploit || 0;
+  const p2 = (v, b) => b ? ((v / b) * 100).toFixed(1) + ' %' : '—';
+
+  if (thead) {
+    thead.innerHTML = compareEx
+      ? `<tr><th colspan="5" style="padding:0"><div class="dc cmp4 dc-head">
+          <span class="chevron"></span><span class="lbl">Postes</span>
+          <span class="amt">${escHtml(String(curLabel))}</span><span class="amt">${escHtml(String(cmpLabel))}</span>
+          <span class="amt">Var. €</span><span class="amt">Var. %</span>
+        </div></th></tr>`
+      : `<tr><th style="width:55%">Postes</th><th class="r">${escHtml(String(curLabel))}</th><th class="r">% Prod. expl.</th></tr>`;
+  }
+
+  const acctRow = (gk, num) => {
+    const vCur = bal[num] || 0;
+    const vCmp = compareEx ? ((compareEx.bal || {})[num] || 0) : 0;
+    const varE = vCur - vCmp;
+    if (compareEx) {
+      return `<tr class="dr-sub" data-parent="${gk}">
+        <td colspan="5" style="padding:0">
+          <div class="dcs cmp4 dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+            <span class="num-code">${num}</span>
+            <span class="lbl-muted">${libOf(num)}</span>
+            <span class="amt-sm ${vCur >= 0 ? 'pos' : 'neg'}">${fmtV(vCur)}</span>
+            <span class="amt-sm" style="color:var(--text3);">${fmtV(vCmp)}</span>
+            <span class="amt-sm ${varE >= 0 ? 'pos' : 'neg'}">${varE >= 0 ? '+' : ''}${fmtV(varE)}</span>
+            <span class="amt-sm"></span>
+          </div>
+        </td></tr>`;
+    }
+    return `<tr class="dr-sub" data-parent="${gk}">
+      <td colspan="3" style="padding:0">
+        <div class="dcs has-pct dcs-acct" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+          <span class="num-code">${num}</span>
+          <span class="lbl-muted">${libOf(num)}</span>
+          <span class="amt-sm ${vCur >= 0 ? 'pos' : 'neg'}">${fmtV(vCur)}</span>
+          <span class="pct-lbl">${p2(vCur, totalBase)}</span>
+        </div>
+      </td></tr>`;
+  };
+
+  const posteRow = (gk, label, id, bold, hasKids) => {
+    const vCur = amtCur[id] || 0;
+    const vCmp = compareEx ? (amtCmp[id] || 0) : 0;
+    const varE = vCur - vCmp;
+    const varP = compareEx && vCmp !== 0 ? (varE / Math.abs(vCmp) * 100) : null;
+    const boldCls = bold ? ' dc-bold' : '';
+    const rowCls = bold && LEGAL_CR_STRUCTURE.find(r => r.id === id)?.final ? 'dr-total' : `dr-group${hasKids ? ' has-kids' : ''}`;
+    if (compareEx) {
+      const vc = varE >= 0 ? 'pos' : 'neg';
+      return `<tr class="${rowCls}" data-group="${gk}" ${hasKids ? `onclick="toggleGroup('${gk}')"` : ''}>
+        <td colspan="5" style="padding:0">
+          <div class="dc cmp4${boldCls}">
+            <span class="chevron">${hasKids ? '›' : ''}</span>
+            <span class="lbl">${escHtml(label)}</span>
+            <span class="amt ${vCur >= 0 ? 'pos' : 'neg'}">${fmtV(vCur)}</span>
+            <span class="amt" style="color:var(--text3);">${fmtV(vCmp)}</span>
+            <span class="amt ${vc}">${varE >= 0 ? '+' : ''}${fmtV(varE)}</span>
+            <span class="amt ${vc}">${varP === null ? '—' : (varP >= 0 ? '+' : '') + varP.toFixed(2) + ' %'}</span>
+          </div>
+        </td></tr>`;
+    }
+    return `<tr class="${rowCls}" data-group="${gk}" ${hasKids ? `onclick="toggleGroup('${gk}')"` : ''}>
+      <td colspan="3" style="padding:0">
+        <div class="dc has-pct${boldCls}">
+          <span class="chevron">${hasKids ? '›' : ''}</span>
+          <span class="lbl">${escHtml(label)}</span>
+          <span class="amt ${vCur >= 0 ? 'pos' : 'neg'}">${fmtV(vCur)}</span>
+          <span class="pct-lbl">${p2(vCur, totalBase)}</span>
+        </div>
+      </td></tr>`;
+  };
+
+  let html = '';
+  LEGAL_CR_STRUCTURE.forEach((row, idx) => {
+    const gk = `lcr_${idx}`;
+    if (row.k === 'section') {
+      html += `<tr><td colspan="${compareEx ? 5 : 3}" style="padding:0">
+        <div class="dc ${compareEx ? 'cmp4' : 'has-pct'} dc-bold" style="background:#f4f3f0;">
+          <span class="chevron"></span><span class="lbl">${escHtml(row.label)}</span>
+          <span class="amt"></span><span class="amt"></span>${compareEx ? '<span class="amt"></span><span class="amt"></span>' : ''}
+        </div>
+      </td></tr>`;
+      return;
+    }
+    if (row.k === 'poste') {
+      const accCur = curAccts[row.id] || [];
+      html += posteRow(gk, row.label, row.id, false, accCur.length > 0);
+      accCur.forEach(num => { html += acctRow(gk, num); });
+      return;
+    }
+    if (row.k === 'group') {
+      html += posteRow(gk, row.label, row.id, false, true);
+      row.subs.forEach(sub => {
+        const sgk = `${gk}_${sub.id}`;
+        const subAccCur = curAccts[sub.id] || [];
+        const subVCur = amtCur[sub.id] || 0;
+        const subVCmp = compareEx ? (amtCmp[sub.id] || 0) : 0;
+        const subVarE = subVCur - subVCmp;
+        const hasKids = subAccCur.length > 0;
+        if (compareEx) {
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="5" style="padding:0">
+              <div class="dcs cmp4" style="cursor:${hasKids ? 'pointer' : 'default'};font-weight:600;" data-group="${sgk}" ${hasKids ? `onclick="event.stopPropagation();toggleGroup('${sgk}')"` : ''}>
+                <span class="chevron" style="font-size:10px;">${hasKids ? '›' : ''}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
+                <span class="amt-sm ${subVCur >= 0 ? 'pos' : 'neg'}">${fmtV(subVCur)}</span>
+                <span class="amt-sm" style="color:var(--text3);">${fmtV(subVCmp)}</span>
+                <span class="amt-sm ${subVarE >= 0 ? 'pos' : 'neg'}">${subVarE >= 0 ? '+' : ''}${fmtV(subVarE)}</span>
+                <span class="amt-sm"></span>
+              </div>
+            </td></tr>`;
+        } else {
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="3" style="padding:0">
+              <div class="dcs has-pct" style="cursor:${hasKids ? 'pointer' : 'default'};font-weight:600;" data-group="${sgk}" ${hasKids ? `onclick="event.stopPropagation();toggleGroup('${sgk}')"` : ''}>
+                <span class="chevron" style="font-size:10px;">${hasKids ? '›' : ''}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
+                <span class="amt-sm ${subVCur >= 0 ? 'pos' : 'neg'}">${fmtV(subVCur)}</span>
+                <span class="pct-lbl"></span>
+              </div>
+            </td></tr>`;
+        }
+        subAccCur.forEach(num => { html += acctRow(sgk, num); });
+      });
+      return;
+    }
+    // subtotal / total / result
+    html += posteRow(gk, row.label, row.id, true, false);
+  });
+
+  tb.innerHTML = html;
+
+  // Toggle des sous-catégories (ex. Dotations) — même principe que buildCRTable().
+  document.querySelectorAll('#tbLegalCR [data-group^="lcr_"][data-group*="_dot_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`#tbLegalCR [data-parent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
+}
 
 /**
  * buildBilanTables()
@@ -5291,11 +5721,46 @@ function buildBilanCsvRows() {
   return rows;
 }
 
-/** exportCRToCSV() Télécharge le détail du Compte de Résultat courant en CSV (cf. buildCRCsvRows()). */
+/** exportCRToCSV() Télécharge le détail de la SIG courante en CSV (cf. buildCRCsvRows()). */
 function exportCRToCSV() {
   if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
-  downloadTextFile(`CR_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildCRCsvRows()), 'text/csv');
-  toast('Export CSV du Compte de Résultat téléchargé');
+  downloadTextFile(`SIG_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildCRCsvRows()), 'text/csv');
+  toast('Export CSV de la SIG téléchargé');
+}
+
+/**
+ * buildLegalCRCsvRows()
+ * Construit les lignes CSV du Compte de Résultat légal (postes PCG +
+ * détail par compte), en respectant l'ordre d'affichage de
+ * buildLegalCRTable().
+ */
+function buildLegalCRCsvRows() {
+  const bal = ACTIVE.bal || {};
+  const accts = legalCRPosteAccounts(bal);
+  const amt = computeLegalCR(bal, accts);
+  const rows = [['Poste', 'Sous-poste', 'Compte', 'Libellé', 'Montant (€)']];
+  LEGAL_CR_STRUCTURE.forEach(row => {
+    if (row.k === 'section') { rows.push([row.label, '', '', '', '']); return; }
+    if (row.k === 'group') {
+      rows.push([row.label, '', '', '', (amt[row.id] || 0).toFixed(2)]);
+      row.subs.forEach(sub => {
+        rows.push(['', sub.label, '', '', (amt[sub.id] || 0).toFixed(2)]);
+        (accts[sub.id] || []).forEach(n => rows.push(['', '', n, ACTIVE.libs[n] || '', (bal[n] || 0).toFixed(2)]));
+      });
+      return;
+    }
+    rows.push([row.label, '', '', '', (amt[row.id] || 0).toFixed(2)]);
+    if (row.k === 'poste') {
+      (accts[row.id] || []).forEach(n => rows.push(['', '', n, ACTIVE.libs[n] || '', (bal[n] || 0).toFixed(2)]));
+    }
+  });
+  return rows;
+}
+/** exportLegalCRToCSV() Télécharge le détail du Compte de Résultat (présentation légale) courant en CSV (cf. buildLegalCRCsvRows()). */
+function exportLegalCRToCSV() {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return; }
+  downloadTextFile(`Compte_de_resultat_${safeFilePart(ACTIVE.name)}.csv`, csvFromRows(buildLegalCRCsvRows()), 'text/csv');
+  toast('Export CSV du Compte de résultat téléchargé');
 }
 /** exportBilanToCSV() Télécharge le détail du Bilan courant (Actif+Passif) en CSV (cf. buildBilanCsvRows()). */
 function exportBilanToCSV() {
@@ -6501,7 +6966,7 @@ function autoAffectOrphans() {
 
   renderMapping('cr'); renderMapping('bilan');
   renderOrphanPanel();
-  buildCRTable(); buildBilanTables();
+  buildCRTable(); buildLegalCRTable(); buildBilanTables();
   schedSave();
 
   const parts = [];

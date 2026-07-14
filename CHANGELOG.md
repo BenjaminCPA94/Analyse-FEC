@@ -4,6 +4,35 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Nouvel onglet « Compte de résultat » (présentation légale PCG)
+
+- **L'ancien onglet « Compte de résultat » devient « SIG »** (Soldes
+  Intermédiaires de Gestion) : c'est en réalité ce qu'il a toujours
+  affiché (marge commerciale, VA, EBE, résultat d'exploitation…), le
+  libellé était trompeur. Renommé dans la barre latérale, l'en-tête de
+  page et l'onglet « Affectation des comptes » — aucun identifiant
+  technique modifié (pas de risque de régression sur les données déjà
+  enregistrées).
+- **Nouvel onglet « Compte de résultat »** : reconstitue le Compte de
+  Résultat légal du PCG (modèle « en liste », art. 512-2 et s.), avec
+  la même présentation que l'export Pennylane (Postes / Chiffre
+  d'affaires / Charges d'exploitation / Résultat d'exploitation /
+  Résultat financier / Résultat exceptionnel / Résultat de l'exercice,
+  numérotés en chiffres romains I à X). 100% automatique : chaque
+  compte 6x/7x du FEC est routé vers son poste légal par préfixe de
+  compte (table `LEGAL_CR_ROUTING`), sans dépendre du mapping éditable
+  de la SIG.
+- **Comparaison N/N-1 automatique** : dès qu'un second exercice est
+  présent dans le dossier, la page affiche Postes / Exercice courant /
+  Exercice précédent / Var. € / Var. %, comme sur le PDF Pennylane —
+  sans réglage manuel.
+- **Postes dépliables** : cliquer sur un poste révèle les comptes du
+  FEC qui le composent ; cliquer sur un compte ouvre son grand livre
+  (même mécanisme que la SIG et le Bilan).
+- Export CSV dédié (`exportLegalCRToCSV()`).
+- Suite de tests existante (117 tests) toujours intégralement verte —
+  aucune régression sur la SIG, le Bilan ou les exports.
+
 ## v6 — Comparaison N/N-1 : alignement, postes dépliables, grand livre
 
 - **Correctif d'alignement** : les colonnes (Poste/N/N-1/Variation) du
