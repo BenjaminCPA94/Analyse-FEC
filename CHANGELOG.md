@@ -4,6 +4,44 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Rémunération dirigeant : recommandation explicite de la meilleure forme juridique
+
+- **Objectif utilisateur** : disposer d'un outil qui indique directement
+  quelle est la meilleure option de rémunération selon la forme juridique
+  (IR ou IS), plutôt que de devoir interpréter soi-même un tableau
+  comparatif. L'onglet « Comparateur de statuts » affichait déjà les 5
+  formes (SASU/SAS-IS, EURL/SARL-IS, EURL-IR, EI-IR, EI-IS) côte à côte
+  mais sans verdict — il indique désormais explicitement la meilleure
+  option.
+- **Bandeau « 🏆 Recommandation »** en tête de l'onglet Comparateur :
+  forme juridique la plus avantageuse, revenu net personnel final
+  (annuel et mensuel), écart en € et en % avec la meilleure alternative.
+- **Classement complet** des 5 formes par revenu net personnel final
+  décroissant (`rmClasserScenarios`), avec médailles 🥇🥈🥉 et écart par
+  rapport à la 1ʳᵉ place pour chaque forme. Le tableau détaillé existant
+  reprend ce même ordre et met en évidence la colonne gagnante. L'export
+  CSV suit désormais le même classement.
+- Le bandeau d'avertissement existant est conservé et renforcé : le
+  classement ne porte que sur le revenu net financier — il ne remplace
+  pas l'analyse des différences de responsabilité, de formalisme, de
+  coûts de structure ni de protection sociale au-delà du score indicatif.
+- **Correctif de robustesse découvert en testant cette fonctionnalité** :
+  `mkChart()` levait une exception non interceptée quand Chart.js (chargé
+  via CDN) est indisponible (hors-ligne, bloqué par un pare-feu/proxy
+  d'entreprise, ad-blocker) — cette exception remontait et interrompait
+  `renderRemu()` avant l'affichage des onglets Comparateur et Simulation
+  inversée (jamais rendus dans ce cas, silencieusement). Corrigé par un
+  simple retour anticipé si `Chart` n'est pas défini, cohérent avec la
+  promesse de l'application (« vos données restent 100% locales ») —
+  un usage hors-ligne ne doit pas casser des fonctionnalités sans rapport
+  avec les graphiques.
+- 5 nouveaux tests (`rmClasserScenarios` : tri décroissant, gestion des
+  égalités, valeurs manquantes traitées comme 0 sans NaN) — 326 tests au
+  total, tous verts. Vérifié en navigateur headless (Playwright) :
+  bandeau de recommandation, classement, non-régression des onglets
+  Résultats/Simulation inversée (dont le rendu était justement empêché
+  par le bug Chart.js ci-dessus avant correction).
+
 ## v6 — Barèmes multi-années (TNS, Rémunération dirigeant, IRPP) + tentative de sourcing externe
 
 - **Tentative d'automatisation par source externe** : avant de construire

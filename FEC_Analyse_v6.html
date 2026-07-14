@@ -2435,6 +2435,7 @@ function getPeriodData() {
 
 // ── CHARTS ──
 function mkChart(id,type,data,opts) {
+  if (typeof Chart === 'undefined') return; // Chart.js (CDN) indisponible (hors-ligne, bloqué) — ne doit jamais faire échouer le reste du rendu
   if(CH[id])CH[id].destroy();
   const ctx=document.getElementById(id);if(!ctx)return;
   const def={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -7320,12 +7321,20 @@ const RM_COMPARISON_ROWS = [
   ['Protection sociale (estimée)', r => rmScoreProtectionSociale(r)],
 ];
 function rmComparisonTable(rows, scenarios) {
-  return `<div class="drill-card" style="overflow-x:auto;"><table class="dt"><thead><tr><th style="width:26%">Indicateur</th>${scenarios.map(s => `<th class="r">${escHtml(s.label)}</th>`).join('')}</tr></thead><tbody>
+  const medaille = { 1: '🥇 ', 2: '🥈 ', 3: '🥉 ' };
+  return `<div class="drill-card" style="overflow-x:auto;"><table class="dt"><thead><tr><th style="width:26%">Indicateur</th>${scenarios.map(s => `<th class="r"${s.rang === 1 ? ' style="background:#e6f1fb;"' : ''}>${s.rang ? (medaille[s.rang] || '') : ''}${escHtml(s.label)}</th>`).join('')}</tr></thead><tbody>
     ${rows.map(([label, fn, bold]) => `<tr${bold ? ' style="font-weight:700;background:#f4f3f0;"' : ''}>
       <td style="padding:9px 16px;">${escHtml(label)}</td>
-      ${scenarios.map(s => { const v = fn(s.res); return `<td class="r" style="padding:9px 16px;">${typeof v === 'string' ? v : fmtV(v)}</td>`; }).join('')}
+      ${scenarios.map(s => { const v = fn(s.res); return `<td class="r" style="padding:9px 16px;${s.rang === 1 ? 'background:#f7fbff;' : ''}">${typeof v === 'string' ? v : fmtV(v)}</td>`; }).join('')}
     </tr>`).join('')}
   </tbody></table></div>`;
+}
+/** rmClasserScenarios — classe les scénarios par revenu net personnel final décroissant (métrique déjà affichée dans le tableau, seule synthèse financière comparable entre formes juridiques). */
+function rmClasserScenarios(scenarios) {
+  return [...scenarios]
+    .map(s => ({ ...s, net: safe(s.res.revenuNetPersonnelFinal) }))
+    .sort((a, b) => b.net - a.net)
+    .map((s, i) => ({ ...s, rang: i + 1 }));
 }
 function renderRmResultats(compute) {
   const el = document.getElementById('rmpanel-resultats');
@@ -7406,12 +7415,34 @@ function renderRmComparateur() {
       : RemunerationEngine.optimiser(forme, { ...entreeBase, formeJuridique: forme }, regles, { budget, pas: Math.max(500, Math.round(budget / 40)), dividendeStrategy: 'maximal' });
     return { label: FORME_JURIDIQUE_LABELS[forme], res };
   });
+  const classement = rmClasserScenarios(scenarios);
+  const gagnant = classement[0], dauphin = classement[1];
+  const ecart = dauphin ? safe(gagnant.net - dauphin.net) : 0;
+  const ecartPct = dauphin && dauphin.net !== 0 ? (ecart / Math.abs(dauphin.net)) * 100 : null;
+
   el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;border:1.5px solid #185FA5;background:#e6f1fb;">
+      <div style="font-size:11px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🏆 Recommandation — meilleure option financière</div>
+      <div style="font-size:20px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(gagnant.label)}</div>
+      <div style="font-size:13px;color:#1a1916;line-height:1.6;">
+        Revenu net personnel final estimé : <strong>${fmtV(gagnant.net)}</strong> / an (${fmtV(gagnant.net / 12)} / mois)${dauphin ? `<br>
+        Soit <strong>${fmtV(ecart)}</strong>${ecartPct !== null ? ` (+${ecartPct.toFixed(1)} %)` : ''} de plus que la meilleure alternative, <strong>${escHtml(dauphin.label)}</strong> (${fmtV(dauphin.net)} / an).` : '.'}
+      </div>
+    </div>
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 10px;font-size:13px;">Classement complet</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${classement.map(s => `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;border-radius:6px;background:${s.rang === 1 ? '#f7fbff' : 'transparent'};">
+          <span style="font-size:13px;font-weight:${s.rang === 1 ? '700' : '500'};color:#1a1916;">${{1:'🥇',2:'🥈',3:'🥉'}[s.rang] || `#${s.rang}`} ${escHtml(s.label)}</span>
+          <span style="font-size:13px;font-weight:600;color:${s.rang === 1 ? '#185FA5' : '#1a1916'};">${fmtV(s.net)} / an${s.rang > 1 ? ` <span style="color:#a09d96;font-weight:400;">(${fmtV(s.net - gagnant.net)})</span>` : ''}</span>
+        </div>`).join('')}
+      </div>
+    </div>
     <div class="drill-card" style="padding:16px 20px;margin-bottom:14px;">
-      <p style="margin:0;font-size:12px;color:#6b6960;line-height:1.6;">Pour un même résultat économique de départ (${fmtV(entreeBase.resultatAvantRemuneration)}) et les mêmes hypothèses de foyer fiscal, comparaison du revenu net final selon la forme juridique — chaque forme utilise sa propre stratégie « mix optimisé ». <strong>Cette comparaison ne prend pas en compte les différences de régime juridique, de responsabilité, de fonctionnement (formalisme, coûts de structure) ni les particularités de la protection sociale au-delà du score indicatif ci-dessous.</strong></p>
+      <p style="margin:0;font-size:12px;color:#6b6960;line-height:1.6;">Pour un même résultat économique de départ (${fmtV(entreeBase.resultatAvantRemuneration)}) et les mêmes hypothèses de foyer fiscal, classement du revenu net final selon la forme juridique — chaque forme utilise sa propre stratégie « mix optimisé ». <strong>Ce classement ne prend en compte que le revenu net final : il ne reflète pas les différences de régime juridique, de responsabilité, de fonctionnement (formalisme, coûts de structure) ni les particularités de la protection sociale au-delà du score indicatif ci-dessous — à mettre en balance avant toute décision.</strong></p>
     </div>
     ${pvExportBtn('exportRemuComparateurToCSV', 'Comparateur de statuts')}
-    ${rmComparisonTable(RM_COMPARISON_ROWS, scenarios)}
+    ${rmComparisonTable(RM_COMPARISON_ROWS, classement)}
   `;
 }
 
@@ -7476,7 +7507,7 @@ function exportRemuComparateurToCSV() {
       : RemunerationEngine.optimiser(forme, { ...entreeBase, formeJuridique: forme }, regles, { budget, pas: Math.max(500, Math.round(budget / 40)), dividendeStrategy: 'maximal' });
     return { label: FORME_JURIDIQUE_LABELS[forme], res };
   });
-  downloadTextFile(`Comparateur_statuts_${safeFilePart(REMU_ACTIVE.name)}.csv`, csvFromRows(rmScenariosToCsv(RM_COMPARISON_ROWS, scenarios)), 'text/csv');
+  downloadTextFile(`Comparateur_statuts_${safeFilePart(REMU_ACTIVE.name)}.csv`, csvFromRows(rmScenariosToCsv(RM_COMPARISON_ROWS, rmClasserScenarios(scenarios))), 'text/csv');
   toast('Export CSV du comparateur de statuts téléchargé');
 }
 

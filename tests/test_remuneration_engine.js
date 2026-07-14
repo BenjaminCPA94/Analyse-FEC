@@ -258,6 +258,35 @@ function run(htmlPath) {
     push('creerRemuVierge() initialise un reglesSnapshot avec annee 2025', vierge.reglesSnapshot && vierge.reglesSnapshot.annee === 2025, vierge.reglesSnapshot && vierge.reglesSnapshot.annee);
   }
 
+  // ── rmClasserScenarios — recommandation « meilleure forme juridique » ──
+  {
+    ctx.__scenariosTest = [
+      { label: 'Forme A', res: { revenuNetPersonnelFinal: 30000 } },
+      { label: 'Forme B', res: { revenuNetPersonnelFinal: 45000 } },
+      { label: 'Forme C', res: { revenuNetPersonnelFinal: 38000 } },
+    ];
+    const classe = getJSON(ctx, `rmClasserScenarios(__scenariosTest)`);
+    push('rmClasserScenarios : trie par revenu net décroissant (B, C, A)', classe.map(s => s.label).join(',') === 'Forme B,Forme C,Forme A', classe.map(s => s.label));
+    push('rmClasserScenarios : rang 1 = 45000 (Forme B)', classe[0].rang === 1 && classe[0].net === 45000, classe[0]);
+    push('rmClasserScenarios : rang croissant 1,2,3', classe.map(s => s.rang).join(',') === '1,2,3', classe.map(s => s.rang));
+
+    // Égalité : les deux meilleurs scénarios sont classés côte à côte (rang 1 et 2), sans planter
+    ctx.__scenariosEgalite = [
+      { label: 'Forme X', res: { revenuNetPersonnelFinal: 40000 } },
+      { label: 'Forme Y', res: { revenuNetPersonnelFinal: 40000 } },
+    ];
+    const classeEgalite = getJSON(ctx, `rmClasserScenarios(__scenariosEgalite)`);
+    push('rmClasserScenarios : égalité gérée sans exception (2 scénarios classés)', classeEgalite.length === 2 && classeEgalite[0].rang === 1 && classeEgalite[1].rang === 2, classeEgalite);
+
+    // Scénario avec revenuNetPersonnelFinal manquant/undefined -> traité comme 0, pas de NaN
+    ctx.__scenariosPartiels = [
+      { label: 'Forme Z', res: {} },
+      { label: 'Forme W', res: { revenuNetPersonnelFinal: 10000 } },
+    ];
+    const classePartiel = getJSON(ctx, `rmClasserScenarios(__scenariosPartiels)`);
+    push('rmClasserScenarios : revenuNetPersonnelFinal manquant traité comme 0 (pas de NaN)', classePartiel[0].label === 'Forme W' && classePartiel[1].net === 0, classePartiel);
+  }
+
   return results;
 }
 
