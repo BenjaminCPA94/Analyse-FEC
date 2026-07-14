@@ -933,6 +933,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg>Trésorerie
     </button>
   </div>
+  <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);">
+    <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Projection</div>
+    <button onclick="lancerPrevisionnelDepuisDossier()" style="width:100%;background:#185FA5;border:none;border-radius:7px;padding:9px 10px;cursor:pointer;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;justify-content:center;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Lancer un prévisionnel
+    </button>
+  </div>
   <div style="margin-top:auto;padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:10px;color:rgba(255,255,255,.25);" id="sidebar-footer"></div>
 </aside>
 
@@ -1589,6 +1596,53 @@
     </div>
   </div>
 </div><!-- /previsionnel-list-screen -->
+
+<!-- ═══ PRÉVISIONNEL — écran d'édition (moteur commun, quelle que soit la source) ═══ -->
+<div id="previsionnel-screen" style="display:none;background:#f7f6f3;min-height:100vh;">
+  <div style="position:fixed;top:0;left:0;right:0;z-index:200;">
+    <div class="home-topbar">
+      <div class="home-logo" onclick="showModuleMenu()" style="cursor:pointer;" title="Retour au menu des modules">
+        <div class="home-logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        FEC Analyse
+      </div>
+      <div style="flex:1;"></div>
+      <div class="home-nav">
+        <button class="home-nav-btn" onclick="backToPrevisionnelList()">← Liste des prévisionnels</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:56px;padding:20px 32px 60px;max-width:1100px;margin-left:auto;margin-right:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input id="prev-name-input" type="text" oninput="onPrevNameChange(this.value)"
+          style="font-size:20px;font-weight:700;border:none;background:transparent;color:#1a1916;outline:none;min-width:180px;">
+        <span id="prev-source-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#185FA5;"></span>
+      </div>
+      <button class="params-btn-danger" onclick="deleteCurrentPrevisionnel()" style="margin:0;">Supprimer ce prévisionnel</button>
+    </div>
+    <div id="prev-warning-banner"></div>
+
+    <div class="params-tabs-top" style="margin-top:14px;">
+      <div class="params-tab active" id="pvtab-hyp" onclick="showPrevTab('hyp')">Hypothèses</div>
+      <div class="params-tab" id="pvtab-cr" onclick="showPrevTab('cr')">Compte de résultat</div>
+      <div class="params-tab" id="pvtab-bilan" onclick="showPrevTab('bilan')">Bilan</div>
+      <div class="params-tab" id="pvtab-inv" onclick="showPrevTab('inv')">Investissements</div>
+      <div class="params-tab" id="pvtab-fin" onclick="showPrevTab('fin')">Financement</div>
+      <div class="params-tab" id="pvtab-treso" onclick="showPrevTab('treso')">Trésorerie</div>
+      <div class="params-tab" id="pvtab-ind" onclick="showPrevTab('ind')">Indicateurs</div>
+    </div>
+
+    <div id="pvpanel-hyp" style="padding-top:16px;"></div>
+    <div id="pvpanel-cr" style="display:none;padding-top:16px;"></div>
+    <div id="pvpanel-bilan" style="display:none;padding-top:16px;"></div>
+    <div id="pvpanel-inv" style="display:none;padding-top:16px;"></div>
+    <div id="pvpanel-fin" style="display:none;padding-top:16px;"></div>
+    <div id="pvpanel-treso" style="display:none;padding-top:16px;"></div>
+    <div id="pvpanel-ind" style="display:none;padding-top:16px;"></div>
+  </div>
+</div><!-- /previsionnel-screen -->
 
 <!-- ═══ TNS — écran liste ═══ -->
 <div id="tns-list-screen" style="display:none;">
@@ -3924,7 +3978,7 @@ function goHome(){
  */
 function showModuleMenu(){
   if(ACTIVE.id) saveActiveDossier();
-  ['home-screen','dashboard-screen','previsionnel-list-screen','tns-list-screen']
+  ['home-screen','dashboard-screen','previsionnel-list-screen','previsionnel-screen','tns-list-screen','tns-screen']
     .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   document.getElementById('module-menu-screen').style.display = 'flex';
 }
@@ -3949,19 +4003,1283 @@ function openModule(mod){
   }
 }
 
-// ── MODULE PRÉVISIONNEL — écran liste (standalone, sans dossier) ────────
-// NOTE : cet incrément pose uniquement le squelette de navigation. Le
-// moteur de calcul et l'écran de saisie/résultats du prévisionnel
-// arrivent dans un incrément suivant (cf. approche validée) ; la liste
-// est donc vide pour l'instant et "+ Nouveau" affiche un message
-// d'attente plutôt que d'ouvrir un écran qui n'existe pas encore.
-function renderPrevisionnelList(){
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE PRÉVISIONNEL — MOTEUR (pur, aucun DOM/localStorage) ──────────
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * PrevisionnelEngine — moteur de calcul du prévisionnel financier.
+ * Fonctions pures : mêmes entrées => mêmes sorties. Utilisé à l'identique
+ * par les deux points d'entrée (dossier existant ou feuille vierge) —
+ * seule la fonction d'amorçage des données de départ diffère (cf.
+ * creerPrevisionnelDepuisDossier / creerPrevisionnelVierge ci-dessous),
+ * jamais le calcul lui-même. Testé indépendamment dans
+ * tests/test_previsionnel_engine.js (mêmes fonctions, mêmes garanties).
+ */
+const PrevisionnelEngine = (function () {
+
+  // ── Utilitaires numériques ──────────────────────────────────────────
+  /** Neutralise NaN/Infinity — jamais propagés dans un tableau affiché. */
+  function safe(n) { return Number.isFinite(n) ? n : 0; }
+
+  /**
+   * serieCroissance(base, tauxParAnnee)
+   * Applique une suite de taux de croissance à une valeur de référence.
+   * serieCroissance(100, [0.1, 0.1]) -> [110, 121]
+   */
+  function serieCroissance(base, tauxParAnnee) {
+    let prev = safe(base);
+    return tauxParAnnee.map(t => { prev = safe(prev * (1 + safe(t))); return prev; });
+  }
+
+  /**
+   * validerOuverture(ouverture)
+   * Un bilan d'ouverture doit, par définition comptable, avoir actif =
+   * passif. Si ce n'est pas le cas (saisie manuelle incohérente), l'écart
+   * se propagerait identiquement sur tous les exercices projetés — on le
+   * détecte donc explicitement ici plutôt que de laisser un déséquilibre
+   * silencieux apparaître dans le Bilan prévisionnel.
+   */
+  function validerOuverture(ouverture) {
+    const totalActif = safe(
+      safe(ouverture.immobilisationsBrutes) - safe(ouverture.amortissementsCumules)
+      + safe(ouverture.stocks) + safe(ouverture.creancesClients) + safe(ouverture.autresCreances)
+      + safe(ouverture.tresorerie)
+    );
+    const totalPassif = safe(
+      safe(ouverture.capitauxPropres) + safe(ouverture.provisions) + safe(ouverture.dettesFinancieres)
+      + safe(ouverture.dettesFournisseurs) + safe(ouverture.autresDettes)
+    );
+    const ecart = safe(totalActif - totalPassif);
+    return { totalActif, totalPassif, ecart, equilibre: Math.abs(ecart) < 1 };
+  }
+
+  // ── 1. Plan d'investissement & amortissements ───────────────────────
+  /**
+   * calculerPlanAmortissement(params)
+   * Simplification assumée : dotation pleine dès l'exercice d'acquisition
+   * (pas de prorata temporis mensuel) — cf. limites documentées dans le
+   * CHANGELOG. Le parc existant (repris d'un dossier réel ou saisi à la
+   * main) est amorti à un rythme annuel constant jusqu'à extinction de sa
+   * VNC d'ouverture.
+   *
+   * @returns {{dotations:number[], vncFin:number[]}} un élément par exercice
+   */
+  function calculerPlanAmortissement({ investissements = [], dotationAnnuelleParcExistant = 0, vncParcExistantOuverture = 0, horizonYears, startYear }) {
+    const dotations = new Array(horizonYears).fill(0);
+    const vncParcParAnnee = new Array(horizonYears).fill(0);
+
+    let vncParc = safe(vncParcExistantOuverture);
+    for (let n = 0; n < horizonYears; n++) {
+      const dot = Math.min(safe(dotationAnnuelleParcExistant), vncParc);
+      dotations[n] += dot;
+      vncParc = safe(vncParc - dot);
+      vncParcParAnnee[n] = vncParc;
+    }
+
+    const vncInvParAnnee = new Array(horizonYears).fill(0);
+    investissements.forEach(inv => {
+      const anneeIdx = (inv.annee || startYear) - startYear;
+      const duree = Math.max(1, inv.dureeAns || 1);
+      const montant = safe(inv.montantHT);
+      const dotAnnuelle = montant / duree;
+      for (let n = 0; n < horizonYears; n++) {
+        if (n < anneeIdx) continue;
+        const anneesEcoulees = n - anneeIdx + 1; // 1 dès l'exercice d'acquisition
+        if (anneesEcoulees <= duree) {
+          dotations[n] += dotAnnuelle;
+          vncInvParAnnee[n] += Math.max(0, montant - dotAnnuelle * anneesEcoulees);
+        }
+      }
+    });
+
+    const vncFin = vncParcParAnnee.map((v, i) => safe(v + vncInvParAnnee[i]));
+    return { dotations: dotations.map(safe), vncFin };
+  }
+
+  // ── 2. Plan de financement — tableau d'amortissement des emprunts ───
+  /**
+   * calculerTableauEmprunt(emprunt, startYear)
+   * Retourne l'échéancier MENSUEL complet d'un emprunt (peut dépasser
+   * l'horizon affiché — utile pour calculer le capital restant dû exact).
+   * 3 modes : 'constant' (amortissement du capital constant, par défaut),
+   * 'annuite' (annuités constantes, méthode bancaire standard),
+   * 'infine' (capital remboursé intégralement au dernier mois).
+   * moisAbs = index mensuel absolu depuis le 1er mois de l'horizon (0-based).
+   */
+  function calculerTableauEmprunt(emprunt, startYear) {
+    const tauxMensuel = safe(emprunt.tauxAnnuel) / 12;
+    const dureeMois = Math.max(1, Math.round(safe(emprunt.dureeAns) * 12));
+    const differe = Math.max(0, Math.min(dureeMois - 1, emprunt.differeMois || 0));
+    const capitalInitial = safe(emprunt.montant);
+    const type = emprunt.typeAmortissement || 'constant';
+    const nAmort = dureeMois - differe;
+
+    const moisDebutAbs = ((emprunt.annee || startYear) - startYear) * 12 + Math.min(12, Math.max(1, emprunt.mois || 1)) - 1;
+
+    let annuiteConstante = 0;
+    if (type === 'annuite' && nAmort > 0) {
+      annuiteConstante = tauxMensuel > 0
+        ? capitalInitial * tauxMensuel / (1 - Math.pow(1 + tauxMensuel, -nAmort))
+        : capitalInitial / nAmort;
+    }
+
+    const schedule = [];
+    let capital = capitalInitial;
+    for (let m = 0; m < dureeMois; m++) {
+      const interets = safe(capital * tauxMensuel);
+      let amortissement = 0;
+      if (m < differe) {
+        amortissement = 0;
+      } else if (type === 'infine') {
+        amortissement = (m === dureeMois - 1) ? capital : 0;
+      } else if (type === 'annuite') {
+        amortissement = Math.min(capital, Math.max(0, annuiteConstante - interets));
+      } else {
+        amortissement = Math.min(capital, capitalInitial / nAmort);
+      }
+      const capitalFin = safe(Math.max(0, capital - amortissement));
+      schedule.push({ moisAbs: moisDebutAbs + m, interets: safe(interets), amortissement: safe(amortissement), capitalDebut: safe(capital), capitalFin });
+      capital = capitalFin;
+    }
+    return schedule;
+  }
+
+  /** agregerEmpruntsParAnnee(emprunts, horizonYears, startYear) -> {interets[], amortissement[], tirage[]} par exercice (0-based). */
+  function agregerEmpruntsParAnnee(emprunts, horizonYears, startYear) {
+    const interets = new Array(horizonYears).fill(0);
+    const amortissement = new Array(horizonYears).fill(0);
+    const tirage = new Array(horizonYears).fill(0);
+    const capitalRestantDuFin = new Array(horizonYears).fill(0);
+    let allSchedules = [];
+
+    emprunts.forEach(emp => {
+      const sched = calculerTableauEmprunt(emp, startYear);
+      allSchedules.push({ emp, sched });
+      const anneeIdxTirage = (emp.annee || startYear) - startYear;
+      if (anneeIdxTirage >= 0 && anneeIdxTirage < horizonYears) tirage[anneeIdxTirage] += safe(emp.montant);
+      sched.forEach(m => {
+        const n = Math.floor(m.moisAbs / 12);
+        if (n >= 0 && n < horizonYears) {
+          interets[n] += m.interets;
+          amortissement[n] += m.amortissement;
+        }
+      });
+    });
+
+    // Capital restant dû cumulé fin d'exercice (tous emprunts confondus)
+    for (let n = 0; n < horizonYears; n++) {
+      let total = 0;
+      allSchedules.forEach(({ sched }) => {
+        const moisFinAnnee = (n + 1) * 12 - 1;
+        // dernier mois de l'échéancier <= fin de l'exercice n
+        const rows = sched.filter(m => m.moisAbs <= moisFinAnnee);
+        if (rows.length) total += rows[rows.length - 1].capitalFin;
+        else if (sched.length && sched[0].moisAbs > moisFinAnnee) total += 0; // pas encore débloqué
+      });
+      capitalRestantDuFin[n] = safe(total);
+    }
+
+    return {
+      interets: interets.map(safe), amortissement: amortissement.map(safe),
+      tirage: tirage.map(safe), capitalRestantDuFin, schedules: allSchedules,
+    };
+  }
+
+  // ── 3. Compte de résultat prévisionnel ───────────────────────────────
+  function calculerCR({ basePeriode, parExercice, dotations, interetsEmprunts }) {
+    const horizonYears = parExercice.length;
+    const ca = serieCroissance(basePeriode.ca, parExercice.map(h => h.croissanceCA));
+    const chargesExternes = serieCroissance(basePeriode.chargesExternes, parExercice.map(h => h.croissanceChargesExternes));
+    const masseSalariale = serieCroissance(basePeriode.masseSalariale, parExercice.map(h => h.croissanceMasseSalariale));
+    const impotsTaxes = serieCroissance(basePeriode.impotsTaxes, parExercice.map(h => h.croissanceImpotsTaxes));
+
+    const margeBrute = ca.map((c, i) => safe(c * safe(parExercice[i].tauxMargeSurCA)));
+    const chargesPatronales = masseSalariale.map((m, i) => safe(m * safe(parExercice[i].tauxChargesPatronales)));
+    const ebe = ca.map((_, i) => safe(margeBrute[i] - chargesExternes[i] - masseSalariale[i] - chargesPatronales[i] - impotsTaxes[i]));
+    const rex = ebe.map((v, i) => safe(v - dotations[i]));
+    const resultatFinancier = interetsEmprunts.map(v => safe(-v));
+    const rcai = rex.map((v, i) => safe(v + resultatFinancier[i]));
+    const tauxIS = parExercice.map((h, i) => h.tauxIS !== undefined ? h.tauxIS : undefined);
+    const is = rcai.map((v, i) => safe(Math.max(0, v) * safe(tauxIS[i] !== undefined ? tauxIS[i] : 0)));
+    const resultatNet = rcai.map((v, i) => safe(v - is[i]));
+
+    const rows = [];
+    for (let n = 0; n < horizonYears; n++) {
+      rows.push({
+        annee: parExercice[n].annee,
+        ca: ca[n], margeBrute: margeBrute[n], chargesExternes: chargesExternes[n],
+        masseSalariale: masseSalariale[n], chargesPatronales: chargesPatronales[n],
+        impotsTaxes: impotsTaxes[n], ebe: ebe[n], dotations: dotations[n], rex: rex[n],
+        resultatFinancier: resultatFinancier[n], rcai: rcai[n], is: is[n], resultatNet: resultatNet[n],
+      });
+    }
+    return rows;
+  }
+
+  // ── 4. BFR ────────────────────────────────────────────────────────────
+  /**
+   * calculerBFR : calcule les postes circulants d'exploitation fin
+   * d'exercice, par la méthode des jours (délai/365 * flux TTC annuel).
+   * Convention : une "dette" en retard de paiement (TVA nette due,
+   * charges sociales, IS) est un délai favorable à la trésorerie —
+   * modélisée symétriquement aux créances clients / dettes fournisseurs.
+   */
+  function calculerBFR({ cr, global, parExercice }) {
+    return cr.map((r, i) => {
+      const h = parExercice[i];
+      const tauxTVA = safe(global.tauxTVA);
+      const caTTC = r.ca * (1 + tauxTVA);
+      const achats = r.chargesExternes + (r.ca - r.margeBrute); // consommations externes + achats variables
+      const achatsTTC = achats * (1 + tauxTVA);
+
+      const stocks = safe(r.ca * safe(h.tauxStockSurCA));
+      const creancesClients = safe(caTTC * safe(global.delaiClientJours) / 365);
+      const dettesFournisseurs = safe(achatsTTC * safe(global.delaiFournisseurJours) / 365);
+
+      const tvaCollectee = r.ca * tauxTVA;
+      const tvaDeductible = achats * tauxTVA; // (les investissements TTC pourraient s'ajouter en V2)
+      const tvaNetteDue = tvaCollectee - tvaDeductible;
+      const detteTVA = safe(tvaNetteDue * safe(global.delaiTVAJours) / 365);
+
+      const detteSociale = safe(r.chargesPatronales * safe(global.delaiChargesSocialesJours) / 365);
+      const detteIS = safe(r.is * safe(global.delaiISJours) / 365);
+
+      // Note : detteTVA peut être négative (crédit de TVA = créance) — dans ce
+      // cas elle s'ajoute à l'actif circulant plutôt que de réduire le passif
+      // (cf. Math.max(0,-b.detteTVA) au niveau du Bilan).
+      const bfr = safe(stocks + creancesClients - dettesFournisseurs - detteSociale - detteIS - detteTVA);
+
+      return { stocks, creancesClients, dettesFournisseurs, detteTVA, detteSociale, detteIS, bfr };
+    });
+  }
+
+  // ── 5. CAF, plan de financement, bilan, indicateurs ─────────────────
+  function calculerPrevisionnel(record) {
+    const { horizonYears, startYear, hypotheses, ouverture, investissements = [], emprunts = [], apports = [] } = record;
+    const { global, basePeriode, parExercice } = hypotheses;
+
+    // Normalise les taux d'IS par exercice (global.tauxIS sert de défaut)
+    const parExerciceIS = parExercice.map(h => ({ ...h, tauxIS: h.tauxIS !== undefined ? h.tauxIS : global.tauxIS }));
+
+    // 1) Amortissements
+    const vncOuverture = safe(ouverture.immobilisationsBrutes) - safe(ouverture.amortissementsCumules);
+    const { dotations, vncFin: vncImmobilisations } = calculerPlanAmortissement({
+      investissements, dotationAnnuelleParcExistant: ouverture.dotationAnnuelleParcExistant,
+      vncParcExistantOuverture: vncOuverture, horizonYears, startYear,
+    });
+
+    // 2) Emprunts
+    const empAgg = agregerEmpruntsParAnnee(emprunts, horizonYears, startYear);
+
+    // 3) Compte de résultat
+    const cr = calculerCR({ basePeriode, parExercice: parExerciceIS, dotations, interetsEmprunts: empAgg.interets });
+
+    // 4) CAF
+    const caf = cr.map(r => safe(r.resultatNet + r.dotations));
+
+    // 5) BFR (fin d'exercice) + ouverture
+    const bfrParExercice = calculerBFR({ cr, global, parExercice });
+    const bfrOuverture = {
+      stocks: safe(ouverture.stocks), creancesClients: safe(ouverture.creancesClients),
+      dettesFournisseurs: safe(ouverture.dettesFournisseurs), detteTVA: 0,
+      detteSociale: 0, detteIS: 0,
+      bfr: safe(ouverture.stocks) + safe(ouverture.creancesClients) - safe(ouverture.dettesFournisseurs),
+    };
+    const bfrSeries = [bfrOuverture, ...bfrParExercice];
+    const deltaBFR = bfrParExercice.map((b, i) => safe(b.bfr - bfrSeries[i].bfr));
+
+    // 6) Investissements / apports / remboursements par exercice
+    const investParAnnee = new Array(horizonYears).fill(0);
+    investissements.forEach(inv => {
+      const idx = (inv.annee || startYear) - startYear;
+      if (idx >= 0 && idx < horizonYears) investParAnnee[idx] += safe(inv.montantHT);
+    });
+    const apportsParAnnee = new Array(horizonYears).fill(0);
+    apports.forEach(ap => {
+      const idx = (ap.annee || startYear) - startYear;
+      if (idx >= 0 && idx < horizonYears) apportsParAnnee[idx] += safe(ap.montant);
+    });
+
+    // 7) Plan de financement (emplois / ressources)
+    const planFinancement = cr.map((r, i) => {
+      const ressources = caf[i] + apportsParAnnee[i] + empAgg.tirage[i];
+      const emplois = investParAnnee[i] + empAgg.amortissement[i] + deltaBFR[i];
+      return {
+        annee: r.annee, caf: caf[i], apports: apportsParAnnee[i], nouveauxEmprunts: empAgg.tirage[i],
+        investissements: investParAnnee[i], remboursementsEmprunts: empAgg.amortissement[i], deltaBFR: deltaBFR[i],
+        ressources: safe(ressources), emplois: safe(emplois), variationTresorerie: safe(ressources - emplois),
+      };
+    });
+
+    // 8) Bilan prévisionnel — la trésorerie de clôture boucle l'équilibre
+    const bilan = [];
+    let capitauxPropresPrec = safe(ouverture.capitauxPropres);
+    let dettesFinancieresPrec = safe(ouverture.dettesFinancieres);
+    let tresoreriePrec = safe(ouverture.tresorerie);
+    for (let n = 0; n < horizonYears; n++) {
+      const capitauxPropres = safe(capitauxPropresPrec + cr[n].resultatNet + apportsParAnnee[n]);
+      const dettesFinancieres = safe(dettesFinancieresPrec - empAgg.amortissement[n] + empAgg.tirage[n]);
+      const tresorerie = safe(tresoreriePrec + planFinancement[n].variationTresorerie);
+      const b = bfrParExercice[n];
+      const immobilisationsNettes = vncImmobilisations[n];
+      const provisions = safe(ouverture.provisions);
+      const autresCreances = safe(ouverture.autresCreances);
+      const autresDettes = safe(ouverture.autresDettes);
+
+      const totalActif = safe(immobilisationsNettes + b.stocks + b.creancesClients + Math.max(0, -b.detteTVA) + autresCreances + tresorerie);
+      const totalPassif = safe(capitauxPropres + provisions + dettesFinancieres + b.dettesFournisseurs + Math.max(0, b.detteTVA) + b.detteSociale + b.detteIS + autresDettes);
+
+      bilan.push({
+        annee: cr[n].annee,
+        immobilisationsNettes, stocks: b.stocks, creancesClients: b.creancesClients,
+        creanceTVA: Math.max(0, -b.detteTVA), autresCreances, tresorerie,
+        totalActif,
+        capitauxPropres, provisions, dettesFinancieres,
+        dettesFournisseurs: b.dettesFournisseurs, detteTVA: Math.max(0, b.detteTVA),
+        detteSociale: b.detteSociale, detteIS: b.detteIS, autresDettes,
+        totalPassif,
+        ecart: safe(totalActif - totalPassif),
+      });
+
+      capitauxPropresPrec = capitauxPropres;
+      dettesFinancieresPrec = dettesFinancieres;
+      tresoreriePrec = tresorerie;
+    }
+
+    // 9) Trésorerie mensuelle — dérivée des mêmes flux annuels (garantit la
+    // cohérence exacte avec le Bilan/Plan de financement par construction :
+    // chaque flux annuel est réparti sur 12 mois avec des poids qui somment
+    // à 1, jamais recalculé indépendamment).
+    const tresorerieMensuelle = calculerTresorerieMensuelle({ record, cr, bfrSeries, empAgg, investissements, apportsParAnnee, planFinancement });
+
+    // 10) Indicateurs
+    const indicateurs = cr.map((r, i) => {
+      const chargesFixesApprox = r.chargesExternes + r.masseSalariale + r.chargesPatronales + r.impotsTaxes + r.dotations;
+      const tauxMargeSurCoutsVariables = r.ca > 0 ? r.margeBrute / r.ca : 0;
+      const seuilRentabilite = tauxMargeSurCoutsVariables > 0 ? chargesFixesApprox / tauxMargeSurCoutsVariables : null;
+      const dateAtteinteSeuil = (seuilRentabilite !== null && r.ca > 0)
+        ? Math.min(12, Math.max(1, Math.ceil((seuilRentabilite / r.ca) * 12)))
+        : null;
+      return {
+        annee: r.annee,
+        seuilRentabilite, dateAtteinteSeuilMois: dateAtteinteSeuil,
+        bfr: bfrParExercice[i].bfr, caf: caf[i],
+        margeBrutePct: r.ca > 0 ? r.margeBrute / r.ca : 0,
+        ebePct: r.ca > 0 ? r.ebe / r.ca : 0,
+        resultatNetPct: r.ca > 0 ? r.resultatNet / r.ca : 0,
+      };
+    });
+
+    return { cr, bilan, planFinancement, tresorerieMensuelle, indicateurs, dotations, empAgg };
+  }
+
+  /**
+   * calculerTresorerieMensuelle
+   * Répartit chaque flux ANNUEL déjà consolidé (encaissements clients nets
+   * du délai, décaissements fournisseurs/TVA/charges sociales/IS nets du
+   * délai, salaires, investissements, emprunts, apports) sur 12 mois.
+   * Les investissements/apports/emprunts sont placés à leur mois exact ;
+   * les flux d'exploitation sont lissés sur l'année (poids sommant à 1).
+   * Le total mensuel de l'année n est ainsi TOUJOURS égal, au centime
+   * près, à variationTresorerie[n] du plan de financement — c'est la
+   * garantie de cohérence entre Bilan et Plan de trésorerie.
+   */
+  function calculerTresorerieMensuelle({ record, cr, bfrSeries, empAgg, investissements, apportsParAnnee, planFinancement }) {
+    const { horizonYears, startYear, ouverture } = record;
+    const months = [];
+    let solde = safe(ouverture.tresorerie);
+
+    for (let n = 0; n < horizonYears; n++) {
+      const bOuv = bfrSeries[n], bClo = bfrSeries[n + 1];
+      const r = cr[n];
+      const caTTC = r.ca * (1 + record.hypotheses.global.tauxTVA);
+      const achats = r.chargesExternes + (r.ca - r.margeBrute);
+      const achatsTTC = achats * (1 + record.hypotheses.global.tauxTVA);
+
+      // Identités comptables exactes (flux réel = charge/produit de la période
+      // + stock d'ouverture − stock de clôture du poste de délai concerné) :
+      const encaissementsClients = safe(caTTC + bOuv.creancesClients - bClo.creancesClients);
+      const decaissementsFournisseurs = safe(achatsTTC + bOuv.dettesFournisseurs - bClo.dettesFournisseurs);
+      const decaissementsTVA = safe((r.ca - achats) * record.hypotheses.global.tauxTVA + bOuv.detteTVA - bClo.detteTVA);
+      const decaissementsChargesSociales = safe(r.chargesPatronales + bOuv.detteSociale - bClo.detteSociale);
+      const decaissementIS = safe(r.is + bOuv.detteIS - bClo.detteIS);
+      const salaires = r.masseSalariale;
+      // Impôts et taxes (63x) et variation de stock : aucun délai modélisé
+      // en V1 (pas de poste BFR dédié) => payés/immobilisés au fil de
+      // l'année, à plat. Les intérêts d'emprunt sont eux décaissés à leur
+      // mois exact (cf. boucle empAgg.schedules ci-dessous) : ils ne sont
+      // donc PAS répartis ici.
+      const decaissementsImpotsTaxes = safe(r.impotsTaxes);
+      const decaissementsVariationStock = safe(bClo.stocks - bOuv.stocks);
+
+      // Poids de répartition mensuelle (somme = 1) — flat par défaut : une
+      // meilleure saisonnalité pourra être ajoutée en V2 sans changer les
+      // totaux annuels (qui restent la source de vérité).
+      const poidsFlat = new Array(12).fill(1 / 12);
+
+      const moisData = new Array(12).fill(null).map((_, m) => ({
+        annee: r.annee, mois: m + 1,
+        encaissementsClients: encaissementsClients * poidsFlat[m],
+        decaissementsFournisseurs: decaissementsFournisseurs * poidsFlat[m],
+        decaissementsTVA: decaissementsTVA * poidsFlat[m],
+        decaissementsChargesSociales: decaissementsChargesSociales * poidsFlat[m],
+        decaissementIS: decaissementIS * poidsFlat[m],
+        decaissementsImpotsTaxes: decaissementsImpotsTaxes * poidsFlat[m],
+        decaissementsVariationStock: decaissementsVariationStock * poidsFlat[m],
+        salaires: salaires * poidsFlat[m],
+        investissements: 0, apports: 0, tirageEmprunts: 0, remboursementsEmprunts: 0, interetsEmprunts: 0,
+      }));
+
+      // Placement exact des flux datés (investissements, apports, emprunts)
+      investissements.forEach(inv => {
+        if ((inv.annee || startYear) - startYear === n) {
+          const m = Math.min(12, Math.max(1, inv.mois || 1)) - 1;
+          moisData[m].investissements += safe(inv.montantHT);
+        }
+      });
+      (record.apports || []).forEach(ap => {
+        if ((ap.annee || startYear) - startYear === n) {
+          const m = Math.min(12, Math.max(1, ap.mois || 1)) - 1;
+          moisData[m].apports += safe(ap.montant);
+        }
+      });
+      // Emprunts : capital ET intérêts décaissés à leur mois exact (même
+      // échéancier mensuel que le tableau d'amortissement — pas de délai
+      // supplémentaire à modéliser, contrairement aux postes de BFR).
+      empAgg.schedules.forEach(({ sched }) => {
+        sched.forEach(row => {
+          const rn = Math.floor(row.moisAbs / 12);
+          const rm = row.moisAbs % 12;
+          if (rn === n) {
+            moisData[rm].remboursementsEmprunts += row.amortissement;
+            moisData[rm].interetsEmprunts += row.interets;
+          }
+        });
+      });
+      (record.emprunts || []).forEach(emp => {
+        if ((emp.annee || startYear) - startYear === n) {
+          const m = Math.min(12, Math.max(1, emp.mois || 1)) - 1;
+          moisData[m].tirageEmprunts += safe(emp.montant);
+        }
+      });
+
+      moisData.forEach(md => {
+        const net = md.encaissementsClients + md.apports + md.tirageEmprunts
+          - md.decaissementsFournisseurs - md.decaissementsTVA - md.decaissementsChargesSociales
+          - md.decaissementIS - md.decaissementsImpotsTaxes - md.decaissementsVariationStock
+          - md.salaires - md.investissements - md.remboursementsEmprunts - md.interetsEmprunts;
+        solde = safe(solde + net);
+        months.push({ ...md, fluxNet: safe(net), soldeFin: solde });
+      });
+    }
+    return months;
+  }
+
+  return {
+    safe, serieCroissance, validerOuverture, calculerPlanAmortissement, calculerTableauEmprunt,
+    agregerEmpruntsParAnnee, calculerCR, calculerBFR, calculerPrevisionnel,
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE PRÉVISIONNEL — STOCKAGE ───────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+const PREV_STORE_KEY = 'fec_analyse_previsionnels_v1';
+
+function loadPrevStore() {
+  try { return JSON.parse(localStorage.getItem(PREV_STORE_KEY) || '{}'); }
+  catch (e) {
+    console.warn('[Prévisionnel] localStorage illisible (JSON corrompu) :', e);
+    toast('Stockage des prévisionnels illisible — les prévisionnels précédents sont peut-être perdus', true);
+    return {};
+  }
+}
+function savePrevStore(data) {
+  try { localStorage.setItem(PREV_STORE_KEY, JSON.stringify(data)); return true; }
+  catch (e) {
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+      toast('Stockage plein : supprimez un prévisionnel avant de continuer', true);
+    } else {
+      toast('Échec de sauvegarde du prévisionnel : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
+    }
+    console.error('[Prévisionnel] savePrevStore() a échoué :', e);
+    return false;
+  }
+}
+function savePrevisionnel(record) {
+  record.updatedAt = Date.now();
+  const store = loadPrevStore();
+  store[record.id] = record;
+  savePrevStore(store);
+}
+function deletePrevisionnelById(id) {
+  const store = loadPrevStore();
+  delete store[id];
+  savePrevStore(store);
+}
+function listPrevisionnels() {
+  return Object.values(loadPrevStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+// ── Modèle par défaut (hypothèses jamais codées en dur dans le moteur —
+//    uniquement des valeurs initiales éditables) ─────────────────────────
+function defaultHypotheses(horizonYears, startYear) {
+  return {
+    global: {
+      tauxTVA: 0.20, delaiClientJours: 45, delaiFournisseurJours: 30, delaiTVAJours: 30,
+      delaiChargesSocialesJours: 30, delaiISJours: 90, tauxIS: 0.25,
+    },
+    basePeriode: { ca: 0, chargesExternes: 0, masseSalariale: 0, impotsTaxes: 0, dotationAnnuelleParcExistant: 0 },
+    parExercice: Array.from({ length: horizonYears }, (_, i) => ({
+      annee: startYear + i, croissanceCA: 0.05, tauxMargeSurCA: 0.60, croissanceChargesExternes: 0.02,
+      croissanceMasseSalariale: 0.02, tauxChargesPatronales: 0.42, croissanceImpotsTaxes: 0.02, tauxStockSurCA: 0,
+    })),
+  };
+}
+function defaultOuverture() {
+  return {
+    immobilisationsBrutes: 0, amortissementsCumules: 0, stocks: 0, creancesClients: 0, autresCreances: 0,
+    tresorerie: 0, capitauxPropres: 0, provisions: 0, dettesFinancieres: 0, dettesFournisseurs: 0,
+    autresDettes: 0, dotationAnnuelleParcExistant: 0,
+  };
+}
+
+/**
+ * creerPrevisionnelVierge(name, horizonYears)
+ * Point d'entrée « feuille vierge » (module Prévisionnel standalone) :
+ * aucune dépendance à un dossier, toutes les hypothèses démarrent à des
+ * valeurs neutres/par défaut que l'utilisateur ajuste lui-même.
+ */
+function creerPrevisionnelVierge(name, horizonYears) {
+  horizonYears = Math.max(1, Math.min(10, horizonYears || 3));
+  const startYear = new Date().getFullYear() + 1;
+  return {
+    id: 'prev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: name || 'Nouveau prévisionnel', createdAt: Date.now(), updatedAt: Date.now(),
+    sourceDossierId: null, sourceExerciceId: null,
+    horizonYears, startYear,
+    hypotheses: defaultHypotheses(horizonYears, startYear),
+    ouverture: defaultOuverture(),
+    investissements: [], emprunts: [], apports: [],
+  };
+}
+
+/**
+ * seedBasePeriodeFromDossier()
+ * Amorce le compte de résultat de référence depuis le dossier ACTIVE, en
+ * réutilisant la classification par compte déjà construite pour l'onglet
+ * "Compte de résultat" légal (legalCRPosteAccounts / computeLegalCR,
+ * cf. plus haut) — pas de nouvelle logique de mapping à maintenir.
+ */
+function seedBasePeriodeFromDossier() {
+  const bal = ACTIVE.bal || {};
+  const accts = legalCRPosteAccounts(bal);
+  const amt = computeLegalCR(bal, accts);
+  const ca = amt.ca_net || 0;
+  const cogs = (amt.achats_marchandises || 0) + (amt.variation_stocks_marchandises || 0)
+    + (amt.achats_matieres || 0) + (amt.variation_stocks || 0);
+  const chargesExternes = amt.autres_achats_charges_ext || 0;
+  const masseSalariale = amt.salaires_traitements || 0;
+  const chargesSociales = amt.charges_sociales || 0;
+  const dotations = amt.dotations_exploit || 0;
+  const impotsTaxes = amt.impots_taxes || 0;
+  return {
+    ca, chargesExternes, masseSalariale, impotsTaxes,
+    dotationAnnuelleParcExistant: dotations,
+    tauxMargeSurCADefaut: ca > 0 ? Math.max(0, Math.min(1, (ca - cogs) / ca)) : 0.60,
+    tauxChargesPatronalesDefaut: masseSalariale > 0 ? chargesSociales / masseSalariale : 0.42,
+  };
+}
+
+/**
+ * seedOuvertureFromDossier()
+ * Amorce le bilan d'ouverture depuis le dossier ACTIVE, en réutilisant le
+ * mapping Bilan déjà affecté par l'utilisateur (ACTIVE.mps.bilan) et la
+ * fonction tmGroupSum() déjà utilisée par le module Trésorerie — même
+ * source de vérité que les onglets Bilan/SIG existants, jamais une
+ * nouvelle classification parallèle.
+ * Comme buildBilanTables(), réinjecte le résultat de l'exercice calculé
+ * depuis les comptes 6x/7x dans les capitaux propres lorsque le compte
+ * 12x (résultat affecté) est absent du FEC — sans quoi le bilan d'un
+ * exercice non encore clôturé serait mécaniquement déséquilibré dès la
+ * création du prévisionnel (cf. AUDIT.md, même correction que le Bilan).
+ */
+function seedOuvertureFromDossier() {
+  const groups = ACTIVE.mps?.bilan || [];
+  const find = id => groups.find(g => g.id === id);
+  const sumGroups = (...ids) => ids.reduce((s, id) => {
+    const g = find(id);
+    return g ? s + tmGroupSum(g, g.side) : s;
+  }, 0);
+
+  const bal = ACTIVE.bal || {};
+  let resultatCalcule = 0;
+  Object.keys(bal).forEach(n => {
+    const cl = n[0];
+    if (cl === '7') resultatCalcule += bal[n];
+    if (cl === '6') resultatCalcule -= bal[n];
+  });
+  const resultatEnBilan = Object.keys(bal).filter(n => n.startsWith('12')).reduce((s, n) => s + bal[n], 0);
+  const resultatAInjecter = (Math.abs(resultatEnBilan) < 1) ? resultatCalcule : 0;
+
+  return {
+    immobilisationsBrutes: sumGroups('ba1', 'ba2', 'ba3'), amortissementsCumules: 0,
+    stocks: sumGroups('ba5'), creancesClients: sumGroups('ba6'),
+    autresCreances: sumGroups('ba0', 'ba7', 'ba9'), tresorerie: sumGroups('ba8'),
+    capitauxPropres: sumGroups('bp1') + resultatAInjecter, provisions: sumGroups('bp3'),
+    dettesFinancieres: sumGroups('bp4'), dettesFournisseurs: sumGroups('bp5'),
+    autresDettes: sumGroups('bp6', 'bp7'), dotationAnnuelleParcExistant: 0,
+  };
+}
+
+/**
+ * creerPrevisionnelDepuisDossier(name, horizonYears)
+ * Point d'entrée « depuis un dossier existant » (bouton sur le dashboard) :
+ * lit une seule fois les données réelles du dossier ACTIVE pour amorcer
+ * l'ouverture et l'année de référence, puis copie tout dans un
+ * PrevisionnelRecord autonome. Isolation stricte : au-delà de cette
+ * lecture initiale, le prévisionnel n'a plus aucun lien vivant avec le
+ * dossier — il n'écrit jamais dans ACTIVE.exercices/bal, et une
+ * modification ultérieure du dossier n'affecte pas le prévisionnel déjà
+ * créé (cf. approche validée).
+ */
+function creerPrevisionnelDepuisDossier(name, horizonYears) {
+  if (!ACTIVE.id) { toast('Aucun dossier ouvert', true); return null; }
+  horizonYears = Math.max(1, Math.min(10, horizonYears || 3));
+  const lastYear = ACTIVE.periodEnd ? parseInt(ACTIVE.periodEnd.slice(0, 4), 10) : new Date().getFullYear();
+  const startYear = (Number.isFinite(lastYear) ? lastYear : new Date().getFullYear()) + 1;
+
+  const seedCR = seedBasePeriodeFromDossier();
+  const hyp = defaultHypotheses(horizonYears, startYear);
+  hyp.basePeriode = {
+    ca: seedCR.ca, chargesExternes: seedCR.chargesExternes, masseSalariale: seedCR.masseSalariale,
+    impotsTaxes: seedCR.impotsTaxes, dotationAnnuelleParcExistant: seedCR.dotationAnnuelleParcExistant,
+  };
+  hyp.parExercice.forEach(h => {
+    h.tauxMargeSurCA = seedCR.tauxMargeSurCADefaut;
+    h.tauxChargesPatronales = seedCR.tauxChargesPatronalesDefaut;
+  });
+
+  return {
+    id: 'prev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: name || `Prévisionnel ${ACTIVE.name} ${startYear}-${startYear + horizonYears - 1}`,
+    createdAt: Date.now(), updatedAt: Date.now(),
+    sourceDossierId: ACTIVE.id, sourceExerciceId: ACTIVE.activeExerciceId || null,
+    horizonYears, startYear, hypotheses: hyp,
+    ouverture: seedOuvertureFromDossier(),
+    investissements: [], emprunts: [], apports: [],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE PRÉVISIONNEL — ÉCRAN LISTE (standalone, sans dossier) ────────
+// ═══════════════════════════════════════════════════════════════════════
+function renderPrevisionnelList() {
   const el = document.getElementById('previsionnel-list-content');
   if (!el) return;
-  el.innerHTML = '<div class="std-empty">Aucun prévisionnel pour l’instant. Cliquez sur « + Nouveau prévisionnel » pour commencer.</div>';
+  const items = listPrevisionnels();
+  if (!items.length) {
+    el.innerHTML = '<div class="std-empty">Aucun prévisionnel pour l’instant. Cliquez sur « + Nouveau prévisionnel » pour commencer.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="std-item-grid">${items.map(p => `
+    <div class="std-item-card" onclick="openPrevisionnelEditor('${p.id}')">
+      <div class="std-item-name">${escHtml(p.name)}</div>
+      <div class="std-item-meta">${p.horizonYears} exercice${p.horizonYears > 1 ? 's' : ''} · à partir de ${p.startYear} · ${p.sourceDossierId ? '📁 depuis dossier' : '📝 feuille vierge'}</div>
+    </div>`).join('')}</div>`;
 }
-function creerNouveauPrevisionnel(){
-  toast('Le module Prévisionnel arrive dans un prochain incrément');
+function creerNouveauPrevisionnel() {
+  const record = creerPrevisionnelVierge();
+  savePrevisionnel(record);
+  openPrevisionnelEditor(record.id);
+}
+
+/**
+ * lancerPrevisionnelDepuisDossier()
+ * Point d'entrée « depuis un dossier » — bouton de la sidebar du
+ * dashboard. Utilise le MÊME moteur et le MÊME écran que la création
+ * depuis le module Prévisionnel standalone (openPrevisionnelEditor) ;
+ * seule creerPrevisionnelDepuisDossier() diffère de creerPrevisionnelVierge().
+ */
+function lancerPrevisionnelDepuisDossier() {
+  const record = creerPrevisionnelDepuisDossier();
+  if (!record) return;
+  savePrevisionnel(record);
+  openPrevisionnelEditor(record.id);
+  toast('Prévisionnel créé à partir des données du dossier « ' + ACTIVE.name + ' »');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── MODULE PRÉVISIONNEL — ÉCRAN D'ÉDITION (moteur commun) ───────────────
+// ═══════════════════════════════════════════════════════════════════════
+let PREV_ACTIVE = null;   // PrevisionnelRecord actuellement ouvert (ou null)
+let PREV_RESULTS = null;  // Dernier résultat de PrevisionnelEngine.calculerPrevisionnel()
+let PREV_TAB = 'hyp';
+let _prevSaveTimer = null;
+
+/** round2(n) — arrondi à 2 décimales pour l'affichage des champs de saisie. */
+function round2(n) { return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100; }
+
+function openPrevisionnelEditor(id) {
+  const store = loadPrevStore();
+  const record = store[id];
+  if (!record) { toast('Prévisionnel introuvable', true); return; }
+  PREV_ACTIVE = record;
+  ['home-screen', 'dashboard-screen', 'previsionnel-list-screen'].forEach(sid => {
+    const e = document.getElementById(sid); if (e) e.style.display = 'none';
+  });
+  document.getElementById('previsionnel-screen').style.display = 'block';
+  showPrevTab('hyp');
+  renderPrevisionnel();
+}
+function backToPrevisionnelList() {
+  if (PREV_ACTIVE) savePrevisionnel(PREV_ACTIVE);
+  PREV_ACTIVE = null; PREV_RESULTS = null;
+  document.getElementById('previsionnel-screen').style.display = 'none';
+  document.getElementById('previsionnel-list-screen').style.display = 'block';
+  renderPrevisionnelList();
+}
+function deleteCurrentPrevisionnel() {
+  if (!PREV_ACTIVE) return;
+  if (!confirm(`Supprimer définitivement « ${PREV_ACTIVE.name} » ? Cette action est irréversible.`)) return;
+  deletePrevisionnelById(PREV_ACTIVE.id);
+  PREV_ACTIVE = null; PREV_RESULTS = null;
+  document.getElementById('previsionnel-screen').style.display = 'none';
+  document.getElementById('previsionnel-list-screen').style.display = 'block';
+  renderPrevisionnelList();
+  toast('Prévisionnel supprimé');
+}
+function onPrevNameChange(v) {
+  if (!PREV_ACTIVE) return;
+  PREV_ACTIVE.name = v || 'Prévisionnel';
+  schedSavePrevisionnel();
+}
+function schedSavePrevisionnel() {
+  clearTimeout(_prevSaveTimer);
+  _prevSaveTimer = setTimeout(() => { if (PREV_ACTIVE) savePrevisionnel(PREV_ACTIVE); }, 800);
+}
+function showPrevTab(tab) {
+  PREV_TAB = tab;
+  ['hyp', 'cr', 'bilan', 'inv', 'fin', 'treso', 'ind'].forEach(t => {
+    document.getElementById('pvtab-' + t)?.classList.toggle('active', t === tab);
+    const p = document.getElementById('pvpanel-' + t);
+    if (p) p.style.display = (t === tab) ? 'block' : 'none';
+  });
+}
+
+/**
+ * renderPrevisionnel()
+ * Orchestrateur : recalcule le prévisionnel complet via le moteur pur
+ * (PrevisionnelEngine.calculerPrevisionnel — jamais de résultat mis en
+ * cache/persisté, cf. modèle de données validé) puis redessine les 7
+ * onglets. Gère l'erreur de calcul proprement (jamais d'écran blanc).
+ */
+function renderPrevisionnel() {
+  if (!PREV_ACTIVE) return;
+  const nameEl = document.getElementById('prev-name-input');
+  if (nameEl && nameEl.value !== PREV_ACTIVE.name) nameEl.value = PREV_ACTIVE.name;
+  const badge = document.getElementById('prev-source-badge');
+  if (badge) badge.textContent = PREV_ACTIVE.sourceDossierId ? '📁 Depuis un dossier' : '📝 Feuille vierge';
+
+  const val = PrevisionnelEngine.validerOuverture(PREV_ACTIVE.ouverture);
+  const warnEl = document.getElementById('prev-warning-banner');
+  if (warnEl) {
+    warnEl.innerHTML = val.equilibre ? '' : `<div style="background:#fff0e6;border:1px solid #e8643c;color:#e8643c;border-radius:8px;padding:8px 14px;font-size:12px;margin:10px 0;">⚠ Le bilan d'ouverture n'est pas équilibré (actif ${fmtV(val.totalActif)} ≠ passif ${fmtV(val.totalPassif)}, écart ${fmtV(val.ecart)}). Ajustez les hypothèses d'ouverture ci-dessous.</div>`;
+  }
+
+  let results;
+  try {
+    results = PrevisionnelEngine.calculerPrevisionnel(PREV_ACTIVE);
+  } catch (e) {
+    console.error('[Prévisionnel] Erreur de calcul', e);
+    toast('Erreur de calcul du prévisionnel : ' + e.message, true);
+    return;
+  }
+  PREV_RESULTS = results;
+
+  renderPrevHypotheses();
+  renderPrevCR(results);
+  renderPrevBilan(results);
+  renderPrevInvestissements();
+  renderPrevFinancement(results);
+  renderPrevTresorerie(results);
+  renderPrevIndicateurs(results);
+  schedSavePrevisionnel();
+}
+
+// ── Champs de saisie (setters) ──────────────────────────────────────────
+function pvSetGlobal(key, raw, isPct) {
+  const v = parseFloat(raw);
+  PREV_ACTIVE.hypotheses.global[key] = Number.isFinite(v) ? (isPct ? v / 100 : v) : 0;
+  renderPrevisionnel();
+}
+function pvSetBase(key, raw) {
+  const v = parseFloat(raw);
+  PREV_ACTIVE.hypotheses.basePeriode[key] = Number.isFinite(v) ? v : 0;
+  renderPrevisionnel();
+}
+function pvSetOuverture(key, raw) {
+  const v = parseFloat(raw);
+  PREV_ACTIVE.ouverture[key] = Number.isFinite(v) ? v : 0;
+  renderPrevisionnel();
+}
+function pvSetExercice(idx, key, raw, isPct) {
+  const v = parseFloat(raw);
+  PREV_ACTIVE.hypotheses.parExercice[idx][key] = Number.isFinite(v) ? (isPct ? v / 100 : v) : 0;
+  renderPrevisionnel();
+}
+/** pvSetHorizon(raw) — redimensionne parExercice (1 à 10 ans) en conservant les années déjà saisies. */
+function pvSetHorizon(raw) {
+  let n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) n = 1;
+  if (n > 10) n = 10;
+  const old = PREV_ACTIVE.hypotheses.parExercice;
+  const startYear = PREV_ACTIVE.startYear;
+  const next = [];
+  for (let i = 0; i < n; i++) {
+    next.push(old[i] ? { ...old[i] } : {
+      croissanceCA: 0.05, tauxMargeSurCA: 0.60, croissanceChargesExternes: 0.02,
+      croissanceMasseSalariale: 0.02, tauxChargesPatronales: 0.42, croissanceImpotsTaxes: 0.02, tauxStockSurCA: 0,
+    });
+    next[i].annee = startYear + i;
+  }
+  PREV_ACTIVE.horizonYears = n;
+  PREV_ACTIVE.hypotheses.parExercice = next;
+  renderPrevisionnel();
+}
+
+// ── Widgets de saisie réutilisables ─────────────────────────────────────
+function pvField(label, value, onchangeExpr, opts) {
+  opts = opts || {};
+  const isPct = !!opts.pct;
+  const display = isPct ? PrevisionnelEngine.safe(value) * 100 : PrevisionnelEngine.safe(value);
+  const step = opts.step !== undefined ? opts.step : (isPct ? 0.5 : 100);
+  return `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;">
+    ${escHtml(label)}
+    <span style="display:flex;align-items:center;gap:4px;">
+      <input type="number" step="${step}" value="${round2(display)}"
+        style="width:100%;padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;"
+        onchange="${onchangeExpr}">
+      <span style="font-size:11px;color:#a09d96;flex-shrink:0;">${opts.suffix || (isPct ? '%' : '€')}</span>
+    </span>
+  </label>`;
+}
+function pvCellInput(value, onchangeExpr, isPct) {
+  const display = isPct ? PrevisionnelEngine.safe(value) * 100 : PrevisionnelEngine.safe(value);
+  return `<input type="number" step="0.5" value="${round2(display)}" style="width:70px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="${onchangeExpr}">${isPct ? ' %' : ''}`;
+}
+function pvExportBtn(fnName, label) {
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <button class="no-print" onclick="${fnName}()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">⬇ Export CSV — ${escHtml(label)}</button>
+  </div>`;
+}
+/** pvTable(rows, data) — tableau générique Poste × Exercices, réutilisé par CR/Bilan/Financement/Indicateurs. */
+function pvTable(rows, data) {
+  return `<div class="drill-card" style="overflow-x:auto;"><table class="dt"><thead><tr><th style="width:34%">Poste</th>${data.map(r => `<th class="r">${r.annee}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(([label, fn, bold]) => `<tr${bold ? ' style="font-weight:700;background:#f4f3f0;"' : ''}>
+      <td style="padding:9px 16px;">${escHtml(label)}</td>
+      ${data.map(r => { const v = fn(r); return `<td class="r" style="padding:9px 16px;color:${v < 0 ? '#A32D2D' : '#1a1916'};">${fmtV(v)}</td>`; }).join('')}
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+// ── Onglet Hypothèses ────────────────────────────────────────────────────
+function renderPrevHypotheses() {
+  const el = document.getElementById('pvpanel-hyp');
+  if (!el || !PREV_ACTIVE) return;
+  const g = PREV_ACTIVE.hypotheses.global;
+  const b = PREV_ACTIVE.hypotheses.basePeriode;
+  const o = PREV_ACTIVE.ouverture;
+  const sourceNote = PREV_ACTIVE.sourceDossierId
+    ? 'Pré-rempli depuis le dernier exercice du dossier source — modifiable librement, sans effet sur le dossier d’origine.'
+    : 'À saisir : ces montants servent de point de départ à l’exercice ' + PREV_ACTIVE.startYear + '.';
+
+  el.innerHTML = `
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Horizon</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">Nombre d'exercices projetés (1 à 10, 3 par défaut).</p>
+      <input type="number" min="1" max="10" value="${PREV_ACTIVE.horizonYears}" style="width:80px;padding:6px 8px;border:1px solid rgba(0,0,0,.14);border-radius:6px;font-size:13px;" onchange="pvSetHorizon(this.value)">
+    </div>
+
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Hypothèses générales</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;">
+        ${pvField('Taux de TVA', g.tauxTVA, `pvSetGlobal('tauxTVA',this.value,true)`, { pct: true })}
+        ${pvField('Délai clients', g.delaiClientJours, `pvSetGlobal('delaiClientJours',this.value,false)`, { suffix: 'jours', step: 1 })}
+        ${pvField('Délai fournisseurs', g.delaiFournisseurJours, `pvSetGlobal('delaiFournisseurJours',this.value,false)`, { suffix: 'jours', step: 1 })}
+        ${pvField('Délai de paiement TVA', g.delaiTVAJours, `pvSetGlobal('delaiTVAJours',this.value,false)`, { suffix: 'jours', step: 1 })}
+        ${pvField('Délai charges sociales', g.delaiChargesSocialesJours, `pvSetGlobal('delaiChargesSocialesJours',this.value,false)`, { suffix: 'jours', step: 1 })}
+        ${pvField('Délai de paiement IS', g.delaiISJours, `pvSetGlobal('delaiISJours',this.value,false)`, { suffix: 'jours', step: 1 })}
+        ${pvField('Taux d’IS', g.tauxIS, `pvSetGlobal('tauxIS',this.value,true)`, { pct: true })}
+      </div>
+    </div>
+
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Exercice de référence</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">${sourceNote}</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;">
+        ${pvField('Chiffre d’affaires', b.ca, `pvSetBase('ca',this.value)`)}
+        ${pvField('Charges externes', b.chargesExternes, `pvSetBase('chargesExternes',this.value)`)}
+        ${pvField('Masse salariale brute', b.masseSalariale, `pvSetBase('masseSalariale',this.value)`)}
+        ${pvField('Impôts et taxes', b.impotsTaxes, `pvSetBase('impotsTaxes',this.value)`)}
+        ${pvField('Dotation annuelle (parc existant)', o.dotationAnnuelleParcExistant, `pvSetOuverture('dotationAnnuelleParcExistant',this.value)`)}
+      </div>
+    </div>
+
+    <div class="drill-card" style="padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:14px;">Bilan d'ouverture</h3>
+      <p style="margin:0 0 12px;font-size:12px;color:#6b6960;">${PREV_ACTIVE.sourceDossierId ? 'Pré-rempli depuis le Bilan du dossier source.' : 'Situation de départ, avant le 1er exercice projeté (doit être équilibrée : actif = passif).'}</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;">
+        ${pvField('Immobilisations brutes', o.immobilisationsBrutes, `pvSetOuverture('immobilisationsBrutes',this.value)`)}
+        ${pvField('Amortissements cumulés', o.amortissementsCumules, `pvSetOuverture('amortissementsCumules',this.value)`)}
+        ${pvField('Stocks', o.stocks, `pvSetOuverture('stocks',this.value)`)}
+        ${pvField('Créances clients', o.creancesClients, `pvSetOuverture('creancesClients',this.value)`)}
+        ${pvField('Autres créances', o.autresCreances, `pvSetOuverture('autresCreances',this.value)`)}
+        ${pvField('Trésorerie', o.tresorerie, `pvSetOuverture('tresorerie',this.value)`)}
+        ${pvField('Capitaux propres', o.capitauxPropres, `pvSetOuverture('capitauxPropres',this.value)`)}
+        ${pvField('Provisions', o.provisions, `pvSetOuverture('provisions',this.value)`)}
+        ${pvField('Dettes financières', o.dettesFinancieres, `pvSetOuverture('dettesFinancieres',this.value)`)}
+        ${pvField('Dettes fournisseurs', o.dettesFournisseurs, `pvSetOuverture('dettesFournisseurs',this.value)`)}
+        ${pvField('Autres dettes', o.autresDettes, `pvSetOuverture('autresDettes',this.value)`)}
+      </div>
+    </div>
+
+    <div class="drill-card" style="padding:20px;overflow-x:auto;">
+      <h3 style="margin:0 0 12px;font-size:14px;">Hypothèses par exercice</h3>
+      <table class="dt" style="min-width:760px;">
+        <thead><tr>
+          <th>Exercice</th><th>Croiss. CA</th><th>Taux de marge</th><th>Croiss. charges ext.</th>
+          <th>Croiss. masse sal.</th><th>Taux charges patr.</th><th>Croiss. impôts/taxes</th><th>Stock (% CA)</th>
+        </tr></thead>
+        <tbody>
+          ${PREV_ACTIVE.hypotheses.parExercice.map((h, i) => `<tr>
+            <td style="font-weight:700;padding:6px 10px;">${h.annee}</td>
+            <td>${pvCellInput(h.croissanceCA, `pvSetExercice(${i},'croissanceCA',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.tauxMargeSurCA, `pvSetExercice(${i},'tauxMargeSurCA',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.croissanceChargesExternes, `pvSetExercice(${i},'croissanceChargesExternes',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.croissanceMasseSalariale, `pvSetExercice(${i},'croissanceMasseSalariale',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.tauxChargesPatronales, `pvSetExercice(${i},'tauxChargesPatronales',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.croissanceImpotsTaxes, `pvSetExercice(${i},'croissanceImpotsTaxes',this.value,true)`, true)}</td>
+            <td>${pvCellInput(h.tauxStockSurCA, `pvSetExercice(${i},'tauxStockSurCA',this.value,true)`, true)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ── Onglet Compte de résultat ────────────────────────────────────────────
+function renderPrevCR(results) {
+  const el = document.getElementById('pvpanel-cr');
+  if (!el) return;
+  const rows = [
+    ['Chiffre d’affaires', r => r.ca],
+    ['Marge brute', r => r.margeBrute],
+    ['Charges externes', r => -r.chargesExternes],
+    ['Charges de personnel (brut)', r => -r.masseSalariale],
+    ['Charges patronales', r => -r.chargesPatronales],
+    ['Impôts et taxes', r => -r.impotsTaxes],
+    ['= EBE', r => r.ebe, true],
+    ['Dotations aux amortissements', r => -r.dotations],
+    ['= Résultat d’exploitation', r => r.rex, true],
+    ['Résultat financier', r => r.resultatFinancier],
+    ['= Résultat courant avant impôt', r => r.rcai, true],
+    ['Impôt sur les sociétés', r => -r.is],
+    ['= Résultat net', r => r.resultatNet, true],
+  ];
+  el.innerHTML = pvExportBtn('exportPrevCRToCSV', 'Compte de résultat') + pvTable(rows, results.cr);
+}
+
+// ── Onglet Bilan ──────────────────────────────────────────────────────────
+function renderPrevBilan(results) {
+  const el = document.getElementById('pvpanel-bilan');
+  if (!el) return;
+  const actifRows = [
+    ['Immobilisations nettes', r => r.immobilisationsNettes],
+    ['Stocks', r => r.stocks],
+    ['Créances clients', r => r.creancesClients],
+    ['Créance de TVA', r => r.creanceTVA],
+    ['Autres créances', r => r.autresCreances],
+    ['Trésorerie', r => r.tresorerie],
+    ['= TOTAL ACTIF', r => r.totalActif, true],
+  ];
+  const passifRows = [
+    ['Capitaux propres', r => r.capitauxPropres],
+    ['Provisions', r => r.provisions],
+    ['Dettes financières', r => r.dettesFinancieres],
+    ['Dettes fournisseurs', r => r.dettesFournisseurs],
+    ['Dette de TVA', r => r.detteTVA],
+    ['Dette sociale', r => r.detteSociale],
+    ['Dette d’IS', r => r.detteIS],
+    ['Autres dettes', r => r.autresDettes],
+    ['= TOTAL PASSIF', r => r.totalPassif, true],
+  ];
+  const equilibre = results.bilan.every(b => Math.abs(b.ecart) < 1);
+  el.innerHTML = pvExportBtn('exportPrevBilanToCSV', 'Bilan')
+    + `<div style="margin-bottom:10px;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;background:${equilibre ? '#eaf3de' : '#fcebeb'};color:${equilibre ? '#3B6D11' : '#A32D2D'};">
+      ${equilibre ? '✓ Actif = Passif sur tous les exercices' : '⚠ Déséquilibre détecté — vérifiez le bilan d’ouverture dans l’onglet Hypothèses'}
+    </div>`
+    + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>${pvTable(actifRows, results.bilan)}</div>
+      <div>${pvTable(passifRows, results.bilan)}</div>
+    </div>`;
+}
+
+// ── Onglet Investissements (plan d'investissement + amortissements) ─────
+function pvAddInvestissement() {
+  PREV_ACTIVE.investissements.push({ id: 'inv-' + Date.now(), libelle: 'Nouvel investissement', annee: PREV_ACTIVE.startYear, mois: 1, montantHT: 0, dureeAns: 5 });
+  renderPrevisionnel();
+}
+function pvDeleteInvestissement(id) {
+  PREV_ACTIVE.investissements = PREV_ACTIVE.investissements.filter(i => i.id !== id);
+  renderPrevisionnel();
+}
+function pvSetInvestissement(id, key, raw) {
+  const inv = PREV_ACTIVE.investissements.find(i => i.id === id);
+  if (!inv) return;
+  if (key === 'libelle') inv[key] = raw;
+  else { const v = parseFloat(raw); inv[key] = Number.isFinite(v) ? v : 0; }
+  renderPrevisionnel();
+}
+function renderPvInvestissementsTable() {
+  const items = PREV_ACTIVE.investissements;
+  if (!items.length) return '<div class="std-empty">Aucun investissement.</div>';
+  const yearOptions = PREV_ACTIVE.hypotheses.parExercice.map(h => h.annee);
+  return `<table class="dt"><thead><tr><th>Libellé</th><th>Exercice</th><th>Mois</th><th class="r">Montant HT</th><th class="r">Durée (ans)</th><th></th></tr></thead><tbody>
+    ${items.map(inv => `<tr>
+      <td><input type="text" value="${escHtml(inv.libelle)}" style="width:100%;min-width:140px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetInvestissement('${inv.id}','libelle',this.value)"></td>
+      <td><select style="padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetInvestissement('${inv.id}','annee',this.value)">
+        ${yearOptions.map(y => `<option value="${y}" ${y === inv.annee ? 'selected' : ''}>${y}</option>`).join('')}
+      </select></td>
+      <td><input type="number" min="1" max="12" value="${inv.mois || 1}" style="width:55px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetInvestissement('${inv.id}','mois',this.value)"></td>
+      <td class="r"><input type="number" step="100" value="${inv.montantHT || 0}" style="width:100px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetInvestissement('${inv.id}','montantHT',this.value)"></td>
+      <td class="r"><input type="number" min="1" step="1" value="${inv.dureeAns || 5}" style="width:65px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetInvestissement('${inv.id}','dureeAns',this.value)"></td>
+      <td><span style="cursor:pointer;color:#A32D2D;font-size:12px;" onclick="pvDeleteInvestissement('${inv.id}')">✕</span></td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+function renderPrevInvestissements() {
+  const el = document.getElementById('pvpanel-inv');
+  if (!el) return;
+  el.innerHTML = `<div class="drill-card" style="padding:16px 20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h3 style="margin:0;font-size:14px;">Plan d’investissement</h3>
+      <button class="params-btn-secondary" style="margin:0;" onclick="pvAddInvestissement()">+ Ajouter un investissement</button>
+    </div>
+    <p style="font-size:12px;color:#6b6960;margin:0 0 12px;">Amortissement linéaire calculé automatiquement (dotation pleine dès l’exercice d’acquisition).</p>
+    <div style="overflow-x:auto;">${renderPvInvestissementsTable()}</div>
+  </div>`;
+}
+
+// ── Onglet Financement (emprunts + apports + plan de financement) ───────
+function pvAddEmprunt() {
+  PREV_ACTIVE.emprunts.push({ id: 'emp-' + Date.now(), libelle: 'Nouvel emprunt', montant: 0, tauxAnnuel: 0.03, dureeAns: 5, annee: PREV_ACTIVE.startYear, mois: 1, differeMois: 0, typeAmortissement: 'annuite' });
+  renderPrevisionnel();
+}
+function pvDeleteEmprunt(id) {
+  PREV_ACTIVE.emprunts = PREV_ACTIVE.emprunts.filter(e => e.id !== id);
+  renderPrevisionnel();
+}
+function pvSetEmprunt(id, key, raw) {
+  const emp = PREV_ACTIVE.emprunts.find(e => e.id === id);
+  if (!emp) return;
+  if (key === 'libelle' || key === 'typeAmortissement') emp[key] = raw;
+  else if (key === 'tauxAnnuel') { const v = parseFloat(raw); emp[key] = Number.isFinite(v) ? v / 100 : 0; }
+  else { const v = parseFloat(raw); emp[key] = Number.isFinite(v) ? v : 0; }
+  renderPrevisionnel();
+}
+function renderPvEmpruntsTable() {
+  const items = PREV_ACTIVE.emprunts;
+  if (!items.length) return '<div class="std-empty">Aucun emprunt.</div>';
+  const yearOptions = PREV_ACTIVE.hypotheses.parExercice.map(h => h.annee);
+  return `<table class="dt"><thead><tr><th>Libellé</th><th>Exercice</th><th>Mois</th><th class="r">Montant</th><th class="r">Taux</th><th class="r">Durée</th><th class="r">Différé</th><th>Type</th><th></th></tr></thead><tbody>
+    ${items.map(emp => `<tr>
+      <td><input type="text" value="${escHtml(emp.libelle)}" style="width:120px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetEmprunt('${emp.id}','libelle',this.value)"></td>
+      <td><select style="padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetEmprunt('${emp.id}','annee',this.value)">
+        ${yearOptions.map(y => `<option value="${y}" ${y === emp.annee ? 'selected' : ''}>${y}</option>`).join('')}
+      </select></td>
+      <td><input type="number" min="1" max="12" value="${emp.mois || 1}" style="width:50px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetEmprunt('${emp.id}','mois',this.value)"></td>
+      <td class="r"><input type="number" step="100" value="${emp.montant || 0}" style="width:90px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetEmprunt('${emp.id}','montant',this.value)"></td>
+      <td class="r"><input type="number" step="0.1" value="${round2((emp.tauxAnnuel || 0) * 100)}" style="width:60px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetEmprunt('${emp.id}','tauxAnnuel',this.value)"> %</td>
+      <td class="r"><input type="number" min="1" step="1" value="${emp.dureeAns || 5}" style="width:55px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetEmprunt('${emp.id}','dureeAns',this.value)"></td>
+      <td class="r"><input type="number" min="0" step="1" value="${emp.differeMois || 0}" style="width:55px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetEmprunt('${emp.id}','differeMois',this.value)"></td>
+      <td><select style="padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetEmprunt('${emp.id}','typeAmortissement',this.value)">
+        <option value="annuite" ${emp.typeAmortissement === 'annuite' ? 'selected' : ''}>Annuités constantes</option>
+        <option value="constant" ${emp.typeAmortissement === 'constant' ? 'selected' : ''}>Capital constant</option>
+        <option value="infine" ${emp.typeAmortissement === 'infine' ? 'selected' : ''}>In fine</option>
+      </select></td>
+      <td><span style="cursor:pointer;color:#A32D2D;font-size:12px;" onclick="pvDeleteEmprunt('${emp.id}')">✕</span></td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+function pvAddApport() {
+  PREV_ACTIVE.apports.push({ id: 'app-' + Date.now(), libelle: 'Apport', montant: 0, annee: PREV_ACTIVE.startYear, mois: 1, type: 'capital' });
+  renderPrevisionnel();
+}
+function pvDeleteApport(id) {
+  PREV_ACTIVE.apports = PREV_ACTIVE.apports.filter(a => a.id !== id);
+  renderPrevisionnel();
+}
+function pvSetApport(id, key, raw) {
+  const ap = PREV_ACTIVE.apports.find(a => a.id === id);
+  if (!ap) return;
+  if (key === 'libelle' || key === 'type') ap[key] = raw;
+  else { const v = parseFloat(raw); ap[key] = Number.isFinite(v) ? v : 0; }
+  renderPrevisionnel();
+}
+function renderPvApportsTable() {
+  const items = PREV_ACTIVE.apports;
+  if (!items.length) return '<div class="std-empty">Aucun apport.</div>';
+  const yearOptions = PREV_ACTIVE.hypotheses.parExercice.map(h => h.annee);
+  return `<table class="dt"><thead><tr><th>Libellé</th><th>Type</th><th>Exercice</th><th>Mois</th><th class="r">Montant</th><th></th></tr></thead><tbody>
+    ${items.map(ap => `<tr>
+      <td><input type="text" value="${escHtml(ap.libelle)}" style="width:140px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetApport('${ap.id}','libelle',this.value)"></td>
+      <td><select style="padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetApport('${ap.id}','type',this.value)">
+        <option value="capital" ${ap.type === 'capital' ? 'selected' : ''}>Capital</option>
+        <option value="ccA" ${ap.type === 'ccA' ? 'selected' : ''}>Compte courant d’associé</option>
+      </select></td>
+      <td><select style="padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetApport('${ap.id}','annee',this.value)">
+        ${yearOptions.map(y => `<option value="${y}" ${y === ap.annee ? 'selected' : ''}>${y}</option>`).join('')}
+      </select></td>
+      <td><input type="number" min="1" max="12" value="${ap.mois || 1}" style="width:50px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;" onchange="pvSetApport('${ap.id}','mois',this.value)"></td>
+      <td class="r"><input type="number" step="100" value="${ap.montant || 0}" style="width:100px;padding:4px 6px;border:1px solid rgba(0,0,0,.14);border-radius:5px;font-size:12px;text-align:right;" onchange="pvSetApport('${ap.id}','montant',this.value)"></td>
+      <td><span style="cursor:pointer;color:#A32D2D;font-size:12px;" onclick="pvDeleteApport('${ap.id}')">✕</span></td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+function renderPrevFinancement(results) {
+  const el = document.getElementById('pvpanel-fin');
+  if (!el) return;
+  const planRows = [
+    ['CAF', r => r.caf],
+    ['Apports', r => r.apports],
+    ['Nouveaux emprunts', r => r.nouveauxEmprunts],
+    ['= Ressources', r => r.ressources, true],
+    ['Investissements', r => r.investissements],
+    ['Remboursements d’emprunts', r => r.remboursementsEmprunts],
+    ['Variation du BFR', r => r.deltaBFR],
+    ['= Emplois', r => r.emplois, true],
+    ['= Variation de trésorerie', r => r.variationTresorerie, true],
+  ];
+  el.innerHTML = `
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <h3 style="margin:0;font-size:14px;">Emprunts</h3>
+        <button class="params-btn-secondary" style="margin:0;" onclick="pvAddEmprunt()">+ Ajouter un emprunt</button>
+      </div>
+      <div style="overflow-x:auto;">${renderPvEmpruntsTable()}</div>
+    </div>
+    <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <h3 style="margin:0;font-size:14px;">Apports</h3>
+        <button class="params-btn-secondary" style="margin:0;" onclick="pvAddApport()">+ Ajouter un apport</button>
+      </div>
+      <div style="overflow-x:auto;">${renderPvApportsTable()}</div>
+    </div>
+    ${pvExportBtn('exportPrevFinancementToCSV', 'Plan de financement')}
+    ${pvTable(planRows, results.planFinancement)}
+  `;
+}
+
+// ── Onglet Trésorerie (plan mensuel) ─────────────────────────────────────
+function renderPrevTresorerie(results) {
+  const el = document.getElementById('pvpanel-treso');
+  if (!el) return;
+  const MOIS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  const rows = results.tresorerieMensuelle.map(m => {
+    const encaissements = m.encaissementsClients + m.apports + m.tirageEmprunts;
+    const decaissements = m.decaissementsFournisseurs + m.decaissementsTVA + m.decaissementsChargesSociales
+      + m.decaissementIS + m.decaissementsImpotsTaxes + m.decaissementsVariationStock + m.salaires
+      + m.investissements + m.remboursementsEmprunts + m.interetsEmprunts;
+    return { ...m, encaissements, decaissements };
+  });
+  el.innerHTML = pvExportBtn('exportPrevTresorerieToCSV', 'Plan de trésorerie mensuel')
+    + `<div class="drill-card" style="overflow:auto;max-height:600px;">
+      <table class="dt"><thead style="position:sticky;top:0;background:#fff;z-index:1;"><tr>
+        <th>Mois</th><th class="r">Encaissements</th><th class="r">Décaissements</th><th class="r">Flux net</th><th class="r">Solde fin de mois</th>
+      </tr></thead><tbody>
+        ${rows.map(m => `<tr>
+          <td style="padding:7px 16px;">${MOIS_FR[m.mois - 1]} ${m.annee}</td>
+          <td class="r" style="padding:7px 16px;">${fmtV(m.encaissements)}</td>
+          <td class="r" style="padding:7px 16px;">${fmtV(m.decaissements)}</td>
+          <td class="r" style="padding:7px 16px;color:${m.fluxNet < 0 ? '#A32D2D' : '#3B6D11'};">${fmtV(m.fluxNet)}</td>
+          <td class="r" style="padding:7px 16px;font-weight:700;color:${m.soldeFin < 0 ? '#A32D2D' : '#1a1916'};">${fmtV(m.soldeFin)}</td>
+        </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+}
+
+// ── Onglet Indicateurs ────────────────────────────────────────────────────
+function renderPrevIndicateurs(results) {
+  const el = document.getElementById('pvpanel-ind');
+  if (!el) return;
+  el.innerHTML = `<div class="drill-card" style="overflow-x:auto;"><table class="dt"><thead><tr>
+      <th style="width:30%">Indicateur</th>${results.indicateurs.map(i => `<th class="r">${i.annee}</th>`).join('')}
+    </tr></thead><tbody>
+      <tr><td style="padding:9px 16px;">Seuil de rentabilité (CA)</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${i.seuilRentabilite !== null ? fmtV(i.seuilRentabilite) : '—'}</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">Atteint en</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${i.dateAtteinteSeuilMois ? ('mois ' + i.dateAtteinteSeuilMois) : '—'}</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">BFR</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${fmtV(i.bfr)}</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">CAF</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${fmtV(i.caf)}</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">Taux de marge brute</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${(i.margeBrutePct * 100).toFixed(1)} %</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">Taux d’EBE</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${(i.ebePct * 100).toFixed(1)} %</td>`).join('')}</tr>
+      <tr><td style="padding:9px 16px;">Taux de résultat net</td>${results.indicateurs.map(i => `<td class="r" style="padding:9px 16px;">${(i.resultatNetPct * 100).toFixed(1)} %</td>`).join('')}</tr>
+    </tbody></table></div>`;
+}
+
+// ── Exports CSV ────────────────────────────────────────────────────────
+function exportPrevCRToCSV() {
+  if (!PREV_ACTIVE || !PREV_RESULTS) return;
+  const lines = [
+    ['Chiffre d’affaires', r => r.ca], ['Marge brute', r => r.margeBrute], ['Charges externes', r => -r.chargesExternes],
+    ['Charges de personnel (brut)', r => -r.masseSalariale], ['Charges patronales', r => -r.chargesPatronales],
+    ['Impôts et taxes', r => -r.impotsTaxes], ['EBE', r => r.ebe], ['Dotations aux amortissements', r => -r.dotations],
+    ['Résultat d’exploitation', r => r.rex], ['Résultat financier', r => r.resultatFinancier],
+    ['Résultat courant avant impôt', r => r.rcai], ['Impôt sur les sociétés', r => -r.is], ['Résultat net', r => r.resultatNet],
+  ];
+  const rows = [['Poste', ...PREV_RESULTS.cr.map(r => r.annee)]];
+  lines.forEach(([label, fn]) => rows.push([label, ...PREV_RESULTS.cr.map(r => fn(r).toFixed(2))]));
+  downloadTextFile(`Previsionnel_CR_${safeFilePart(PREV_ACTIVE.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV du Compte de résultat prévisionnel téléchargé');
+}
+function exportPrevBilanToCSV() {
+  if (!PREV_ACTIVE || !PREV_RESULTS) return;
+  const lines = [
+    ['Immobilisations nettes', r => r.immobilisationsNettes], ['Stocks', r => r.stocks], ['Créances clients', r => r.creancesClients],
+    ['Créance de TVA', r => r.creanceTVA], ['Autres créances', r => r.autresCreances], ['Trésorerie', r => r.tresorerie],
+    ['TOTAL ACTIF', r => r.totalActif], ['Capitaux propres', r => r.capitauxPropres], ['Provisions', r => r.provisions],
+    ['Dettes financières', r => r.dettesFinancieres], ['Dettes fournisseurs', r => r.dettesFournisseurs],
+    ['Dette de TVA', r => r.detteTVA], ['Dette sociale', r => r.detteSociale], ['Dette d’IS', r => r.detteIS],
+    ['Autres dettes', r => r.autresDettes], ['TOTAL PASSIF', r => r.totalPassif],
+  ];
+  const rows = [['Poste', ...PREV_RESULTS.bilan.map(r => r.annee)]];
+  lines.forEach(([label, fn]) => rows.push([label, ...PREV_RESULTS.bilan.map(r => fn(r).toFixed(2))]));
+  downloadTextFile(`Previsionnel_Bilan_${safeFilePart(PREV_ACTIVE.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV du Bilan prévisionnel téléchargé');
+}
+function exportPrevFinancementToCSV() {
+  if (!PREV_ACTIVE || !PREV_RESULTS) return;
+  const lines = [
+    ['CAF', r => r.caf], ['Apports', r => r.apports], ['Nouveaux emprunts', r => r.nouveauxEmprunts], ['Ressources', r => r.ressources],
+    ['Investissements', r => r.investissements], ['Remboursements d’emprunts', r => r.remboursementsEmprunts],
+    ['Variation du BFR', r => r.deltaBFR], ['Emplois', r => r.emplois], ['Variation de trésorerie', r => r.variationTresorerie],
+  ];
+  const rows = [['Poste', ...PREV_RESULTS.planFinancement.map(r => r.annee)]];
+  lines.forEach(([label, fn]) => rows.push([label, ...PREV_RESULTS.planFinancement.map(r => fn(r).toFixed(2))]));
+  downloadTextFile(`Previsionnel_Financement_${safeFilePart(PREV_ACTIVE.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV du Plan de financement téléchargé');
+}
+function exportPrevTresorerieToCSV() {
+  if (!PREV_ACTIVE || !PREV_RESULTS) return;
+  const rows = [['Année', 'Mois', 'Encaissements clients', 'Décaissements fournisseurs', 'Décaissements TVA',
+    'Décaissements charges sociales', 'Décaissement IS', 'Décaissements impôts/taxes', 'Décaissements variation stock',
+    'Salaires', 'Investissements', 'Tirage emprunts', 'Remboursements emprunts', 'Intérêts emprunts', 'Flux net', 'Solde fin de mois']];
+  PREV_RESULTS.tresorerieMensuelle.forEach(m => rows.push([
+    m.annee, m.mois, m.encaissementsClients.toFixed(2), m.decaissementsFournisseurs.toFixed(2), m.decaissementsTVA.toFixed(2),
+    m.decaissementsChargesSociales.toFixed(2), m.decaissementIS.toFixed(2), m.decaissementsImpotsTaxes.toFixed(2),
+    m.decaissementsVariationStock.toFixed(2), m.salaires.toFixed(2), m.investissements.toFixed(2), m.tirageEmprunts.toFixed(2),
+    m.remboursementsEmprunts.toFixed(2), m.interetsEmprunts.toFixed(2), m.fluxNet.toFixed(2), m.soldeFin.toFixed(2),
+  ]));
+  downloadTextFile(`Previsionnel_Tresorerie_${safeFilePart(PREV_ACTIVE.name)}.csv`, csvFromRows(rows), 'text/csv');
+  toast('Export CSV du Plan de trésorerie téléchargé');
 }
 
 // ── MODULE TNS — écran liste ─────────────────────────────────────────────

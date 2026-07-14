@@ -91,6 +91,9 @@ reportResults('Multi-exercices', require('./test_multi_exercices.js').run(htmlPa
 section('11. Grand livre — détail par compte');
 reportResults('Grand livre', require('./test_grand_livre.js').run(htmlPath));
 
+section('12. Prévisionnel — moteur de calcul (PrevisionnelEngine)');
+reportResults('Prévisionnel', require('./test_previsionnel_engine.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
