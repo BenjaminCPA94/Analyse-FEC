@@ -4,6 +4,46 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Chantier SaaS multi-tenant : audit complet + Phase 1 (stabilisation) + Phase 2 (couche de stockage abstraite)
+
+- **`SAAS_ARCHITECTURE.md`** (nouveau) : audit exhaustif de l'existant
+  (stack, 5 modules, 8 clés `localStorage` inventoriées, fonctions de
+  stockage, parseur FEC, sécurité XSS déjà en place), architecture cible
+  (Supabase — PostgreSQL + Auth + Storage + RLS, justifiée par comparaison
+  avec les alternatives), modèle de données multi-tenant complet
+  (organizations/dossier_permissions/exercises/fec_files/audit_logs...),
+  décision argumentée sur la granularité de stockage des gros FEC (fichier
+  privé + balance agrégée, jamais l'écriture individuelle en base — cohérent
+  avec le choix déjà fait aujourd'hui côté `localStorage`, où le grand livre
+  n'est jamais persisté), stratégie de migration des données locales
+  (jamais de suppression avant confirmation explicite du succès), et ordre
+  de travail sur 12 phases. Point de transparence : cet environnement de
+  développement n'a pas d'accès réseau externe — aucun projet Supabase ne
+  peut être créé ni connecté depuis cette session ; les phases 3 et
+  suivantes nécessitent un projet et des identifiants côté utilisateur.
+- **Phase 2 implémentée** : `createLocalStorageRepository(config)`,
+  générateur générique d'interface CRUD (`get/list/save/remove`) qui
+  remplace les 4 quintets dupliqués `loadXStore/saveXStore/saveX/
+  deleteXById/listX` des modules Prévisionnel, TNS, Rémunération et IRPP
+  (le module Dossiers, de forme différente, n'est pas concerné). **Aucun
+  changement de comportement** : mêmes clés `localStorage`, mêmes formats
+  JSON, mêmes messages d'erreur/toast, même gestion de
+  `QuotaExceededError` quand elle existait déjà — vérifié par relecture
+  après un rechargement complet de page en navigateur headless. Décision
+  documentée de ne **pas** extraire ce code vers de vrais fichiers
+  `src/storage/*.js` dès maintenant : `tests/harness.js` n'exécute que le
+  `<script>` inline unique du fichier HTML, et l'application est encore
+  ouverte directement en `file://` sans serveur — un split prématuré
+  aurait cassé silencieusement les 326 tests existants sans aucun
+  bénéfice tant qu'aucun backend ne justifie une étape de build.
+- 26 nouveaux tests (`tests/test_storage_repository.js`) : contrat
+  générique (get/list/save/remove, tri, JSON corrompu géré sans
+  exception), présence du repository sur les 4 modules migrés, et
+  non-régression stricte des anciennes fonctions sur les 4 clés
+  `localStorage` concernées — 352 tests au total, tous verts. Vérifié en
+  navigateur headless (Playwright) : création/liste dans les 4 modules,
+  persistance après rechargement complet de la page.
+
 ## v6 — Rémunération dirigeant : recommandation explicite de la meilleure forme juridique
 
 - **Objectif utilisateur** : disposer d'un outil qui indique directement

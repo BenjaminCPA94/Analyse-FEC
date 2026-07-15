@@ -4718,44 +4718,83 @@ const PrevisionnelEngine = (function () {
 })();
 
 // ═══════════════════════════════════════════════════════════════════════
+// ── COUCHE DE STOCKAGE — REPOSITORY GÉNÉRIQUE (cf. SAAS_ARCHITECTURE.md §3.4/§10) ─
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * createLocalStorageRepository(config) — génère l'interface CRUD commune
+ * ({get, list, save, remove}) qui remplace les quintets dupliqués
+ * loadXStore/saveXStore/saveX/deleteXById/listX auparavant réécrits dans
+ * chaque module (Prévisionnel, TNS, Rémunération, IRPP — même store
+ * "map d'enregistrements par id" dans localStorage). Comportement
+ * strictement identique à l'ancien code : mêmes clés, mêmes formats JSON,
+ * mêmes messages, même gestion de QuotaExceededError quand elle existait.
+ *
+ * Cette interface est délibérément celle qu'un futur repository cloud
+ * (Supabase) devra offrir : le jour où un backend existe, seule
+ * l'implémentation de ce générateur change (ou un adapter équivalent la
+ * remplace), aucun écran ni fonction métier n'a besoin d'être modifié.
+ * Le module Dossiers (ACTIVE/STORE_KEY) n'est volontairement pas concerné
+ * par ce générateur : sa forme de stockage est différente (un seul objet
+ * `bal`/`libs`/`months`/`exercices` par dossier, avec une transformation
+ * spécifique excluant le grand livre avant sauvegarde — cf.
+ * `saveActiveDossier()`) et sera traité séparément si besoin.
+ *
+ * @param {object} cfg
+ * @param {string} cfg.storeKey - clé localStorage.
+ * @param {string} cfg.logPrefix - préfixe des logs console, ex. "[TNS]".
+ * @param {string} cfg.corruptWarnSuffix - texte après logPrefix dans le console.warn de lecture corrompue.
+ * @param {string} cfg.corruptToastMessage - message toast affiché si le JSON stocké est illisible.
+ * @param {string} cfg.saveErrorPrefix - préfixe du message toast d'échec de sauvegarde (avant les deux-points).
+ * @param {string} [cfg.quotaToastMessage] - message toast spécifique si QuotaExceededError (sinon message générique de saveErrorPrefix).
+ * @param {string} cfg.saveErrorLogLabel - nom de fonction affiché dans le console.error d'échec de sauvegarde.
+ */
+function createLocalStorageRepository(cfg) {
+  function loadAll() {
+    try { return JSON.parse(localStorage.getItem(cfg.storeKey) || '{}'); }
+    catch (e) {
+      console.warn(`${cfg.logPrefix} ${cfg.corruptWarnSuffix}`, e);
+      toast(cfg.corruptToastMessage, true);
+      return {};
+    }
+  }
+  function saveAll(data) {
+    try { localStorage.setItem(cfg.storeKey, JSON.stringify(data)); return true; }
+    catch (e) {
+      if (cfg.quotaToastMessage && e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+        toast(cfg.quotaToastMessage, true);
+      } else {
+        toast(`${cfg.saveErrorPrefix} : ` + (e && e.message ? e.message : 'erreur inconnue'), true);
+      }
+      console.error(`${cfg.logPrefix} ${cfg.saveErrorLogLabel}() a échoué :`, e);
+      return false;
+    }
+  }
+  return {
+    loadAll, saveAll,
+    get(id) { return loadAll()[id] || null; },
+    list() { return Object.values(loadAll()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); },
+    save(record) { record.updatedAt = Date.now(); const store = loadAll(); store[record.id] = record; return saveAll(store); },
+    remove(id) { const store = loadAll(); delete store[id]; return saveAll(store); },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // ── MODULE PRÉVISIONNEL — STOCKAGE ───────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
 const PREV_STORE_KEY = 'fec_analyse_previsionnels_v1';
 
-function loadPrevStore() {
-  try { return JSON.parse(localStorage.getItem(PREV_STORE_KEY) || '{}'); }
-  catch (e) {
-    console.warn('[Prévisionnel] localStorage illisible (JSON corrompu) :', e);
-    toast('Stockage des prévisionnels illisible — les prévisionnels précédents sont peut-être perdus', true);
-    return {};
-  }
-}
-function savePrevStore(data) {
-  try { localStorage.setItem(PREV_STORE_KEY, JSON.stringify(data)); return true; }
-  catch (e) {
-    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
-      toast('Stockage plein : supprimez un prévisionnel avant de continuer', true);
-    } else {
-      toast('Échec de sauvegarde du prévisionnel : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
-    }
-    console.error('[Prévisionnel] savePrevStore() a échoué :', e);
-    return false;
-  }
-}
-function savePrevisionnel(record) {
-  record.updatedAt = Date.now();
-  const store = loadPrevStore();
-  store[record.id] = record;
-  savePrevStore(store);
-}
-function deletePrevisionnelById(id) {
-  const store = loadPrevStore();
-  delete store[id];
-  savePrevStore(store);
-}
-function listPrevisionnels() {
-  return Object.values(loadPrevStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-}
+const PrevisionnelRepository = createLocalStorageRepository({
+  storeKey: PREV_STORE_KEY, logPrefix: '[Prévisionnel]',
+  corruptWarnSuffix: 'localStorage illisible (JSON corrompu) :',
+  corruptToastMessage: 'Stockage des prévisionnels illisible — les prévisionnels précédents sont peut-être perdus',
+  saveErrorPrefix: 'Échec de sauvegarde du prévisionnel', saveErrorLogLabel: 'savePrevStore',
+  quotaToastMessage: 'Stockage plein : supprimez un prévisionnel avant de continuer',
+});
+function loadPrevStore() { return PrevisionnelRepository.loadAll(); }
+function savePrevStore(data) { return PrevisionnelRepository.saveAll(data); }
+function savePrevisionnel(record) { PrevisionnelRepository.save(record); }
+function deletePrevisionnelById(id) { PrevisionnelRepository.remove(id); }
+function listPrevisionnels() { return PrevisionnelRepository.list(); }
 
 // ── Modèle par défaut (hypothèses jamais codées en dur dans le moteur —
 //    uniquement des valeurs initiales éditables) ─────────────────────────
@@ -5932,36 +5971,17 @@ function tnsDupliquerAnneeCaisses(anneeSource, anneeCible) {
 // ── MODULE TNS — STOCKAGE ─────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
 const TNS_STORE_KEY = 'fec_analyse_tns_v1';
-function loadTnsStore() {
-  try { return JSON.parse(localStorage.getItem(TNS_STORE_KEY) || '{}'); }
-  catch (e) {
-    console.warn('[TNS] localStorage illisible (JSON corrompu) :', e);
-    toast('Stockage des calculs TNS illisible', true);
-    return {};
-  }
-}
-function saveTnsStore(data) {
-  try { localStorage.setItem(TNS_STORE_KEY, JSON.stringify(data)); return true; }
-  catch (e) {
-    toast('Échec de sauvegarde du calcul TNS : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
-    console.error('[TNS] saveTnsStore() a échoué :', e);
-    return false;
-  }
-}
-function saveTns(record) {
-  record.updatedAt = Date.now();
-  const store = loadTnsStore();
-  store[record.id] = record;
-  saveTnsStore(store);
-}
-function deleteTnsById(id) {
-  const store = loadTnsStore();
-  delete store[id];
-  saveTnsStore(store);
-}
-function listTns() {
-  return Object.values(loadTnsStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-}
+const TnsRepository = createLocalStorageRepository({
+  storeKey: TNS_STORE_KEY, logPrefix: '[TNS]',
+  corruptWarnSuffix: 'localStorage illisible (JSON corrompu) :',
+  corruptToastMessage: 'Stockage des calculs TNS illisible',
+  saveErrorPrefix: 'Échec de sauvegarde du calcul TNS', saveErrorLogLabel: 'saveTnsStore',
+});
+function loadTnsStore() { return TnsRepository.loadAll(); }
+function saveTnsStore(data) { return TnsRepository.saveAll(data); }
+function saveTns(record) { TnsRepository.save(record); }
+function deleteTnsById(id) { TnsRepository.remove(id); }
+function listTns() { return TnsRepository.list(); }
 function creerTnsVierge() {
   return {
     id: 'tns-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
@@ -6938,17 +6958,17 @@ const FORME_JURIDIQUE_LABELS = {
   eurl_ir: 'EURL (IR)', ei_ir: 'Entreprise individuelle (IR)', ei_is: 'Entreprise individuelle (option IS)',
 };
 const FORMES_IR = ['eurl_ir', 'ei_ir'];
-function loadRemuStore() {
-  try { return JSON.parse(localStorage.getItem(REMU_STORE_KEY) || '{}'); }
-  catch (e) { console.warn('[Rémunération] localStorage illisible :', e); toast('Stockage des simulations de rémunération illisible', true); return {}; }
-}
-function saveRemuStore(data) {
-  try { localStorage.setItem(REMU_STORE_KEY, JSON.stringify(data)); return true; }
-  catch (e) { toast('Échec de sauvegarde de la simulation : ' + (e && e.message || 'erreur inconnue'), true); console.error('[Rémunération] saveRemuStore() a échoué :', e); return false; }
-}
-function saveRemu(record) { record.updatedAt = Date.now(); const store = loadRemuStore(); store[record.id] = record; saveRemuStore(store); }
-function deleteRemuById(id) { const store = loadRemuStore(); delete store[id]; saveRemuStore(store); }
-function listRemu() { return Object.values(loadRemuStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); }
+const RemuRepository = createLocalStorageRepository({
+  storeKey: REMU_STORE_KEY, logPrefix: '[Rémunération]',
+  corruptWarnSuffix: 'localStorage illisible :',
+  corruptToastMessage: 'Stockage des simulations de rémunération illisible',
+  saveErrorPrefix: 'Échec de sauvegarde de la simulation', saveErrorLogLabel: 'saveRemuStore',
+});
+function loadRemuStore() { return RemuRepository.loadAll(); }
+function saveRemuStore(data) { return RemuRepository.saveAll(data); }
+function saveRemu(record) { RemuRepository.save(record); }
+function deleteRemuById(id) { RemuRepository.remove(id); }
+function listRemu() { return RemuRepository.list(); }
 
 function creerRemuVierge(name) {
   return {
@@ -7845,17 +7865,17 @@ function rechercherCasesIrpp(requete) {
 // ── MODULE IRPP — STOCKAGE ────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
 const IRPP_STORE_KEY = 'fec_analyse_irpp_v1';
-function loadIrppStore() {
-  try { return JSON.parse(localStorage.getItem(IRPP_STORE_KEY) || '{}'); }
-  catch (e) { console.warn('[IRPP] localStorage illisible :', e); toast('Stockage des déclarations IRPP illisible', true); return {}; }
-}
-function saveIrppStore(data) {
-  try { localStorage.setItem(IRPP_STORE_KEY, JSON.stringify(data)); return true; }
-  catch (e) { toast('Échec de sauvegarde de la déclaration : ' + (e && e.message || 'erreur inconnue'), true); console.error('[IRPP] saveIrppStore() a échoué :', e); return false; }
-}
-function saveIrpp(record) { record.updatedAt = Date.now(); const store = loadIrppStore(); store[record.id] = record; saveIrppStore(store); }
-function deleteIrppById(id) { const store = loadIrppStore(); delete store[id]; saveIrppStore(store); }
-function listIrpp() { return Object.values(loadIrppStore()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); }
+const IrppRepository = createLocalStorageRepository({
+  storeKey: IRPP_STORE_KEY, logPrefix: '[IRPP]',
+  corruptWarnSuffix: 'localStorage illisible :',
+  corruptToastMessage: 'Stockage des déclarations IRPP illisible',
+  saveErrorPrefix: 'Échec de sauvegarde de la déclaration', saveErrorLogLabel: 'saveIrppStore',
+});
+function loadIrppStore() { return IrppRepository.loadAll(); }
+function saveIrppStore(data) { return IrppRepository.saveAll(data); }
+function saveIrpp(record) { IrppRepository.save(record); }
+function deleteIrppById(id) { IrppRepository.remove(id); }
+function listIrpp() { return IrppRepository.list(); }
 
 function creerIrppVierge(name) {
   return {

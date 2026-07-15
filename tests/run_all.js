@@ -106,6 +106,9 @@ reportResults('IRPP', require('./test_irpp_engine.js').run(htmlPath));
 section('16. TNS — caisses professionnelles paramétrables (TNS_CAISSES_DEFAUT)');
 reportResults('TNS caisses', require('./test_tns_caisses.js').run(htmlPath));
 
+section('17. Couche de stockage — repository générique (createLocalStorageRepository)');
+reportResults('Storage repository', require('./test_storage_repository.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
