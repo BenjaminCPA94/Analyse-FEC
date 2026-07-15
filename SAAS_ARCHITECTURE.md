@@ -263,16 +263,25 @@ Points clés :
   décision argumentée en §3.6, cohérente avec le choix déjà fait côté
   `localStorage` aujourd'hui.
 
-### 3.3 Politiques RLS (principe, pas encore implémenté dans ce commit)
+### 3.3 Politiques RLS — implémentées (`supabase/migrations/20260715000008_rls_policies.sql`)
 
-Chaque table métier : `organization_id = (select organization_id from
-organization_members where user_id = auth.uid() and status = 'active')`
-**et**, pour les tables liées à un dossier, une politique additionnelle
-vérifiant `dossier_permissions.permission_level != 'none'` pour l'utilisateur
-courant sur ce `dossier_id` précis. Deux niveaux de policy empilés
-(organisation, puis dossier) — jamais un seul niveau, pour respecter
-strictement §8 de la demande (accès par dossier, pas seulement par
-cabinet).
+Chaque table métier applique deux niveaux de policy empilés — jamais un
+seul, pour respecter strictement §8 de la demande (accès par dossier, pas
+seulement par cabinet) :
+1. **Niveau cabinet** : `is_active_member_of(organization_id)`.
+2. **Niveau dossier** (tables liées à un dossier) : `has_dossier_access(dossier_id, 'read'|'write'|'manage')`,
+   qui traite un administrateur de cabinet comme ayant de facto un accès
+   `'manage'` à tous les dossiers de son cabinet (§7), et tout autre rôle
+   comme strictement dépendant de `dossier_permissions`.
+
+Détail technique important, documenté en commentaire dans la migration :
+les fonctions d'autorisation (`is_active_member_of`, `is_admin_of`,
+`has_dossier_access`...) sont `security definer`, la seule dérogation
+volontaire à la RLS dans tout le schéma — nécessaire pour éviter une
+récursion RLS infinie sur `organization_members` (motif standard et
+documenté de Supabase), et vérifiée automatiquement par
+`tests/test_supabase_schema.js` (aucune de ces fonctions ne doit
+redevenir un accès non contrôlé).
 
 ### 3.4 Couche d'abstraction du stockage (le cœur de la Phase 2, implémentée dans ce commit)
 
@@ -354,37 +363,59 @@ backend et l'auth soient stables — ce n'est pas un prérequis des phases
 
 ---
 
-## 4. Fichiers à créer
+## 4. Fichiers créés (mis à jour au fil des livraisons)
 
 ```
-SAAS_ARCHITECTURE.md              -- ce document (créé)
-tests/test_storage_repository.js  -- Phase 2 (créé dans ce commit)
+SAAS_ARCHITECTURE.md                 -- ce document
+SETUP_SUPABASE.md                    -- guide non-développeur (création de compte/projet Supabase)
+.env.example                         -- variables publiques uniquement (URL + anon key), jamais service_role
 
--- Écrits mais non applicables tant qu'aucun projet Supabase n'existe (§9) :
 supabase/
-  config.toml
-  migrations/
-    0001_organizations_and_auth.sql
-    0002_dossiers_and_permissions.sql
-    0003_exercises_and_fec_files.sql
-    0004_module_data.sql          -- previsionnels/tns/remuneration/irpp
-    0005_audit_and_versioning.sql
-    0006_rls_policies.sql
+  config.toml                        -- scaffold CLI Supabase (project_id à renseigner, aucun secret)
+  migrations/                        -- écrites et relues, NON appliquées (aucun projet réel, §9)
+    20260715000001_extensions_and_helpers.sql
+    20260715000002_organizations_and_members.sql
+    20260715000003_dossiers_and_permissions.sql
+    20260715000004_exercises_and_fec_data.sql
+    20260715000005_module_data.sql
+    20260715000006_audit_and_versioning.sql
+    20260715000007_storage_fec_files.sql
+    20260715000008_rls_policies.sql
+  functions/
+    invite-collaborator/index.ts     -- Edge Function (Deno), écrite mais NON déployée/testée (§9)
+  tests/
+    tenant_isolation.sql             -- tests RLS réels (cabinet A ne voit jamais cabinet B, permissions par dossier), écrits mais NON exécutés (§9) — prêts à lancer via `psql $DATABASE_URL -f supabase/tests/tenant_isolation.sql` dès qu'un projet existe
 
--- Créés seulement à partir de la Phase 3, une fois un serveur nécessaire
--- (cf. §3.4 — pas de split prématuré en fichiers src/) :
-package.json, .env.example, src/storage/*.js, src/auth/, src/organizations/, src/audit/
+src/cloud/                           -- code de préparation, dépendances injectées (testable sans réseau ni npm)
+  supabase.client.js
+  cloud.repository.js
+  migration.service.js
+
+tests/
+  test_storage_repository.js         -- Phase 2
+  test_supabase_schema.js            -- Phase 3 (lint statique des migrations, exécuté et vert)
+  test_cloud_repository.js           -- Phase 3 (client Supabase simulé, exécuté et vert)
+  test_migration_service.js          -- Phase 3 (détection/plan de migration, exécuté et vert)
+
+-- Reportés à quand un serveur/build devient réellement nécessaire (cf. §3.4) :
+package.json, bundler, src/auth/, src/organizations/, src/audit/ (UI)
 ```
 
-## 5. Fichiers à modifier (au fil des phases, jamais en une fois)
+## 5. Fichiers modifiés (au fil des phases, jamais en une fois)
 
-- `FEC_Analyse_v6.html` : les 6 triplets `loadXStore/saveXStore/saveX/
-  deleteXById/listX` remplacés par un repository généré via
-  `createLocalStorageRepository()` (Phase 2, non-fonctionnel — même
-  comportement, mêmes clés `localStorage`, juste une indirection). Les
-  écrans, moteurs de calcul, et le parseur FEC **ne sont pas touchés**.
-- `tests/run_all.js` : nouvelles sections ajoutées, jamais de section
-  existante supprimée.
+- `FEC_Analyse_v6.html` : les 4 quintets `loadXStore/saveXStore/saveX/
+  deleteXById/listX` (Prévisionnel/TNS/Rémunération/IRPP) remplacés par un
+  repository généré via `createLocalStorageRepository()` (Phase 2, non-
+  fonctionnel — même comportement, mêmes clés `localStorage`, juste une
+  indirection). Les écrans, moteurs de calcul, et le parseur FEC **ne sont
+  pas touchés**.
+- `tests/run_all.js` : nouvelles sections ajoutées (17 à 20), jamais de
+  section existante supprimée ; passage en orchestration `async` pour
+  accueillir des suites asynchrones (CloudRepository) sans changer le
+  comportement des 17 suites synchrones existantes (`await` sur une
+  valeur non-Promise se résout immédiatement).
+- `.gitignore` : exclusion de `node_modules/` et des fichiers locaux
+  Supabase CLI (`supabase/.branches`, `supabase/.temp`).
 - `CHANGELOG.md` : une entrée par phase livrée, comme pour toutes les
   fonctionnalités précédentes de ce dépôt.
 
@@ -409,8 +440,8 @@ Implémentée en Phase 9, seulement après que Phases 3-8 soient stables :
 
 | Risque | Sévérité | Mitigation |
 |---|---|---|
-| RLS mal configurée → fuite inter-cabinets | **Critique** | Tests d'isolation dédiés obligatoires avant toute mise en production (§24 point 1), revue manuelle de chaque policy, jamais de RLS désactivée pour débugger |
-| Regression sur les 326 tests existants pendant l'extraction du storage | Élevé | Phase 2 strictement non-fonctionnelle (mêmes clés, même format JSON), suite complète relancée après chaque commit |
+| RLS mal configurée → fuite inter-cabinets | **Critique** | `tests/test_supabase_schema.js` vérifie automatiquement (79 contrôles) que chaque table a RLS activée et au moins une politique ; `supabase/tests/tenant_isolation.sql` implémente les 5 scénarios d'attaque concrets (§24 point 1/2) prêts à exécuter dès la connexion à un projet réel ; jamais de RLS désactivée pour déboguer |
+| Regression sur les tests existants pendant l'extraction du storage | Élevé | Phase 2 strictement non-fonctionnelle (mêmes clés, même format JSON), suite complète (455 tests) relancée après chaque commit |
 | Volume FEC → dégradation performance base | Moyen | Option 3 du §3.6 (balance agrégée + fichier privé), jamais de table `journal_entries` par défaut |
 | Perte de données locales pendant la migration | Élevé | Jamais de suppression avant confirmation explicite post-succès (§6) |
 | Coût Supabase à l'échelle (nombreux cabinets, gros FEC en Storage) | Moyen | À chiffrer une fois le volume réel connu ; commencer sur le plan gratuit/Pro le temps du développement |
@@ -419,13 +450,20 @@ Implémentée en Phase 9, seulement après que Phases 3-8 soient stables :
 
 ## 8. Ordre de travail retenu (aligné sur les 12 phases demandées)
 
-| Phase | Contenu | Réalisable dans ce commit ? |
+| Phase | Contenu | État |
 |---|---|---|
-| 1 | Audit + stabilisation | ✅ Ce document + suite de tests déjà à 326/326 |
-| 2 | Couche de stockage abstraite | ✅ Implémentée immédiatement après ce rapport |
-| 3 | Base de données + modèle multi-tenant | ⚠️ Schéma conçu (§3.2), migrations SQL peuvent être écrites, **mais ne peuvent pas être appliquées** sans un projet Supabase réel |
-| 4 | Authentification | ⚠️ Nécessite le projet Supabase de la Phase 3 |
-| 5-12 | Cabinets/utilisateurs, rôles, sync, migration, audit, perf, tests sécurité | ⚠️ Dépendent toutes d'un backend existant |
+| 1 | Audit + stabilisation | ✅ Fait — ce document + suite de tests (455/455 au moment de la Phase 3) |
+| 2 | Couche de stockage abstraite | ✅ Fait — `createLocalStorageRepository()`, 4 modules migrés |
+| 3 | Base de données + modèle multi-tenant | ✅ **Conçu et écrit intégralement** : 8 migrations SQL (schéma + RLS + Storage), Edge Function d'invitation, code client de préparation (`src/cloud/`), 79+13+11 tests exécutables sans base réelle. ⚠️ **Non appliqué** — aucun projet Supabase n'existe encore (§9) |
+| 4 | Authentification | ⚠️ Structure prête côté SQL (profiles/organization_members/handle_new_user), câblage réel dans `FEC_Analyse_v6.html` reporté à l'existence d'un projet |
+| 5 | Cabinets et utilisateurs | ⚠️ Modèle et fonctions prêts (`create_organization`, `organization_members`), UI non câblée |
+| 6 | Rôles et permissions | ✅ Modèle et RLS complets (`dossier_permissions`, `has_dossier_access`) ; UI non câblée |
+| 7 | Synchronisation des dossiers existants | ⚠️ `CloudRepository` écrit (interface prête), non branché sur `FEC_Analyse_v6.html` |
+| 8 | Sauvegarde cloud mappings/analyses | ⚠️ Tables prêtes (`mappings`, `account_balances`), non branchées |
+| 9 | Migration des données locales | ⚠️ `migration.service.js` écrit et testé (détection + plan), l'exécution réelle (upload) dépend de la Phase 7 |
+| 10 | Historique et audit | ✅ Modèle complet (`audit_logs`, `entity_versions`, triggers) |
+| 11 | Optimisation gros FEC (Web Worker, IndexedDB) | Non commencé — reporté après Phases 3-10 stables, cf. §3.5/§3.7 |
+| 12 | Tests de sécurité et non-régression | ✅ Lint statique RLS (`test_supabase_schema.js`) fait ; tests d'intégration réels (`supabase/tests/tenant_isolation.sql`, cf. §11) écrits et prêts, nécessitent un projet connecté pour s'exécuter |
 
 ---
 
@@ -451,14 +489,18 @@ signaler plutôt que de trancher seul :
      Netlify, ou autre — un simple fichier statique ne suffit plus dès
      qu'il y a un SDK Supabase à charger et des variables d'environnement
      à injecter au build).
-- Les migrations SQL (§3.2) peuvent être **écrites et versionnées dans ce
-  dépôt dès maintenant** (Phase 3 « design ») pour que tout soit prêt à
-  être appliqué dès qu'un projet existe — c'est un travail que je peux
-  faire sans accès réseau, et je le ferai à la suite si vous le souhaitez.
+- **Fait** : les migrations SQL (§3.2), les politiques RLS (§3.3), l'Edge
+  Function d'invitation, le code client de préparation (`src/cloud/`) et
+  le script de tests d'isolation multi-tenant
+  (`supabase/tests/tenant_isolation.sql`) sont désormais **écrits,
+  relus et versionnés dans ce dépôt**, prêts à être appliqués/exécutés dès
+  qu'un projet existe (cf. §11). C'est tout le travail réalisable sans
+  accès réseau — la suite (Phases 4-10 « câblées ») nécessite le projet
+  réel.
 
 ---
 
-## 10. Implémenté dans ce commit (Phase 1 + Phase 2)
+## 10. Implémenté — Phase 1 + Phase 2 (stockage local abstrait)
 
 Voir `CHANGELOG.md` pour le détail précis. Résumé :
 - Ce document (`SAAS_ARCHITECTURE.md`).
@@ -476,3 +518,37 @@ Voir `CHANGELOG.md` pour le détail précis. Résumé :
 - `tests/test_storage_repository.js`.
 - Suite complète re-vérifiée verte après extraction (326 tests avant,
   détail après dans `CHANGELOG.md`).
+
+## 11. Implémenté — Phase 3 (modèle multi-tenant complet, conçu hors ligne)
+
+Voir `CHANGELOG.md` pour le détail précis. Résumé :
+- **8 migrations SQL** (`supabase/migrations/`) : schéma complet
+  (16 tables métier + `organizations`/`profiles`), toutes les politiques
+  RLS (58 politiques), bucket Storage privé pour les FEC avec ses
+  politiques dédiées, 9 fonctions d'autorisation/administration
+  (`is_active_member_of`, `has_dossier_access`, `create_organization`,
+  `log_audit_event`...), triggers de versioning ciblé.
+- **Edge Function `invite-collaborator`** (Deno/TypeScript) : parcours
+  d'invitation complet avec vérification serveur de l'autorisation
+  (jamais de confiance dans le rôle envoyé par le client), clé
+  `service_role` utilisée uniquement côté serveur.
+- **`src/cloud/`** : `supabase.client.js` (usine de client injectable,
+  ne fabrique jamais un faux client fonctionnel), `cloud.repository.js`
+  (même contrat que `createLocalStorageRepository`, asynchrone —
+  différence assumée et documentée), `migration.service.js` (détection +
+  plan de migration locale → cloud, jamais de suppression ni de fusion
+  silencieuse).
+- **`supabase/tests/tenant_isolation.sql`** : 5 scénarios de sécurité
+  concrets (lecture/écriture croisée entre cabinets, permission par
+  dossier), transaction annulée systématiquement (`ROLLBACK`), prêts à
+  exécuter dès la connexion à un projet réel.
+- **`SETUP_SUPABASE.md`** et **`.env.example`** : guide non-développeur et
+  scaffold de configuration (aucun secret committé).
+- **103 nouveaux tests exécutables sans base réelle** (`test_supabase_schema.js` :
+  79 contrôles structurels sur les migrations ; `test_cloud_repository.js` :
+  13 tests avec un client Supabase simulé ; `test_migration_service.js` :
+  11 tests de détection/planification) — 455 tests au total, tous verts.
+- **Non fait, volontairement** : application réelle des migrations,
+  déploiement de l'Edge Function, exécution des tests d'isolation contre
+  une vraie base, câblage de `CloudRepository` dans `FEC_Analyse_v6.html` —
+  tout ceci nécessite un projet Supabase réel (§9).

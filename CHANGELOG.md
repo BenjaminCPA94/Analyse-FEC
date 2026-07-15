@@ -4,6 +4,88 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Chantier SaaS multi-tenant : Phase 3 complète hors ligne (modèle multi-tenant, RLS, invitations, préparation client)
+
+Tout ce qui pouvait être préparé sans accès réseau pour les Phases 3 et
+suivantes, comme demandé explicitement. **Rien de ceci n'est appliqué à
+un projet réel** (aucun projet Supabase n'existe encore) — c'est un
+travail de conception et d'écriture, relu attentivement, prêt à être
+déployé dès que les informations du projet seront communiquées (cf.
+`SETUP_SUPABASE.md`).
+
+- **8 migrations SQL** (`supabase/migrations/`), dans l'ordre
+  d'application : extensions/fonctions utilitaires ; cabinets/profils/
+  appartenances (`organizations`, `profiles` liée 1:1 à `auth.users` via
+  trigger, `organization_members` avec rôles admin/manager/collaborator/
+  read_only) ; dossiers et permissions par dossier
+  (`dossiers`, `dossier_permissions`, niveaux none/read/write/manage,
+  un admin de cabinet a un accès `manage` implicite à tous les dossiers
+  de son cabinet) ; exercices et données FEC (`exercises`, `fec_files`,
+  `account_balances` — **jamais l'écriture individuelle en base**, cf.
+  décision déjà documentée en `SAAS_ARCHITECTURE.md` §3.6, `mappings`) ;
+  données des 4 modules métier (`forecasts`, `tns_simulations`,
+  `remuneration_simulations`, `irpp_declarations`, `comments` — payload
+  `jsonb` réutilisant tel quel le format déjà produit par les moteurs
+  purs existants, jamais de duplication du schéma en SQL) ; audit et
+  versioning (`audit_logs`, `entity_versions`, triggers ciblés sur
+  `mappings`/`dossier_permissions`, jamais de client autorisé à écrire
+  directement dans ces deux tables) ; stockage privé des FEC (bucket
+  Supabase Storage `fec-files`, `public = false`, politiques basées sur
+  `storage.foldername()`) ; toutes les politiques RLS (58 au total).
+- **Isolation multi-tenant appliquée dans la base, jamais seulement côté
+  interface** : deux niveaux de policy empilés sur chaque table liée à un
+  dossier (appartenance au cabinet + permission sur le dossier précis).
+  Fonctions d'autorisation `security definer` (seule dérogation
+  volontaire à la RLS, documentée, nécessaire pour éviter une récursion
+  RLS sur `organization_members` — motif standard Supabase).
+- **Edge Function `invite-collaborator`** (Deno/TypeScript) : vérifie
+  côté serveur que l'appelant est admin du cabinet concerné avant toute
+  action (jamais de confiance dans un rôle envoyé par le client), utilise
+  la clé `service_role` exclusivement côté serveur pour créer
+  l'appartenance et déclencher l'email d'invitation Supabase Auth,
+  journalise l'action dans `audit_logs`.
+- **`src/cloud/`** (nouveau) : code de préparation client, à dépendances
+  injectées pour rester testable sans réseau ni paquet npm réel —
+  `supabase.client.js` (ne fabrique jamais un faux client silencieusement
+  fonctionnel), `cloud.repository.js` (même contrat get/list/save/remove
+  que `createLocalStorageRepository`, asynchrone — différence assumée et
+  documentée plutôt que masquée), `migration.service.js` (détection des
+  8 clés localStorage inventoriées + planification de migration avec
+  détection de doublons par SIREN/nom, jamais de fusion silencieuse).
+- **`supabase/tests/tenant_isolation.sql`** : script de tests de sécurité
+  concrets — un utilisateur du cabinet A ne peut jamais lire ni écrire une
+  donnée du cabinet B, un collaborateur sans accès explicite à un dossier
+  de son propre cabinet ne peut pas le consulter. Transaction annulée
+  systématiquement (`ROLLBACK`). Prêt à exécuter dès qu'un projet existe.
+- **`SETUP_SUPABASE.md`** (nouveau) : guide non-développeur pas à pas —
+  création de compte, création du projet, choix de la région (UE),
+  où trouver l'URL et la clé publique à communiquer, quelle clé ne
+  jamais communiquer (`service_role`) et pourquoi, ce qui se passe
+  ensuite.
+- **`.env.example`** (nouveau) : scaffold de configuration, uniquement
+  les valeurs publiques (URL + clé `anon`), avertissement explicite sur
+  `service_role`. `.gitignore` étendu (`node_modules/`, fichiers locaux
+  Supabase CLI).
+- **103 nouveaux tests exécutables dès maintenant, sans base réelle** :
+  `tests/test_supabase_schema.js` (79 contrôles — analyse statique des
+  migrations : chaque table métier porte `organization_id`, chaque table
+  a RLS activée, chaque table RLS a au moins une politique, aucune
+  occurrence de "disable row level security" nulle part, intégrité des
+  clés étrangères, fonctions d'autorisation bien `security definer`,
+  aucun secret en clair) ; `tests/test_cloud_repository.js` (13 tests,
+  client Supabase simulé — isolation par cabinet dès la construction de
+  requête, gestion d'erreurs) ; `tests/test_migration_service.js`
+  (11 tests — détection/planification de migration). `tests/run_all.js`
+  passe en orchestration asynchrone pour accueillir ces nouvelles suites
+  sans changer le comportement des suites synchrones existantes.
+  **455 tests au total, tous verts.**
+- **Ce qui reste bloqué sans action de votre part** (inchangé depuis
+  l'audit initial) : appliquer réellement ces migrations, déployer
+  l'Edge Function, exécuter `tenant_isolation.sql` contre une vraie base,
+  et câbler `CloudRepository` dans `FEC_Analyse_v6.html` nécessitent un
+  projet Supabase réel — cet environnement de développement n'a pas
+  d'accès réseau externe. Cf. `SETUP_SUPABASE.md` pour la marche à suivre.
+
 ## v6 — Chantier SaaS multi-tenant : audit complet + Phase 1 (stabilisation) + Phase 2 (couche de stockage abstraite)
 
 - **`SAAS_ARCHITECTURE.md`** (nouveau) : audit exhaustif de l'existant
