@@ -4,6 +4,31 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 2 : rapport d'import FEC structuré
+
+Jusqu'ici, `parseFECFile()` importait silencieusement ce qu'il parvenait à
+lire et ignorait le reste sans aucune trace visible — un FEC tronqué,
+partiellement corrompu, ou ré-exporté deux fois par erreur produisait un
+dossier d'apparence normale, sans aucun signal.
+
+- Nouvelle fonction `analyserQualiteImportFEC()` : passe de lecture
+  **indépendante** du parseur existant (qui n'est ni modifié ni contourné)
+  produisant un diagnostic structuré à chaque import — lignes valides/
+  rejetées avec la raison précise de chaque rejet, écart débit/crédit
+  global, lignes strictement dupliquées.
+- Notification immédiate après import uniquement si une anomalie est
+  détectée (aucun bruit sur un import propre).
+- L'onglet **« Suivi des imports »** affiche désormais, sous chaque
+  exercice, un résumé du rapport avec un détail dépliable et un export CSV
+  dédié des anomalies (même protection anti-injection de formule que les
+  autres exports).
+- Ce rapport est strictement informatif : il ne bloque jamais l'import,
+  seul le parseur décide de ce qui est effectivement importé.
+
+21 nouveaux tests (572 au total, tous verts), vérification manuelle en
+navigateur headless (Playwright) avec un FEC construit avec anomalies
+volontaires (ligne rejetée, doublon, écart débit/crédit).
+
 ## v6 — Chantier de fiabilisation et sécurisation : Phase 1 (correctifs critiques)
 
 Audit complet demandé (sécurité, fiabilité, maintenabilité) mené en 9

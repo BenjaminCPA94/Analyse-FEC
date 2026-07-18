@@ -145,6 +145,9 @@ async function main() {
   section('28. Agrégation multi-sociétés — renommage "Consolidé" + bannière permanente (Phase 4)');
   await reportResults('Agrégation multi-sociétés', require('./test_agregation_rename.js').run(htmlPath));
 
+  section('29. Rapport d\'import FEC structuré (Phase 2 de l\'audit)');
+  await reportResults('Rapport d\'import FEC', require('./test_rapport_import_fec.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

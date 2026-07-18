@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 551 tests automatiques, tous verts.
+**État au moment de la rédaction** : 572 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -338,6 +338,63 @@ Reporting classique.
 
 ---
 
+## Phase 2 — Fiabilisation de l'import FEC
+
+### 10. 🟠 Absence de rapport d'import structuré — ✅ Corrigé
+
+**Anomalie initiale** : `parseFECFile()` importe silencieusement ce qu'il
+parvient à lire (colonnes obligatoires présentes, montants numériques) et
+ignore le reste sans aucune trace visible pour l'utilisateur — un
+FEC partiellement corrompu, tronqué, ou ré-exporté deux fois par erreur
+produisait un dossier apparemment normal, sans qu'aucun signal n'alerte
+l'expert-comptable sur un éventuel écart avec le fichier source.
+
+**Correction appliquée** :
+- Nouvelle fonction `analyserQualiteImportFEC(text)` : passe de lecture
+  **indépendante** de `parseFECFile()` (le parseur existant n'est ni
+  modifié ni contourné — il reste seul décisionnaire des données
+  réellement importées). Elle recompte les lignes valides/rejetées avec
+  la raison précise de chaque rejet (colonnes obligatoires absentes,
+  numéro de compte vide, montant débit/crédit non numérique), calcule
+  l'écart débit/crédit global (une FEC équilibrée doit avoir un écart nul
+  ou négligeable), et détecte les lignes strictement dupliquées (signal
+  fréquent d'un double export/import accidentel).
+- Le rapport est calculé à l'import (`npConfirm()`) et attaché à
+  l'exercice correspondant (`ACTIVE.exercices[exId].rapportImport`,
+  persisté par `saveActiveDossier()` comme le reste de l'exercice) — pour
+  le tout premier exercice d'un dossier, transite par
+  `store[id].rapportImportInitial` puis `ensureExercices()`.
+- Une notification s'affiche immédiatement après l'import
+  (`toastRapportImport()`) **uniquement si une anomalie est détectée**
+  (aucun bruit ajouté sur un import propre).
+- L'onglet "Suivi des imports" affiche désormais, sous chaque exercice,
+  un résumé du rapport (`rapportImportResumeHtml()`) avec un détail
+  dépliable (lignes rejetées, lignes dupliquées) et un export CSV dédié
+  des anomalies (`exporterAnomaliesImport()`, réutilisant
+  `csvFromRows()`/`csvSafeValue()` — même protection anti-injection de
+  formule que tous les autres exports de l'application).
+- Ce rapport est strictement informatif : il **ne bloque jamais**
+  l'import, conformément au principe déjà appliqué au reste de l'audit —
+  seules les caisses TNS incomplètes (§8) bloquent un résultat, car elles
+  produisent un chiffre mathématiquement faux ; ici, le parseur importe
+  toujours ce qu'il peut lire, le rapport signale simplement ce qu'il n'a
+  pas pu utiliser.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_rapport_import_fec.js` (21 tests : cas nominal
+sans anomalie, colonnes obligatoires absentes, 3 raisons de rejet
+distinctes, écart débit/crédit, doublons stricts, fichier vide,
+câblage `finishNpConfirm()`/`ensureExercices()`/
+`addExerciceToActiveDossier()`, comportement silencieux/alerte de
+`toastRapportImport()`, échappement HTML du contenu brut du FEC dans le
+panneau de détail, neutralisation d'une valeur de type formule dans
+l'export CSV des anomalies) + vérification manuelle en navigateur
+headless (Playwright) avec un FEC construit avec 1 ligne rejetée, 1
+doublon strict et un écart débit/crédit volontaires : les trois sont
+correctement détectés, affichés et exportables.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -349,8 +406,9 @@ Reporting classique.
 | `tests/test_duplicate_functions.js` | 3 | Unicité des fonctions globales |
 | `tests/test_baremes_non_valides.js` | 24 | Statut des barèmes + caisses TNS incomplètes |
 | `tests/test_agregation_rename.js` | 8 | Renommage "Consolidé" → "Agrégation multi-sociétés" + bannière |
+| `tests/test_rapport_import_fec.js` | 21 | Rapport d'import FEC structuré (Phase 2) |
 
-Total suite complète (`node tests/run_all.js`) : **551 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **572 tests, 0 échec**.
 
 ---
 
@@ -361,12 +419,8 @@ Total suite complète (`node tests/run_all.js`) : **551 tests, 0 échec**.
 2. ~~**Phase 4 — Renommage "Consolidé" → "Agrégation multi-sociétés"** +
    bannière permanente~~ — ✅ traité, confirmé par l'utilisateur (cf. §9
    ci-dessus).
-3. **Phase 2 — Validation FEC** : le parseur actuel (`parseFECFile()`)
-   vérifie les colonnes obligatoires et gère les montants
-   français/internationaux, mais n'a pas de rapport d'import structuré
-   (comptage lignes valides/rejetées, écart débit/crédit, doublons,
-   export des anomalies) — à construire comme un nouveau module, sans
-   toucher au parseur existant qui fonctionne.
+3. ~~**Phase 2 — Validation FEC**~~ — ✅ traité : rapport d'import
+   structuré ajouté sans modifier le parseur existant (cf. §10 ci-dessus).
 4. **Phase 3 — Comptes mixtes** : le mapping est aujourd'hui partagé entre
    exercices sans règle de présentation conditionnelle par signe pour les
    comptes réellement mixtes (TVA, comptes courants...) — limite déjà
