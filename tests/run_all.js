@@ -51,6 +51,8 @@ section('1. Syntaxe (node --check)');
   }
 }
 
+(async () => {
+
 // ── 2. E2E propre ─────────────────────────────────────────────────────────
 section('2. E2E — mapping propre (FEC de test bien formé)');
 reportResults('E2E propre', require('./test_e2e_clean.js').run(htmlPath));
@@ -100,6 +102,9 @@ reportResults('Injection CSV', require('./test_csv_injection.js').run(htmlPath))
 section('14. Identifiants HTML dupliqués (audit — correctif critique)');
 reportResults('IDs HTML', require('./test_html_ids.js').run(htmlPath));
 
+section('15. Fonctions JavaScript dupliquées (audit — correctif critique)');
+reportResults('Fonctions dupliquées', await require('./test_duplicate_functions.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
@@ -109,3 +114,5 @@ if (failedSuites.length > 0) {
 }
 console.log('✓ Suite de tests intégralement verte.');
 process.exit(0);
+
+})();
