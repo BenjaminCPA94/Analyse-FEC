@@ -60,13 +60,37 @@ que le reste de l'application, jusqu'ici oublié à ces 3 endroits).
    totalement l'affichage d'un résultat chiffré (aucune approximation)
    tant que la caisse n'est pas entièrement paramétrée.
 
-Les phases 2 à 9 de la demande (validation FEC structurée, comptes mixtes
-par signe, renommage du module Consolidé, IndexedDB, Web Worker,
-refactorisation modulaire, tests étendus, améliorations de modules,
-accessibilité) n'ont pas été commencées.
+Les phases 2, 3, 5 à 9 de la demande (validation FEC structurée, comptes
+mixtes par signe, IndexedDB, Web Worker, refactorisation modulaire, tests
+étendus, améliorations de modules, accessibilité) restent à traiter.
 
 71 nouveaux tests (543 au total, tous verts), vérifications manuelles en
 navigateur headless (Playwright) pour chaque correctif à surface UI.
+
+## v6 — Phase 4 : renommage "Consolidé" → "Agrégation multi-sociétés" + bannière permanente
+
+Confirmation obtenue de l'utilisateur pour le renommage prévu par la
+Phase 4 de l'audit (précédemment différé, cf. entrée ci-dessus) : le
+module livré sous le nom "Consolidé" devient **"Agrégation
+multi-sociétés"** dans tous les libellés visibles (type de projet, tag de
+carte, boutons, toasts, messages de blocage), afin d'éviter toute
+confusion avec une véritable consolidation comptable réglementaire
+(éliminations intragroupe, retraitements, intérêts minoritaires — que ce
+module ne réalise jamais).
+
+- Renommage limité aux libellés **visibles** ; le type de stockage
+  interne (`type: 'consolide'`), les noms de fonctions et les classes CSS
+  sont inchangés — aucun impact sur les dossiers déjà enregistrés.
+- Nouvelle bannière d'avertissement **permanente et non masquable**,
+  visible sur les 4 onglets d'un dossier d'agrégation ouvert (Analyses,
+  Affectation des comptes, Suivi des imports, Paramètres), rappelant
+  qu'il s'agit d'une addition simple des dossiers membres, sans
+  élimination des flux intragroupe ni retraitement de consolidation, et
+  que le résultat ne se substitue pas à une consolidation légale.
+
+8 nouveaux tests (551 au total, tous verts), vérification manuelle en
+navigateur headless (Playwright) confirmant la bannière sur les 4 onglets
+et son absence sur un dossier Reporting classique.
 
 ## v6 — Consolidé : vue « Contributif en colonnes » (détail par société) sur Bilan/CR/SIG
 

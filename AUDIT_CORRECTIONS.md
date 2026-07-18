@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 519 tests automatiques, tous verts.
+**État au moment de la rédaction** : 551 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -287,6 +287,57 @@ normalement) + vérification manuelle en navigateur headless.
 
 ---
 
+## Phase 4 — Renommage du module "Consolidé" + bannière permanente
+
+### 9. 🟡 Renommage "Consolidé" → "Agrégation multi-sociétés" — ✅ Corrigé
+
+**Contexte** : le module avait été livré et nommé "Consolidé" avec l'accord
+explicite de l'utilisateur lors d'une session précédente (cf. CHANGELOG.md).
+La Phase 4 de la demande d'audit prévoyait ce renommage pour éviter toute
+confusion avec une véritable consolidation comptable réglementaire
+(éliminations intragroupe, retraitements, intérêts minoritaires — que ce
+module ne réalise jamais, il se contente d'additionner les comptes de
+plusieurs dossiers Reporting existants). Le renommage a été **différé**
+dans la passe précédente le temps d'obtenir confirmation explicite ;
+confirmé par l'utilisateur, il est maintenant appliqué.
+
+**Correction appliquée** :
+- Tous les libellés **visibles** ("Consolidé" comme titre de type de
+  projet, tag sur la carte de dossier, sous-titres, boutons "Créer le
+  consolidé"/"Ajouter au consolidé", toasts, messages de blocage) sont
+  renommés en "Agrégation multi-sociétés" (ou "Agrégation" en version
+  courte pour les tags compacts).
+- **Volontairement inchangés** : le type de stockage interne
+  (`type: 'consolide'`), les noms de fonctions
+  (`computeConsolidatedData`, `addConsolideMember`,
+  `npConfirmConsolide`...) et les classes CSS (`dc-consolide-tag`,
+  `consolide-view-toggle`...). Ce sont des identifiants internes jamais
+  affichés à l'utilisateur ; les renommer aurait forcé une migration des
+  dossiers déjà enregistrés dans le localStorage des utilisateurs actuels
+  sans aucun bénéfice visible, pour un risque de régression pur.
+- Nouvelle fonction `renderAgregationAlertBanner()` : bannière
+  d'avertissement **permanente et non masquable**, injectée dans le
+  bandeau supérieur du module (`#agregation-alert-banner`, en dehors de
+  chaque écran `.module-screen` — donc visible sur les 4 onglets Analyses/
+  Affectation/Suivi des imports/Paramètres sans devoir dupliquer le code
+  dans chacun), rappelant qu'il s'agit d'une addition simple sans
+  élimination des flux intragroupe ni retraitement de consolidation
+  réglementaire, et que le résultat ne se substitue pas à une
+  consolidation légale. Appelée depuis `renderDashboard()`, elle
+  apparaît/disparaît automatiquement selon `ACTIVE.type`.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_agregation_rename.js` (8 tests : absence de
+libellé visible résiduel, sélecteur de type, étape de sélection des
+membres, tag de carte, message de blocage "Ajouter un exercice",
+affichage/disparition de la bannière selon le type de dossier,
+non-régression du type de stockage interne) + vérification manuelle en
+navigateur headless (Playwright) confirmant la bannière visible sur les 4
+onglets d'un dossier d'agrégation ouvert et absente sur un dossier
+Reporting classique.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -297,35 +348,31 @@ normalement) + vérification manuelle en navigateur headless.
 | `tests/test_html_ids.js` | 10 | Unicité des ids HTML |
 | `tests/test_duplicate_functions.js` | 3 | Unicité des fonctions globales |
 | `tests/test_baremes_non_valides.js` | 24 | Statut des barèmes + caisses TNS incomplètes |
+| `tests/test_agregation_rename.js` | 8 | Renommage "Consolidé" → "Agrégation multi-sociétés" + bannière |
 
-Total suite complète (`node tests/run_all.js`) : **543 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **551 tests, 0 échec**.
 
 ---
 
 ## Prochaines étapes recommandées (par ordre de priorité)
 
-1. **Barèmes non validés** (§7) et **caisses TNS incomplètes** (§8) —
-   items critiques restants de la Phase 1, dimensionnés ci-dessus.
-2. **Phase 2 — Validation FEC** : le parseur actuel (`parseFECFile()`)
+1. ~~**Barèmes non validés** (§7) et **caisses TNS incomplètes** (§8)~~ —
+   ✅ traité (cf. §7-8 ci-dessus).
+2. ~~**Phase 4 — Renommage "Consolidé" → "Agrégation multi-sociétés"** +
+   bannière permanente~~ — ✅ traité, confirmé par l'utilisateur (cf. §9
+   ci-dessus).
+3. **Phase 2 — Validation FEC** : le parseur actuel (`parseFECFile()`)
    vérifie les colonnes obligatoires et gère les montants
    français/internationaux, mais n'a pas de rapport d'import structuré
    (comptage lignes valides/rejetées, écart débit/crédit, doublons,
    export des anomalies) — à construire comme un nouveau module, sans
    toucher au parseur existant qui fonctionne.
-3. **Phase 3 — Comptes mixtes** : le mapping est aujourd'hui partagé entre
+4. **Phase 3 — Comptes mixtes** : le mapping est aujourd'hui partagé entre
    exercices sans règle de présentation conditionnelle par signe pour les
    comptes réellement mixtes (TVA, comptes courants...) — limite déjà
    documentée dans `addExerciceToActiveDossier()` (cf. commentaire
    existant dans le code). Nécessite un audit de la convention de signe
    réelle avant toute règle automatique, comme demandé.
-4. **Phase 4 — Renommage "Consolidé" → "Agrégation multi-sociétés"** +
-   bannière permanente : changement volontairement **différé** tant que
-   l'utilisateur n'a pas confirmé le renommage (fonctionnalité livrée ce
-   mois-ci sous le nom "Consolidé" avec l'accord explicite de
-   l'utilisateur — cf. CHANGELOG.md ; un renommage silencieux romprait la
-   cohérence avec les échanges précédents. Le principe de l'alerte
-   permanente ne pose en revanche aucune ambiguïté et peut être ajouté
-   sans discussion).
 5. **Chart.js local** : dépendance CDN actuelle déjà neutralisée par des
    gardes défensifs (§6 + correctif préexistant) — reste à héberger
    réellement le fichier en local pour un fonctionnement 100% hors ligne

@@ -995,6 +995,9 @@
     </div>
   </div>
 
+  <!-- Bannière permanente — visible sur tous les onglets d'un dossier "Agrégation multi-sociétés" -->
+  <div id="agregation-alert-banner"></div>
+
   <!-- ANALYSES MODULE -->
   <div class="module-screen active" id="module-analyses">
     <!-- Period bar -->
@@ -2724,6 +2727,7 @@ function renderDashboard() {
   const ptitle=document.getElementById('params-dossier-title-module');if(ptitle)ptitle.textContent=ACTIVE.name||'';
   renderConsolideMembersBox();
   renderConsolideViewToggles();
+  renderAgregationAlertBanner();
 
   // Imports
   renderImportsTracking();
@@ -2749,23 +2753,23 @@ function renderConsolideMembersBox(){
   const members=memberIds.map(mid=>({id:mid,name:store[mid]?store[mid].name:null}));
   const eligible=Object.values(store).filter(d=>d.group===ACTIVE.group && d.type!=='consolide' && d.id!==ACTIVE.id && !memberIds.includes(d.id));
   const membersHtml=members.length
-    ? members.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid rgba(0,0,0,.08);border-radius:8px;font-size:13px;margin-bottom:6px;${m.name?'':'color:#e8643c;'}"><span>${escHtml(m.name||'(dossier introuvable — supprimé ?)')}</span><span style="cursor:pointer;color:#a09d96;font-weight:700;" onclick="removeConsolideMember('${m.id}')" title="Retirer du consolidé">✕</span></div>`).join('')
+    ? members.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid rgba(0,0,0,.08);border-radius:8px;font-size:13px;margin-bottom:6px;${m.name?'':'color:#e8643c;'}"><span>${escHtml(m.name||'(dossier introuvable — supprimé ?)')}</span><span style="cursor:pointer;color:#a09d96;font-weight:700;" onclick="removeConsolideMember('${m.id}')" title="Retirer de l'agrégation">✕</span></div>`).join('')
     : '<div style="font-size:13px;color:#a09d96;margin-bottom:6px;">Aucun dossier inclus pour l\'instant.</div>';
   const addHtml=eligible.length
     ? `<select class="params-field-input" id="params-add-member-select" style="margin-top:8px;">
         <option value="">— Choisir un dossier à ajouter —</option>
         ${eligible.map(d=>`<option value="${d.id}">${escHtml(d.name)}</option>`).join('')}
       </select>
-      <button class="params-btn-secondary" onclick="addConsolideMember()">Ajouter au consolidé</button>`
+      <button class="params-btn-secondary" onclick="addConsolideMember()">Ajouter à l'agrégation</button>`
     : '';
   const box=document.createElement('div');
   box.id='params-consolide-box';
   box.className='params-section';
   box.style.marginTop='20px';
-  box.innerHTML=`<div class="params-field-label">Dossiers inclus dans ce consolidé (agrégation simple)</div>${membersHtml}${addHtml}`;
+  box.innerHTML=`<div class="params-field-label">Dossiers inclus dans cette agrégation multi-sociétés (addition simple)</div>${membersHtml}${addHtml}`;
   section.insertAdjacentElement('afterend', box);
 }
-/** addConsolideMember() Ajoute le dossier choisi dans le menu déroulant à la liste des membres du consolidé ouvert, puis recalcule l'agrégation. */
+/** addConsolideMember() Ajoute le dossier choisi dans le menu déroulant à la liste des membres de l'agrégation ouverte, puis recalcule l'agrégation. */
 function addConsolideMember(){
   const sel=document.getElementById('params-add-member-select');
   const id=sel?.value;
@@ -2775,16 +2779,16 @@ function addConsolideMember(){
   saveActiveDossier();
   openDossier(ACTIVE.id);
   switchModule('params');
-  toast('Dossier ajouté au consolidé');
+  toast('Dossier ajouté à l\'agrégation');
 }
-/** removeConsolideMember(id) Retire un dossier membre du consolidé ouvert, puis recalcule l'agrégation. */
+/** removeConsolideMember(id) Retire un dossier membre de l'agrégation ouverte, puis recalcule l'agrégation. */
 function removeConsolideMember(id){
-  if(!confirm('Retirer ce dossier du consolidé ?\nSes données ne seront plus incluses dans l\'agrégation.')) return;
+  if(!confirm('Retirer ce dossier de l\'agrégation ?\nSes données ne seront plus incluses dans l\'agrégation.')) return;
   ACTIVE.memberIds=(ACTIVE.memberIds||[]).filter(x=>x!==id);
   saveActiveDossier();
   openDossier(ACTIVE.id);
   switchModule('params');
-  toast('Dossier retiré du consolidé');
+  toast('Dossier retiré de l\'agrégation');
 }
 
 /**
@@ -2822,6 +2826,25 @@ function setConsolideView(mode){
   buildLegalCRTable();
   buildCRTable();
   buildBilanTables();
+}
+
+/**
+ * renderAgregationAlertBanner()
+ * Bannière permanente, non masquable, rappelant qu'un dossier
+ * "Agrégation multi-sociétés" (ex-"Consolidé", cf. Phase 4 de l'audit) est
+ * une simple addition des dossiers Reporting membres — sans élimination
+ * des flux intragroupe ni retraitements de consolidation réglementaire —
+ * et ne remplace donc pas une consolidation légale. Injectée dans
+ * #agregation-alert-banner, placé dans le topbar du module (en dehors de
+ * chaque .module-screen) pour rester visible sur tous les onglets
+ * (Analyses, Affectation, Suivi des imports, Paramètres) sans devoir être
+ * dupliquée dans chaque écran.
+ */
+function renderAgregationAlertBanner(){
+  const el=document.getElementById('agregation-alert-banner');
+  if(!el) return;
+  if(ACTIVE.type!=='consolide'){ el.innerHTML=''; return; }
+  el.innerHTML=`<div style="background:#fff3e0;border-bottom:1.5px solid #d4a72c;color:#7a5c00;padding:8px 32px;font-size:12px;font-weight:600;">⚠ Agrégation multi-sociétés — addition simple des dossiers membres, sans élimination des flux intragroupe ni retraitement de consolidation réglementaire. Ne se substitue pas à une consolidation légale ni à un reporting groupe certifié.</div>`;
 }
 
 /** fmtPeriodDate(p) Formate une période AAAAMM en "MM/AAAA" pour affichage. */
@@ -4863,7 +4886,7 @@ function openDossier(id){
   if(d && d.type==='consolide'){
     const agg = computeConsolidatedData(d.memberIds||[]);
     const exId = 'consolide-agg';
-    const label = agg.periodEnd ? exerciceLabelFromPeriod(agg.periodStart, agg.periodEnd) : 'Consolidé';
+    const label = agg.periodEnd ? exerciceLabelFromPeriod(agg.periodStart, agg.periodEnd) : 'Agrégation multi-sociétés';
     const activeEx = {id:exId, label, bal:agg.bal, libs:agg.libs, months:agg.months, nbLines:agg.nbLines, periodStart:agg.periodStart, periodEnd:agg.periodEnd, filename:'', importedAt:Date.now()};
     ACTIVE={id:d.id,name:d.name,group:d.group,type:'consolide',memberIds:d.memberIds||[],consolideMembers:agg.members,bal:activeEx.bal,libs:activeEx.libs,months:activeEx.months,nbLines:activeEx.nbLines,periodStart:activeEx.periodStart,periodEnd:activeEx.periodEnd,filename:'',mps:d.mps||null,isRDCompany:false,revenueTypes:{},savedAt:d.savedAt,exercices:{[exId]:activeEx},activeExerciceId:exId,ledger:null};
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
@@ -9390,7 +9413,7 @@ function npSelectType(type){
  */
 function openAjouterExercice(){
   if(!ACTIVE.id){toast('Ouvrez un dossier avant d’ajouter un exercice',true);return;}
-  if(ACTIVE.type==='consolide'){toast('Non disponible pour un dossier Consolidé — gérez plutôt les dossiers inclus depuis Paramètres',true);return;}
+  if(ACTIVE.type==='consolide'){toast('Non disponible pour une agrégation multi-sociétés — gérez plutôt les dossiers inclus depuis Paramètres',true);return;}
   _npMode='add-exercice';
   _npFile=null;
   _npNewName=ACTIVE.name;
@@ -9401,7 +9424,7 @@ function showNpStep(step){
   const ov=document.createElement('div');ov.className='np-overlay';ov.id='np-overlay';ov.addEventListener('click',closeNpModal);
   if(step===1){ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="closeNpModal()">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:20px;">Nouveau projet</div></div><div class="np-form"><label class="np-label" for="np-name">Nom du projet</label><input class="np-input" id="np-name" type="text" placeholder="Ex: Société Dupont" style="margin-bottom:20px;"><label class="np-label" style="margin-bottom:8px;display:block;">Type de projet</label><div class="np-type-row">
       <div class="np-select-box selected" id="np-type-reporting" onclick="npSelectType('reporting')"><div><div class="np-select-title">Reporting</div><div class="np-select-desc">Dossier individuel à partir d'un FEC ou Grand Livre</div></div></div>
-      <div class="np-select-box" id="np-type-consolide" onclick="npSelectType('consolide')"><div><div class="np-select-title">Consolidé</div><div class="np-select-desc">Agrège plusieurs dossiers Reporting déjà existants dans ce groupe</div></div></div>
+      <div class="np-select-box" id="np-type-consolide" onclick="npSelectType('consolide')"><div><div class="np-select-title">Agrégation multi-sociétés</div><div class="np-select-desc">Agrège plusieurs dossiers Reporting déjà existants dans ce groupe</div></div></div>
     </div><div style="font-size:12px;color:#185FA5;cursor:pointer;margin-bottom:20px;">Paramètres avancés</div><button class="np-btn" onclick="npGoStep2()">Créer</button></div></div>`;
   } else if(step==='members'){
     const members=npEligibleMembers();
@@ -9409,8 +9432,8 @@ function showNpStep(step){
       const init=(d.name||'').split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
       const checked=_npMembers.includes(d.id)?'checked':'';
       return `<label class="np-member-row"><input type="checkbox" ${checked} onchange="npToggleMember('${d.id}',this.checked)"><span class="np-member-avatar">${escHtml(init)}</span><span class="np-member-name">${escHtml(d.name)}</span></label>`;
-    }).join(''):'<div style="font-size:13px;color:#a09d96;padding:12px 0;">Aucun dossier Reporting disponible dans ce groupe pour l\'instant. Créez d\'abord un ou plusieurs dossiers Reporting individuels avant de créer un Consolidé.</div>';
-    ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(_npNewName||'Consolidé')}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Sélectionnez les dossiers Reporting à inclure — leurs comptes seront additionnés (agrégation simple, sans élimination des flux intragroupe)</div></div><div class="np-form"><div class="np-member-list">${rows}</div><button class="np-btn" id="np-consolide-confirm-btn" onclick="npConfirmConsolide()" ${_npMembers.length?'':'disabled'}>Créer le consolidé${_npMembers.length?` (${_npMembers.length} dossier${_npMembers.length>1?'s':''})`:''}</button></div></div>`;
+    }).join(''):'<div style="font-size:13px;color:#a09d96;padding:12px 0;">Aucun dossier Reporting disponible dans ce groupe pour l\'instant. Créez d\'abord un ou plusieurs dossiers Reporting individuels avant de créer une agrégation multi-sociétés.</div>';
+    ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(_npNewName||'Agrégation multi-sociétés')}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Sélectionnez les dossiers Reporting à inclure — leurs comptes seront additionnés (agrégation simple, sans élimination des flux intragroupe)</div></div><div class="np-form"><div class="np-member-list">${rows}</div><button class="np-btn" id="np-consolide-confirm-btn" onclick="npConfirmConsolide()" ${_npMembers.length?'':'disabled'}>Créer l'agrégation${_npMembers.length?` (${_npMembers.length} dossier${_npMembers.length>1?'s':''})`:''}</button></div></div>`;
   } else {
     const name=_npNewName||'Nouveau dossier';
     ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(name)}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Import de FEC (recommandé) ou Grand Livre</div></div><div class="np-form"><div class="np-upload-zone" id="np-drop-zone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="npHandleDrop(event)" onclick="document.getElementById('np-file-input').click()"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a09d96" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg><p>Glissez votre FEC ici ou cliquez</p><small>Format .txt, .csv (séparateur tabulation)</small><input type="file" id="np-file-input" accept=".txt,.csv,.TXT,.CSV" style="display:none" onchange="npHandleFile(this)"></div><div id="np-file-status"></div><button class="np-btn" id="np-confirm-btn" onclick="npConfirm()" disabled>Analyser</button></div></div>`;
@@ -9432,7 +9455,7 @@ function npEligibleMembers(){
 function npToggleMember(id,checked){
   if(checked){ if(!_npMembers.includes(id))_npMembers.push(id); } else { _npMembers=_npMembers.filter(x=>x!==id); }
   const btn=document.getElementById('np-consolide-confirm-btn');
-  if(btn){ btn.disabled=_npMembers.length===0; btn.textContent=`Créer le consolidé${_npMembers.length?` (${_npMembers.length} dossier${_npMembers.length>1?'s':''})`:''}`; }
+  if(btn){ btn.disabled=_npMembers.length===0; btn.textContent=`Créer l'agrégation${_npMembers.length?` (${_npMembers.length} dossier${_npMembers.length>1?'s':''})`:''}`; }
 }
 /**
  * npConfirmConsolide()
@@ -9449,7 +9472,7 @@ function npConfirmConsolide(){
   store[id]={id,name:_npNewName,group:_npGroup,type:'consolide',memberIds:[..._npMembers],mps:null,mps_version:0,savedAt:Date.now()};
   saveStore(store);
   closeNpModal();
-  addDossierCard(_npNewName,_npGroup,id,`Consolidé · ${_npMembers.length} dossier${_npMembers.length>1?'s':''}`,{consolide:true});
+  addDossierCard(_npNewName,_npGroup,id,`Agrégation · ${_npMembers.length} dossier${_npMembers.length>1?'s':''}`,{consolide:true});
   setTimeout(()=>{ openDossier(id); }, 400);
 }
 function npHandleDrop(e){e.preventDefault();document.getElementById('np-drop-zone')?.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)npSetFile(f);}
@@ -9592,7 +9615,7 @@ function addDossierCard(name,group,id,subtitle,opts){
   const avatarInner=opts.consolide
     ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`
     : escHtml(initials);
-  const consolideTag=opts.consolide?'<div class="dc-consolide-tag">Consolidé</div>':'';
+  const consolideTag=opts.consolide?'<div class="dc-consolide-tag">Agrégation</div>':'';
   card.innerHTML=`<div class="dc-badge"></div>${consolideTag}<div class="dc-avatar" style="background:rgba(255,255,255,.12);color:#fff;">${avatarInner}</div><div class="dc-name">${escHtml(name)}</div><div class="dc-sub">${escHtml(subtitle||'FEC importé')}</div>${GEAR_BTN}`;
   card.onclick=()=>openDossier(id);
   const uc=grid.querySelector('.upload-card');grid.insertBefore(card,uc);
@@ -9620,7 +9643,7 @@ function duplicateDossier(){
   const newName=name+' (copie)',newId='dossier-'+Date.now();
   const store=loadStore();let isConsolide=false;
   if(store[srcId]){store[newId]=JSON.parse(JSON.stringify(store[srcId]));store[newId].id=newId;store[newId].name=newName;store[newId].createdAt=Date.now();isConsolide=store[srcId].type==='consolide';saveStore(store);}
-  addDossierCard(newName,_currentParamsCard.closest('.home-section')?.dataset.group||'non-classes',newId,isConsolide?'Copie (consolidé)':'Copie',{consolide:isConsolide});toast('Dupliqué');
+  addDossierCard(newName,_currentParamsCard.closest('.home-section')?.dataset.group||'non-classes',newId,isConsolide?'Copie (agrégation)':'Copie',{consolide:isConsolide});toast('Dupliqué');
 }
 function deleteFromParams(){
   if(!_currentParamsCard)return;
@@ -9662,7 +9685,7 @@ function duplicateDossierModule(){
   const srcId=ACTIVE.id,newName=ACTIVE.name+' (copie)',newId='dossier-'+Date.now();
   const store=loadStore();let isConsolide=false;
   if(store[srcId]){store[newId]=JSON.parse(JSON.stringify(store[srcId]));store[newId].id=newId;store[newId].name=newName;store[newId].createdAt=Date.now();isConsolide=store[srcId].type==='consolide';saveStore(store);}
-  addDossierCard(newName,ACTIVE.group||'non-classes',newId,isConsolide?'Copie (consolidé)':'Copie',{consolide:isConsolide});
+  addDossierCard(newName,ACTIVE.group||'non-classes',newId,isConsolide?'Copie (agrégation)':'Copie',{consolide:isConsolide});
   toast('Dupliqué');
 }
 function deleteFromParamsModule(){
@@ -11546,7 +11569,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     if(document.querySelector(`[data-id="${d.id}"]`))return;
     if(d.type==='consolide'){
       const n=(d.memberIds||[]).length;
-      addDossierCard(d.name||d.id,d.group||'non-classes',d.id,`Consolidé · ${n} dossier${n>1?'s':''}`,{consolide:true});
+      addDossierCard(d.name||d.id,d.group||'non-classes',d.id,`Agrégation · ${n} dossier${n>1?'s':''}`,{consolide:true});
       return;
     }
     const year=d.periodEnd?d.periodEnd.slice(0,4):'';
