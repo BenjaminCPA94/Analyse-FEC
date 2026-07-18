@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 627 tests automatiques, tous verts.
+**État au moment de la rédaction** : 639 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -637,6 +637,58 @@ existant) + vérification manuelle en navigateur headless.
 
 ---
 
+## Phase 9 — Accessibilité et qualité de l'interface
+
+### 16. 🟠 Accessibilité clavier/lecteur d'écran quasi absente — 🟡 Partiellement corrigé (périmètre volontairement restreint)
+
+**Constat** : audit statique du fichier entier — **aucun** attribut
+`aria-*` ni `role` nulle part avant cette passe, 99 `<div onclick>` et
+16 `<span onclick>` utilisés comme boutons (jamais focusables au
+clavier, jamais annoncés comme interactifs par un lecteur d'écran), et
+aucune fenêtre modale/menu ne pouvait être fermé au clavier (seul un
+clic en dehors fonctionnait). Une mise en conformité WCAG AA exhaustive
+représenterait un chantier touchant la quasi-totalité des écrans — d'une
+ampleur comparable ou supérieure à la Phase 6, à ne pas entreprendre en
+une seule passe (règle impérative n°6) ni au risque de modifier
+l'apparence actuelle (règle n°3).
+
+**Correction appliquée dans ce périmètre volontairement restreint**
+(purement additive : aucun attribut ni changement ne modifie l'apparence
+visuelle existante) :
+- `fermerAvecEchap()` : la touche **Échap** ferme désormais la fenêtre
+  modale ou le menu actuellement ouvert (Grand livre, "Nouveau projet",
+  Confidentialité, menu déroulant de sélection de dossier, panneau
+  Paramètres accessible depuis l'icône ⚙ d'une carte) — sans modifier
+  aucun comportement au clic déjà existant.
+- Icône **Paramètres** (`GEAR_BTN`, réutilisée sur chaque carte de
+  dossier créée, + les 7 cartes de démonstration statiques du même
+  motif, incohérentes avant ce correctif) : `aria-label="Paramètres du
+  dossier"` + `aria-hidden="true"` sur l'icône SVG décorative.
+- Sélecteur de dossier (`module-dossier-tag`, présent sur tous les
+  écrans d'un dossier ouvert) : `role="button"`, `tabindex="0"`,
+  `aria-haspopup="true"`, `aria-label`, et gestion clavier
+  (Entrée/Espace déclenche le menu comme un clic) — sans changer la
+  balise HTML (donc sans aucun risque sur le style CSS existant).
+
+**Limite assumée** : ce correctif ne couvre que les contrôles les plus
+universellement présents (au moins un par écran). Les autres éléments
+cliquables non sémantiques (99 `<div onclick>`/16 `<span onclick>`
+restants, propres à des écrans spécifiques) ne sont pas couverts par
+cette passe — à traiter dans un chantier d'accessibilité dédié
+ultérieur, écran par écran.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_accessibilite.js` (12 tests : `fermerAvecEchap()`
+pour chacune des 5 fenêtres/menus, ordre de priorité quand plusieurs
+sont ouverts simultanément, ignorance des touches autres qu'Échap,
+cohérence des 8 occurrences de l'aria-label Paramètres, présence des
+attributs d'accessibilité du sélecteur de dossier) + vérification
+manuelle en navigateur headless (Playwright) : fermeture au clavier
+effective des 3 principales fenêtres testées, ouverture du menu
+déroulant via focus + Entrée, non-régression du clic souris.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -654,8 +706,9 @@ existant) + vérification manuelle en navigateur headless.
 | `tests/test_indexeddb_backup.js` | 9 | Sauvegarde de secours IndexedDB (Phase 5) |
 | `tests/test_period_data_tresorerie.js` | 19 | Agrégation par période + formatage monétaire (Phase 7) |
 | `tests/test_previsionnel_prorata_temporis.js` | 10 | Amortissement au prorata temporis mensuel (Phase 8) |
+| `tests/test_accessibilite.js` | 12 | Fermeture au clavier + aria-labels (Phase 9) |
 
-Total suite complète (`node tests/run_all.js`) : **627 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **639 tests, 0 échec**.
 
 ---
 

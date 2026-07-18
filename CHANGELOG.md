@@ -4,6 +4,32 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 9 : accessibilité clavier et lecteur d'écran (périmètre restreint)
+
+Aucun attribut `aria-*` ni `role` nulle part dans l'application avant
+cette passe ; aucune fenêtre modale ne pouvait être fermée au clavier.
+Une mise en conformité exhaustive représenterait un chantier de l'ampleur
+de la Phase 6 — cette passe se limite donc, volontairement, aux contrôles
+les plus universellement présents, de façon purement additive (aucun
+changement d'apparence) :
+
+- La touche **Échap** ferme désormais toute fenêtre modale/menu ouvert
+  (Grand livre, Nouveau projet, Confidentialité, menu de sélection de
+  dossier, panneau Paramètres).
+- Icône Paramètres (⚙, sur chaque carte de dossier) : `aria-label`
+  explicite + icône décorative masquée aux lecteurs d'écran.
+- Sélecteur de dossier (haut de chaque écran d'un dossier ouvert) :
+  focusable au clavier, déclenchable via Entrée/Espace, annoncé comme un
+  bouton.
+
+12 nouveaux tests (639 au total, tous verts), vérification manuelle en
+navigateur headless : fermeture clavier effective, navigation au clavier
+fonctionnelle, non-régression du clic souris.
+
+**Reste à traiter** (hors périmètre de cette passe) : les autres éléments
+cliquables non sémantiques propres à des écrans spécifiques — chantier
+d'accessibilité dédié, écran par écran.
+
 ## v6 — Phase 8 : Prévisionnel — amortissement au prorata temporis mensuel
 
 `calculerPlanAmortissement()` appliquait une dotation annuelle pleine dès

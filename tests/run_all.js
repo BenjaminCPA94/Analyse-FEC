@@ -163,6 +163,9 @@ async function main() {
   section('34. Prévisionnel — amortissement au prorata temporis mensuel (Phase 8)');
   await reportResults('Prévisionnel — prorata temporis', require('./test_previsionnel_prorata_temporis.js').run(htmlPath));
 
+  section('35. Accessibilité — fermeture au clavier + aria-labels (Phase 9)');
+  await reportResults('Accessibilité', require('./test_accessibilite.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
