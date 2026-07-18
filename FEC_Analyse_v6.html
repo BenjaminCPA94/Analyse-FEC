@@ -3001,7 +3001,7 @@ function buildCRTable() {
       <td colspan="3" style="padding:0">
         <div class="dc has-pct${bold}">
           <span class="chevron">${hasKids ? '›' : ''}</span>
-          <span class="lbl">${g.label}</span>
+          <span class="lbl">${escHtml(g.label)}</span>
           <span class="amt ${cc}">${fmtV(gTotal)}</span>
           <span class="pct-lbl">${p2(gTotal, caBase)}</span>
         </div>
@@ -3024,7 +3024,7 @@ function buildCRTable() {
                    data-group="${sk}"
                    onclick="event.stopPropagation();toggleGroup('${sk}')">
                 <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
-                <span class="lbl">${sub.label}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
                 <span class="amt ${sc2}">${fmtV(st)}</span>
                 <span class="pct-lbl">${p2(st, caBase)}</span>
               </div>
@@ -3349,7 +3349,7 @@ function buildCRTableCompare() {
       <td colspan="4" style="padding:0">
         <div class="dc cmp3${bold}">
           <span class="chevron">${hasKids ? '›' : ''}</span>
-          <span class="lbl">${g.label}</span>
+          <span class="lbl">${escHtml(g.label)}</span>
           <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}">${fmtV(curTotal)}</span>
           <span class="amt" style="color:var(--text3);">${fmtV(cmpTotal)}</span>
           <span class="amt ${variance >= 0 ? 'pos' : 'neg'}">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
@@ -3368,7 +3368,7 @@ function buildCRTableCompare() {
             <td colspan="4" style="padding:0">
               <div class="dcs cmp3" style="cursor:pointer;font-weight:600;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
                 <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
-                <span class="lbl">${sub.label}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
                 <span class="amt-sm ${cst >= 0 ? 'pos' : 'neg'}">${fmtV(cst)}</span>
                 <span class="amt-sm" style="color:var(--text3);">${fmtV(pst)}</span>
                 <span class="amt-sm ${vst >= 0 ? 'pos' : 'neg'}">${vst >= 0 ? '+' : ''}${fmtV(vst)}</span>
@@ -4149,7 +4149,7 @@ function buildBilanTablesCompare() {
         <td colspan="4" style="padding:0">
           <div class="dc cmp3${bold}">
             <span class="chevron">${hasKids ? '›' : ''}</span>
-            <span class="lbl">${g.label}</span>
+            <span class="lbl">${escHtml(g.label)}</span>
             <span class="amt ${curTotal >= 0 ? 'pos' : 'neg'}">${fmtV(curTotal)}</span>
             <span class="amt" style="color:var(--text3);">${fmtV(cmpTotal)}</span>
             <span class="amt ${variance >= 0 ? 'pos' : 'neg'}">${variance >= 0 ? '+' : ''}${fmtV(variance)}</span>
@@ -4181,7 +4181,7 @@ function buildBilanTablesCompare() {
               <td colspan="4" style="padding:0">
                 <div class="dcs cmp3" style="cursor:pointer;font-weight:600;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
                   <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
-                  <span class="lbl">${sub.label}</span>
+                  <span class="lbl">${escHtml(sub.label)}</span>
                   <span class="amt-sm ${cst >= 0 ? 'pos' : 'neg'}">${fmtV(cst)}</span>
                   <span class="amt-sm" style="color:var(--text3);">${fmtV(pst)}</span>
                   <span class="amt-sm ${vst >= 0 ? 'pos' : 'neg'}">${vst >= 0 ? '+' : ''}${fmtV(vst)}</span>
@@ -4324,7 +4324,7 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
       <td colspan="2" style="padding:0">
         <div class="dc no-pct" style="${boldSt}">
           <span class="chevron">${hasKids?'›':''}</span>
-          <span class="lbl" style="font-weight:${isSub||isTotal?'700':'400'}">${g.label}</span>
+          <span class="lbl" style="font-weight:${isSub||isTotal?'700':'400'}">${escHtml(g.label)}</span>
           <span class="amt ${cc}">${fmtV(gTotal)}</span>
         </div>
       </td></tr>`;
@@ -4341,7 +4341,7 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
               <div class="dc no-pct" style="padding-left:24px;font-weight:600;background:#f9f8f6;cursor:pointer;"
                    data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
                 <span class="chevron" style="font-size:10px;">${sub.accounts?.length?'›':''}</span>
-                <span class="lbl">${sub.label}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
                 <span class="amt ${sc2}">${fmtV(st)}</span>
               </div>
             </td></tr>`;
@@ -4819,7 +4819,7 @@ function toggleDossierDropdown(){
     html+=`<div style="padding:5px 14px 3px;font-size:10px;font-weight:700;color:#a09d96;text-transform:uppercase;letter-spacing:.06em;">${gLabel}</div>`;
     items.forEach(item=>{
       html+=`<div onclick="closeDossierDropdown();openDossier('${item.id}')" style="padding:9px 14px;font-size:13px;font-weight:${item.active?'700':'400'};color:${item.active?'#185FA5':'#1a1916'};cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f7f6f3'" onmouseout="this.style.background=''">
-        <span style="width:8px;height:8px;border-radius:50%;background:${item.active?'#185FA5':'transparent'};border:1.5px solid ${item.active?'#185FA5':'#d0cec8'};flex-shrink:0;"></span>${item.name}
+        <span style="width:8px;height:8px;border-radius:50%;background:${item.active?'#185FA5':'transparent'};border:1.5px solid ${item.active?'#185FA5':'#d0cec8'};flex-shrink:0;"></span>${escHtml(item.name)}
       </div>`;
     });
   });
@@ -9453,7 +9453,7 @@ function renderMapping(key){
     h+=`<div id="mpg-${key}-${g.id}" style="border-bottom:1px solid rgba(0,0,0,0.07);">`;
     h+=`<div style="display:flex;align-items:center;padding:9px 12px;background:${bg};gap:6px;cursor:pointer;" onclick="mpToggle('${key}','${g.id}',event)">`;
     h+=`<span id="chev-${key}-${g.id}" style="width:14px;display:inline-flex;align-items:center;justify-content:center;color:${isTotal?'rgba(255,255,255,.4)':'#a09d96'};font-size:12px;flex-shrink:0;transition:transform .15s;">›</span>`;
-    h+=`<span style="flex:1;font-size:13px;font-weight:${fw};color:${clr};" onclick="event.stopPropagation();mpRename(event,'${key}','${g.id}',null)">${g.label}</span>`;
+    h+=`<span style="flex:1;font-size:13px;font-weight:${fw};color:${clr};" onclick="event.stopPropagation();mpRename(event,'${key}','${g.id}',null)">${escHtml(g.label)}</span>`;
     if(!isSub&&!isTotal){h+=`<button onclick="event.stopPropagation();mpAddSub('${key}','${g.id}')" style="border:none;background:rgba(0,0,0,0.05);border-radius:5px;padding:3px 8px;font-size:11px;color:#6b6960;cursor:pointer;white-space:nowrap;">+ Sous-cat.</button>`;h+=`<button onclick="event.stopPropagation();mpAddAccountsPicker('${key}','${g.id}',null)" style="border:none;background:rgba(0,0,0,0.05);border-radius:5px;padding:3px 8px;font-size:11px;color:#6b6960;cursor:pointer;white-space:nowrap;margin-left:3px;">+ Comptes</button>`;}
     h+=`<button onclick="event.stopPropagation();mpDeleteGroup('${key}','${g.id}')" style="border:none;background:none;cursor:pointer;color:${isTotal?'rgba(255,255,255,.3)':'#d0cec8'};font-size:16px;line-height:1;padding:2px 5px;">×</button>`;
     h+=`</div>`;
@@ -9469,7 +9469,7 @@ function renderMapping(key){
           h+=`<div style="border-top:1px solid rgba(0,0,0,0.06);">`;
           h+=`<div style="display:flex;align-items:center;padding:7px 12px 7px 24px;background:#f4f3f0;gap:6px;" ondragover="mpRowDragOver(event)" ondrop="mpRowDrop(event,'${key}','${g.id}','${sub.id}')" ondragleave="mpRowDragLeave(event)">`;
           h+=`<span style="width:12px;color:#a09d96;font-size:10px;flex-shrink:0;">›</span>`;
-          h+=`<span style="flex:1;font-size:12px;font-weight:600;color:#1a1916;cursor:text;" onclick="event.stopPropagation();mpRename(event,'${key}','${g.id}','${sub.id}')">${sub.label}</span>`;
+          h+=`<span style="flex:1;font-size:12px;font-weight:600;color:#1a1916;cursor:text;" onclick="event.stopPropagation();mpRename(event,'${key}','${g.id}','${sub.id}')">${escHtml(sub.label)}</span>`;
           const st=(sub.accounts||[]).reduce((s,n)=>s+balOf(n),0);
           h+=`<span style="font-size:11px;font-weight:600;color:${st>=0?'#3B6D11':'#A32D2D'};margin-right:8px;">${fmtV(st)}</span>`;
           h+=`<button onclick="event.stopPropagation();mpDeleteSub('${key}','${g.id}','${sub.id}')" style="border:none;background:none;cursor:pointer;color:#d0cec8;font-size:14px;line-height:1;padding:2px 4px;">×</button>`;
@@ -9597,7 +9597,7 @@ function orphanChipHtml(num) {
   </span>`;
 }
 let _pCtx2=null,_pSel2=new Set();
-function mpAddAccountsPicker(key,gid,subId){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const target=(subId&&subId!=='null')?g.subs.find(x=>x.id===subId):g;if(!target)return;_pCtx2={key,gid,subId:(subId&&subId!=='null')?subId:null};_pSel2=new Set(target.accounts||[]);const elsewhere=usedElsewhere(key,gid,_pCtx2.subId);const ov=document.createElement('div');ov.id='mp-picker';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;';ov.addEventListener('click',mpClosePicker);ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:12px;width:540px;max-height:600px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.22);"><div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><div><div style="font-size:14px;font-weight:700;color:#1a1916;">Affecter des comptes</div><div style="font-size:11px;color:#a09d96;margin-top:2px;">${target.label}</div></div><button onclick="mpClosePicker()" style="width:28px;height:28px;border-radius:6px;border:none;background:none;cursor:pointer;font-size:20px;color:#6b6960;">×</button></div><div style="padding:10px 20px;border-bottom:1px solid rgba(0,0,0,0.06);"><input id="mp-psearch" type="text" placeholder="Numéro ou libellé…" oninput="mpFilterPicker(this.value)" style="width:100%;padding:8px 12px;border:1px solid rgba(0,0,0,0.14);border-radius:8px;font-size:13px;outline:none;font-family:inherit;"></div><div id="mp-plist" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px;border-top:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><span id="mp-pcount" style="font-size:12px;color:#a09d96;"></span><div style="display:flex;gap:8px;"><button onclick="mpClosePicker()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Annuler</button><button onclick="mpSavePicker()" style="padding:8px 18px;border-radius:7px;border:none;background:#185FA5;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Valider</button></div></div></div>`;
+function mpAddAccountsPicker(key,gid,subId){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const target=(subId&&subId!=='null')?g.subs.find(x=>x.id===subId):g;if(!target)return;_pCtx2={key,gid,subId:(subId&&subId!=='null')?subId:null};_pSel2=new Set(target.accounts||[]);const elsewhere=usedElsewhere(key,gid,_pCtx2.subId);const ov=document.createElement('div');ov.id='mp-picker';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;';ov.addEventListener('click',mpClosePicker);ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:12px;width:540px;max-height:600px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.22);"><div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><div><div style="font-size:14px;font-weight:700;color:#1a1916;">Affecter des comptes</div><div style="font-size:11px;color:#a09d96;margin-top:2px;">${escHtml(target.label)}</div></div><button onclick="mpClosePicker()" style="width:28px;height:28px;border-radius:6px;border:none;background:none;cursor:pointer;font-size:20px;color:#6b6960;">×</button></div><div style="padding:10px 20px;border-bottom:1px solid rgba(0,0,0,0.06);"><input id="mp-psearch" type="text" placeholder="Numéro ou libellé…" oninput="mpFilterPicker(this.value)" style="width:100%;padding:8px 12px;border:1px solid rgba(0,0,0,0.14);border-radius:8px;font-size:13px;outline:none;font-family:inherit;"></div><div id="mp-plist" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px;border-top:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><span id="mp-pcount" style="font-size:12px;color:#a09d96;"></span><div style="display:flex;gap:8px;"><button onclick="mpClosePicker()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Annuler</button><button onclick="mpSavePicker()" style="padding:8px 18px;border-radius:7px;border:none;background:#185FA5;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Valider</button></div></div></div>`;
   document.body.appendChild(ov);mpFilterPicker('');setTimeout(()=>document.getElementById('mp-psearch')?.focus(),40);}
 function usedElsewhere(key,excGid,excSubId){const used=new Set();(ACTIVE.mps[key]||[]).forEach(g=>{(g.accounts||[]).forEach(n=>{if(g.id!==excGid)used.add(n);});(g.subs||[]).forEach(s=>{if(!(g.id===excGid&&s.id===excSubId))(s.accounts||[]).forEach(n=>used.add(n));});});return used;}
 function mpFilterPicker(q){
