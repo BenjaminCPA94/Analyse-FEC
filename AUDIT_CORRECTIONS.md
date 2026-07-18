@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 589 tests automatiques, tous verts.
+**État au moment de la rédaction** : 598 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -497,22 +497,65 @@ celui-ci **reste réactif pendant tout le parsing** (progression continue
 du compteur, alors qu'un test identique avant ce correctif l'aurait
 montré figé pendant la durée du parsing).
 
-**Limite assumée de cette passe** : le second volet de la Phase 5
-(migration du stockage vers IndexedDB, pour lever le plafond
-localStorage ~5-10 Mo et permettre à terme la persistance du Grand Livre
-détaillé, aujourd'hui explicitement jamais persisté) n'a **pas** été
-traité dans cette passe. `loadStore()`/`saveStore()` sont utilisées de
-façon strictement **synchrone** dans 34 emplacements du code (ouverture,
-sauvegarde, changement, suppression, duplication de dossier, écrans
-Paramètres…) ; IndexedDB est par nature asynchrone. Migrer sans casser
-ces 34 usages nécessite soit de les convertir un par un en async/await
-(chantier de l'ampleur de la Phase 6, à ne pas mélanger avec elle), soit
-un adaptateur mémoire-cache plus prudent — dans les deux cas, un chantier
-dédié distinct, conformément à la règle impérative n°6 de la demande
-("pas de réécriture totale immédiate"). Non traité pour l'instant :
-capacité actuelle du localStorage inchangée, comportement de blocage de
-sauvegarde déjà existant (message actionnable en cas de quota dépassé,
-cf. `saveStore()`) inchangé lui aussi.
+### 13. 🟡 Absence de sauvegarde de secours au-delà du quota localStorage — ✅ Corrigé (IndexedDB en miroir)
+
+**Anomalie initiale** : `loadStore()`/`saveStore()` reposent
+exclusivement sur `localStorage` (quota généralement ~5-10 Mo selon le
+navigateur). En cas de dépassement de quota, `saveStore()` affichait déjà
+un message actionnable (pas d'échec silencieux) mais les données de la
+sauvegarde en cours étaient réellement perdues faute d'alternative. Une
+vraie migration vers IndexedDB (asynchrone par nature) aurait nécessité
+de convertir les 34 emplacements du code qui appellent
+`loadStore()`/`saveStore()` de façon strictement synchrone — un chantier
+de l'ampleur de la Phase 6, à ne jamais mélanger avec un correctif ciblé
+(règle impérative n°6 de la demande : "pas de réécriture totale
+immédiate").
+
+**Décision (choix arbitré avec l'utilisateur)** : plutôt qu'une
+conversion complète en async/await, `loadStore()`/`saveStore()`
+**conservent leur signature synchrone inchangée** — aucun des 34 appels
+existants n'a été modifié, risque de régression minimal. IndexedDB
+(quota nettement supérieur, souvent plusieurs centaines de Mo) sert de
+**miroir asynchrone best-effort** à chaque sauvegarde.
+
+**Correction appliquée** :
+- `ouvrirIndexedDBSecours()` / `idbBackupPutStore()` /
+  `idbBackupGetStore()` : couche IndexedDB minimale (base
+  `fec_analyse_idb_v1`), dégradation propre si `indexedDB` est
+  indisponible (jamais d'exception).
+- `saveStore(data)` réplique désormais `data` vers IndexedDB en tâche de
+  fond (fire-and-forget, ne bloque jamais la sauvegarde principale, ne
+  modifie ni sa signature ni sa valeur de retour) — y compris quand
+  l'écriture localStorage elle-même échoue par dépassement de quota : les
+  données ne sont alors plus nécessairement perdues si la réplication
+  IndexedDB réussit. Le message d'erreur de quota mentionne désormais
+  cette sauvegarde de secours.
+- `restaurerDepuisIndexedDB()` : action **explicite** (jamais
+  automatique), exposée par un nouveau bouton dans l'écran
+  Confidentialité (`openPrivacyModal()`), pour récupérer la dernière
+  sauvegarde de secours si le localStorage a été vidé, corrompu, ou en
+  cas d'échec de sauvegarde par quota dépassé.
+- `deleteAllIndexedDbData()` (Phase 1, déjà générique par
+  `indexedDB.databases()`) supprime cette nouvelle base sans
+  modification nécessaire — aucun dossier fantôme ne subsiste après
+  "Supprimer toutes les données".
+
+**Limite assumée** : IndexedDB reste un **miroir**, pas la source de
+vérité principale — `loadStore()` continue de lire depuis localStorage.
+Une bascule complète (IndexedDB comme stockage principal, levant
+réellement le plafond de capacité pour la lecture aussi) resterait un
+chantier distinct nécessitant la conversion async/await des 34 usages,
+volontairement non entrepris ici.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_indexeddb_backup.js` (9 tests : dégradation
+propre sans `indexedDB`, `saveStore()` reste synchrone et inchangé dans
+son comportement, message de quota mentionnant la sauvegarde de secours,
+`restaurerDepuisIndexedDB()` sans sauvegarde disponible et avec
+restauration effective, non-régression de `deleteAllIndexedDbData()`) +
+vérification manuelle en navigateur headless (Playwright) : réplication
+réelle vers IndexedDB après `saveStore()`, suppression simulée du
+localStorage, restauration réussie via le bouton de Confidentialité.
 
 ---
 
@@ -530,8 +573,9 @@ cf. `saveStore()`) inchangé lui aussi.
 | `tests/test_rapport_import_fec.js` | 21 | Rapport d'import FEC structuré (Phase 2) |
 | `tests/test_comptes_mixtes_multi_exercice.js` | 12 | Comptes mixtes multi-exercices (Phase 3) |
 | `tests/test_fec_worker_parsing.js` | 5 | Parsing FEC déporté (Web Worker, Phase 5) |
+| `tests/test_indexeddb_backup.js` | 9 | Sauvegarde de secours IndexedDB (Phase 5) |
 
-Total suite complète (`node tests/run_all.js`) : **589 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **598 tests, 0 échec**.
 
 ---
 
@@ -548,20 +592,23 @@ Total suite complète (`node tests/run_all.js`) : **589 tests, 0 échec**.
    l'incohérence + correction explicite (jamais automatique/silencieuse),
    sans inventer de nouvelle règle de convention de signe (cf. §11
    ci-dessus).
-5. ~~**Phase 5 — Web Worker de parsing**~~ — ✅ traité (cf. §12
-   ci-dessus). **Reste à traiter** : migration du stockage vers
-   IndexedDB (34 usages synchrones de `loadStore()`/`saveStore()` à
-   convertir prudemment, chantier distinct — cf. limite assumée en §12).
+5. ~~**Phase 5 — Web Worker de parsing + sauvegarde de secours
+   IndexedDB**~~ — ✅ traité (cf. §12-13 ci-dessus). IndexedDB reste un
+   miroir best-effort (pas la source de vérité principale) : une
+   bascule complète nécessiterait de convertir les 34 usages
+   synchrones de `loadStore()`/`saveStore()`, décision arbitrée avec
+   l'utilisateur pour ne pas mélanger ce correctif ciblé avec la
+   Phase 6.
 6. **Chart.js local** : dépendance CDN actuelle déjà neutralisée par des
    gardes défensifs (§6 + correctif préexistant) — reste à héberger
    réellement le fichier en local pour un fonctionnement 100% hors ligne
    garanti (actuellement : dégradation gracieuse, pas d'hébergement local).
-7. **Phase 6, IndexedDB, Phases 7-9** (refactorisation modulaire,
-   TypeScript, tests étendus, améliorations de modules, accessibilité) :
-   chantiers d'ampleur, chacun comparable ou supérieur en taille à
-   l'ensemble de la Phase 1 — à traiter comme des chantiers dédiés
-   séparés, jamais en une seule réécriture totale (cf. règle impérative
-   n°6 de la demande).
+7. **Phases 7-9** (tests étendus, améliorations de modules,
+   accessibilité) — priorisées avant la Phase 6 (refactorisation
+   modulaire/TypeScript), décision arbitrée avec l'utilisateur : la
+   Phase 6 nécessite d'adapter le harnais de tests (contraint aujourd'hui
+   à un seul `<script>` inline) et représente le chantier le plus
+   invasif de toute la demande — reportée en dernier.
 
 ## Limites de cette passe
 

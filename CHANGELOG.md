@@ -4,6 +4,28 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 5 (2/2) : sauvegarde de secours IndexedDB
+
+En cas de dépassement de quota localStorage (~5-10 Mo selon le
+navigateur), les données de la sauvegarde en cours étaient réellement
+perdues, malgré un message d'erreur déjà actionnable.
+
+- `loadStore()`/`saveStore()` **conservent leur signature synchrone
+  inchangée** (34 usages dans le code, aucun modifié) — décision
+  arbitrée pour ne pas mélanger ce correctif avec la Phase 6
+  (refactorisation).
+- `saveStore()` réplique désormais chaque sauvegarde vers IndexedDB en
+  tâche de fond (miroir best-effort, quota nettement supérieur) — y
+  compris quand localStorage lui-même échoue par dépassement de quota.
+- Nouveau bouton **« Restaurer depuis la sauvegarde de secours »** dans
+  l'écran Confidentialité : action explicite, jamais automatique.
+- `deleteAllIndexedDbData()` (déjà générique) supprime cette nouvelle
+  base sans modification — aucun dossier fantôme après suppression totale.
+
+9 nouveaux tests (598 au total, tous verts), vérification manuelle en
+navigateur headless : réplication réelle vers IndexedDB, suppression
+simulée du localStorage, restauration réussie.
+
 ## v6 — Phase 5 (1/2) : parsing FEC déporté dans un Web Worker
 
 Le parsing d'un FEC volumineux (~2 s de traitement synchrone pour

@@ -154,6 +154,9 @@ async function main() {
   section('31. Parsing FEC déporté (Web Worker) — Phase 5 de l\'audit');
   await reportResults('Parsing FEC déporté', require('./test_fec_worker_parsing.js').run(htmlPath));
 
+  section('32. Sauvegarde de secours IndexedDB — Phase 5 de l\'audit');
+  await reportResults('Sauvegarde de secours IndexedDB', await require('./test_indexeddb_backup.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
