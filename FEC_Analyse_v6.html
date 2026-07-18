@@ -5157,11 +5157,24 @@ const PrevisionnelEngine = (function () {
   // ── 1. Plan d'investissement & amortissements ───────────────────────
   /**
    * calculerPlanAmortissement(params)
-   * Simplification assumée : dotation pleine dès l'exercice d'acquisition
-   * (pas de prorata temporis mensuel) — cf. limites documentées dans le
-   * CHANGELOG. Le parc existant (repris d'un dossier réel ou saisi à la
-   * main) est amorti à un rythme annuel constant jusqu'à extinction de sa
-   * VNC d'ouverture.
+   * Amortissement linéaire avec PRORATA TEMPORIS MENSUEL (Phase 8 de
+   * l'audit demandé — améliorations du module Prévisionnel) : la
+   * dotation de l'exercice d'acquisition est calculée au prorata du
+   * nombre de mois restants dans l'exercice à compter du mois
+   * d'acquisition inclus (`inv.mois`, déjà saisi par l'utilisateur et
+   * déjà utilisé pour le placement exact des flux de trésorerie dans
+   * calculerTresorerieMensuelle() — simplement pas encore exploité ici
+   * avant ce correctif). La durée d'amortissement se prolonge alors
+   * naturellement sur un exercice supplémentaire partiel en fin de plan,
+   * comme en comptabilité réelle. `inv.mois` vaut 1 (janvier) par défaut
+   * à la création (cf. `pvAddInvestissement()`), ce qui donne un prorata
+   * de 12/12 — comportement STRICTEMENT IDENTIQUE à l'ancien calcul pour
+   * tous les investissements déjà saisis sans changer le mois par défaut
+   * (aucune régression sur les dossiers Prévisionnel existants).
+   *
+   * Le parc existant (repris d'un dossier réel ou saisi à la main) reste
+   * amorti à un rythme annuel constant jusqu'à extinction de sa VNC
+   * d'ouverture (pas de date d'acquisition connue pour ce parc global).
    *
    * @returns {{dotations:number[], vncFin:number[]}} un élément par exercice
    */
@@ -5183,13 +5196,17 @@ const PrevisionnelEngine = (function () {
       const duree = Math.max(1, inv.dureeAns || 1);
       const montant = safe(inv.montantHT);
       const dotAnnuelle = montant / duree;
-      for (let n = 0; n < horizonYears; n++) {
-        if (n < anneeIdx) continue;
-        const anneesEcoulees = n - anneeIdx + 1; // 1 dès l'exercice d'acquisition
-        if (anneesEcoulees <= duree) {
-          dotations[n] += dotAnnuelle;
-          vncInvParAnnee[n] += Math.max(0, montant - dotAnnuelle * anneesEcoulees);
-        }
+      const moisAcquisition = Math.min(12, Math.max(1, inv.mois || 1));
+      const moisPremiereAnnee = 13 - moisAcquisition; // mois=1 (janv.) → 12 mois ; mois=12 (déc.) → 1 mois
+      let moisRestants = duree * 12;
+      let cumulDotation = 0;
+      for (let n = anneeIdx; n < horizonYears && moisRestants > 0; n++) {
+        const moisCetteAnnee = (n === anneeIdx) ? Math.min(moisPremiereAnnee, moisRestants) : Math.min(12, moisRestants);
+        const dot = dotAnnuelle * moisCetteAnnee / 12;
+        dotations[n] += dot;
+        cumulDotation += dot;
+        moisRestants -= moisCetteAnnee;
+        vncInvParAnnee[n] += Math.max(0, montant - cumulDotation);
       }
     });
 
@@ -6205,7 +6222,7 @@ function renderPrevInvestissements() {
       <h3 style="margin:0;font-size:14px;">Plan d’investissement</h3>
       <button class="params-btn-secondary" style="margin:0;" onclick="pvAddInvestissement()">+ Ajouter un investissement</button>
     </div>
-    <p style="font-size:12px;color:#6b6960;margin:0 0 12px;">Amortissement linéaire calculé automatiquement (dotation pleine dès l’exercice d’acquisition).</p>
+    <p style="font-size:12px;color:#6b6960;margin:0 0 12px;">Amortissement linéaire calculé automatiquement au prorata temporis du mois d’acquisition.</p>
     <div style="overflow-x:auto;">${renderPvInvestissementsTable()}</div>
   </div>`;
 }

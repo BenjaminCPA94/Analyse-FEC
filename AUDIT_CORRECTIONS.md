@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 617 tests automatiques, tous verts.
+**État au moment de la rédaction** : 627 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -594,6 +594,49 @@ navigateur headless.
 
 ---
 
+## Phase 8 — Améliorations fonctionnelles des modules
+
+### 15. 🟡 Prévisionnel — amortissement sans prorata temporis mensuel — ✅ Corrigé
+
+**Constat** : `calculerPlanAmortissement()` appliquait une dotation
+annuelle pleine dès l'exercice d'acquisition, quel que soit le mois réel
+d'acquisition — limitation explicitement documentée dans le code et
+affichée à l'utilisateur ("Amortissement linéaire calculé
+automatiquement (dotation pleine dès l'exercice d'acquisition)"). Le
+champ `inv.mois` existait pourtant déjà dans le modèle de données et
+dans l'écran de saisie (utilisé pour le placement exact des flux de
+trésorerie dans `calculerTresorerieMensuelle()`), mais n'était jamais
+exploité par le calcul d'amortissement comptable lui-même.
+
+**Correction appliquée** :
+- `calculerPlanAmortissement()` applique désormais le **prorata temporis
+  mensuel standard** : la dotation de l'exercice d'acquisition est
+  proportionnelle au nombre de mois restants dans l'exercice à compter du
+  mois d'acquisition inclus, et la durée d'amortissement se prolonge
+  naturellement d'un exercice partiel supplémentaire en fin de plan —
+  comme en comptabilité réelle.
+- **Non-régression garantie** : `inv.mois === 1` (janvier, valeur par
+  défaut à la création d'un investissement, cf. `pvAddInvestissement()`)
+  donne un prorata de 12/12, strictement identique à l'ancien calcul —
+  aucun dossier Prévisionnel existant n'est affecté tant que l'utilisateur
+  n'a pas explicitement changé le mois d'acquisition d'un investissement.
+  Un `inv.mois` absent (dossiers créés avant l'introduction de ce champ)
+  est traité comme janvier, même garantie.
+- Le parc d'immobilisations existant (`dotationAnnuelleParcExistant`/
+  `vncParcExistantOuverture`, sans date d'acquisition connue) n'est pas
+  concerné et continue d'être amorti à un rythme annuel constant.
+- Texte d'aide de l'écran mis à jour en conséquence.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_previsionnel_prorata_temporis.js` (10 tests :
+non-régression mois=1 et mois absent, prorata 6/12 pour une acquisition
+en juillet avec prolongation du plan sur un exercice supplémentaire,
+prorata minimal 1/12 pour une acquisition en décembre, conservation de
+la valeur totale amortie dans les deux cas, non-affectation du parc
+existant) + vérification manuelle en navigateur headless.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -610,8 +653,9 @@ navigateur headless.
 | `tests/test_fec_worker_parsing.js` | 5 | Parsing FEC déporté (Web Worker, Phase 5) |
 | `tests/test_indexeddb_backup.js` | 9 | Sauvegarde de secours IndexedDB (Phase 5) |
 | `tests/test_period_data_tresorerie.js` | 19 | Agrégation par période + formatage monétaire (Phase 7) |
+| `tests/test_previsionnel_prorata_temporis.js` | 10 | Amortissement au prorata temporis mensuel (Phase 8) |
 
-Total suite complète (`node tests/run_all.js`) : **617 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **627 tests, 0 échec**.
 
 ---
 

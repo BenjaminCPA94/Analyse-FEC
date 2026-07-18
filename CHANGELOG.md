@@ -4,6 +4,25 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 8 : Prévisionnel — amortissement au prorata temporis mensuel
+
+`calculerPlanAmortissement()` appliquait une dotation annuelle pleine dès
+l'exercice d'acquisition, quel que soit le mois réel — limitation déjà
+documentée et affichée à l'utilisateur. Le champ "Mois" d'acquisition
+existait déjà dans l'écran de saisie (utilisé pour la trésorerie) mais
+jamais pour le calcul d'amortissement lui-même.
+
+- Prorata temporis mensuel standard : dotation proportionnelle au nombre
+  de mois restants dans l'exercice d'acquisition, plan prolongé d'un
+  exercice partiel supplémentaire en fin de période.
+- **Aucune régression** : mois=janvier (valeur par défaut) ou mois absent
+  (anciens dossiers) donnent un résultat strictement identique à l'ancien
+  calcul — seuls les investissements dont l'utilisateur change
+  explicitement le mois sont affectés.
+
+10 nouveaux tests (627 au total, tous verts), vérification manuelle en
+navigateur headless.
+
 ## v6 — Phase 7 : tests sur l'agrégation par période et le formatage monétaire
 
 `getPeriodData()` (agrégation mensuelle/trimestrielle/semestrielle/
