@@ -133,6 +133,9 @@ async function main() {
   section('24. Injection de formule CSV (audit sécurité — correctif critique)');
   await reportResults('Injection CSV', require('./test_csv_injection.js').run(htmlPath));
 
+  section('25. Identifiants HTML dupliqués (audit — correctif critique)');
+  await reportResults('IDs HTML', require('./test_html_ids.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

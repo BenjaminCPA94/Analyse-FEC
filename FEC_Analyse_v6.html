@@ -1569,28 +1569,31 @@
     </div>
   </div>
 
-  <!-- PARAMS MODULE -->
+  <!-- PARAMS MODULE (onglet "Paramètres" du dossier ouvert — distinct de la
+       modale "params-overlay" accessible depuis l'icône ⚙ d'une carte sur
+       l'écran d'accueil : ids suffixés -module pour éviter toute collision,
+       cf. AUDIT_CORRECTIONS.md, correctif "identifiants HTML dupliqués") -->
   <div class="module-screen" id="module-params">
     <div style="padding:40px 60px;max-width:600px;">
-      <h1 style="font-size:22px;font-weight:700;color:#1a1916;margin-bottom:6px;" id="params-dossier-title">Paramètres</h1>
+      <h1 style="font-size:22px;font-weight:700;color:#1a1916;margin-bottom:6px;" id="params-dossier-title-module">Paramètres</h1>
       <div style="display:flex;gap:0;border-bottom:1px solid rgba(0,0,0,0.1);margin-bottom:28px;">
-        <div class="params-tab active" id="ptab-parametres" onclick="showParamsTab('parametres',null)">Paramètres</div>
-        <div class="params-tab" id="ptab-mapping" onclick="showParamsTab('mapping',null)">Mapping</div>
+        <div class="params-tab active" id="ptab-parametres-module" onclick="showParamsTabModule('parametres',null)">Paramètres</div>
+        <div class="params-tab" id="ptab-mapping-module" onclick="showParamsTabModule('mapping',null)">Mapping</div>
       </div>
-      <div id="ppanel-parametres">
+      <div id="ppanel-parametres-module">
         <div class="params-section">
           <div class="params-field-label">Nom du projet</div>
-          <input class="params-field-input" id="params-name-input" type="text">
-          <button class="params-btn-primary" onclick="saveParamsName()">Enregistrer</button>
-          <button class="params-btn-secondary" onclick="duplicateDossier()">Dupliquer le projet</button>
+          <input class="params-field-input" id="params-name-input-module" type="text">
+          <button class="params-btn-primary" onclick="saveParamsNameModule()">Enregistrer</button>
+          <button class="params-btn-secondary" onclick="duplicateDossierModule()">Dupliquer le projet</button>
           <button class="params-btn-secondary" onclick="exportDossierJSON()" title="Sauvegarde complète hors du navigateur">Sauvegarder en JSON</button>
-          <button class="params-btn-danger" onclick="deleteFromParams()">
+          <button class="params-btn-danger" onclick="deleteFromParamsModule()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             Supprimer le projet
           </button>
         </div>
       </div>
-      <div id="ppanel-mapping" style="display:none;"><div style="color:#6b6960;font-size:14px;">Allez dans "Affectation des comptes" pour configurer le mapping.</div></div>
+      <div id="ppanel-mapping-module" style="display:none;"><div style="color:#6b6960;font-size:14px;">Allez dans "Affectation des comptes" pour configurer le mapping.</div></div>
     </div>
   </div>
 </main>
@@ -2714,9 +2717,11 @@ function renderDashboard() {
   const tag2=document.getElementById('module-dossier-tag');
   if(tag2)tag2.childNodes[0].textContent=(ACTIVE.name||'—')+' ';
 
-  // Params
-  const pname=document.getElementById('params-name-input');if(pname)pname.value=ACTIVE.name||'';
-  const ptitle=document.getElementById('params-dossier-title');if(ptitle)ptitle.textContent=ACTIVE.name||'';
+  // Params (onglet "Paramètres" du dossier OUVERT — #module-params, ids
+  // suffixés -module, distincts de la modale accessible depuis l'icône ⚙
+  // d'une carte sur l'écran d'accueil, cf. AUDIT_CORRECTIONS.md)
+  const pname=document.getElementById('params-name-input-module');if(pname)pname.value=ACTIVE.name||'';
+  const ptitle=document.getElementById('params-dossier-title-module');if(ptitle)ptitle.textContent=ACTIVE.name||'';
   renderConsolideMembersBox();
   renderConsolideViewToggles();
 
@@ -2728,16 +2733,13 @@ function renderDashboard() {
 /**
  * renderConsolideMembersBox()
  * Section "Dossiers inclus dans ce consolidé" injectée dans l'onglet
- * Paramètres du dossier ouvert (#ppanel-parametres), visible uniquement
- * si ACTIVE.type === 'consolide'. Permet d'ajouter/retirer des dossiers
- * Reporting existants du même groupe, conformément à la décision
- * "Choisir parmi les dossiers existants du groupe" (cf. CHANGELOG).
+ * Paramètres du dossier ouvert (#ppanel-parametres-module), visible
+ * uniquement si ACTIVE.type === 'consolide'. Permet d'ajouter/retirer des
+ * dossiers Reporting existants du même groupe, conformément à la
+ * décision "Choisir parmi les dossiers existants du groupe" (cf.
+ * CHANGELOG).
  */
 function renderConsolideMembersBox(){
-  // Scopé sur #module-params (id unique) plutôt que sur #ppanel-parametres,
-  // qui existe en double dans le document (cf. l'écran home "Paramètres"
-  // par carte, #ppanel-parametres2, historiquement dupliqué) — cibler
-  // #ppanel-parametres directement risquerait de résoudre le mauvais nœud.
   document.querySelectorAll('#params-consolide-box').forEach(el=>el.remove());
   if(ACTIVE.type!=='consolide') return;
   const section=document.querySelector('#module-params .params-section');
@@ -4783,6 +4785,21 @@ function showParamsTab(tab,el){
   document.querySelectorAll('[id^="ppanel-"]').forEach(p=>p.style.display='none');
   document.getElementById('ptab-'+tab)?.classList.add('active');
   document.getElementById('ppanel-'+tab).style.display='';
+}
+/**
+ * showParamsTabModule(tab, el)
+ * Équivalent de showParamsTab() pour l'onglet "Paramètres" du dossier
+ * OUVERT (#module-params, ids suffixés -module) — les deux écrans de
+ * paramètres (celui-ci et la modale accessible depuis l'icône ⚙ d'une
+ * carte sur l'écran d'accueil) partageaient auparavant les mêmes ids,
+ * ce qui faisait échouer silencieusement le changement d'onglet dans
+ * l'un des deux écrans (cf. AUDIT_CORRECTIONS.md).
+ */
+function showParamsTabModule(tab,el){
+  document.querySelectorAll('#module-params .params-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('[id^="ppanel-"][id$="-module"]').forEach(p=>p.style.display='none');
+  document.getElementById('ptab-'+tab+'-module')?.classList.add('active');
+  const pp=document.getElementById('ppanel-'+tab+'-module');if(pp)pp.style.display='';
 }
 
 // ── SWITCH MODULE ──
@@ -9425,6 +9442,52 @@ function deleteFromParams(){
   setTimeout(()=>{_currentParamsCard.remove();closeParamsPage();toast(`"${name}" supprimé`);_currentParamsCard=null;},300);
 }
 
+/**
+ * saveParamsNameModule() / duplicateDossierModule() / deleteFromParamsModule()
+ * ─────────────────────────────────────────────────────────────────────────
+ * Équivalents de saveParamsName()/duplicateDossier()/deleteFromParams()
+ * pour l'onglet "Paramètres" du dossier OUVERT (#module-params). Les
+ * fonctions d'origine opèrent exclusivement sur _currentParamsCard (une
+ * carte DOM), qui n'est JAMAIS renseignée quand on arrive par l'onglet
+ * Paramètres d'un dossier déjà ouvert (on n'est pas passé par l'icône ⚙
+ * d'une carte sur l'écran d'accueil) : leurs boutons "Enregistrer" /
+ * "Dupliquer" / "Supprimer" étaient donc de purs NO-OP silencieux depuis
+ * cet écran, avant même la question des ids dupliqués — cf.
+ * AUDIT_CORRECTIONS.md. Ces variantes opèrent sur ACTIVE (le dossier
+ * réellement ouvert) et synchronisent la carte correspondante sur
+ * l'écran d'accueil si elle est déjà présente dans le DOM.
+ */
+function saveParamsNameModule(){
+  if(!ACTIVE.id)return;
+  const newName=(document.getElementById('params-name-input-module')?.value||'').trim();
+  if(!newName)return;
+  ACTIVE.name=newName;
+  const store=loadStore();if(store[ACTIVE.id]){store[ACTIVE.id].name=newName;saveStore(store);}
+  const card=document.querySelector(`[data-id="${ACTIVE.id}"]`);
+  if(card){const nameEl=card.querySelector('.dc-name');if(nameEl)nameEl.textContent=newName;card.dataset.name=newName.toLowerCase();}
+  renderDashboard();
+  toast('Renommé en "'+newName+'"');
+}
+function duplicateDossierModule(){
+  if(!ACTIVE.id)return;
+  const srcId=ACTIVE.id,newName=ACTIVE.name+' (copie)',newId='dossier-'+Date.now();
+  const store=loadStore();let isConsolide=false;
+  if(store[srcId]){store[newId]=JSON.parse(JSON.stringify(store[srcId]));store[newId].id=newId;store[newId].name=newName;store[newId].createdAt=Date.now();isConsolide=store[srcId].type==='consolide';saveStore(store);}
+  addDossierCard(newName,ACTIVE.group||'non-classes',newId,isConsolide?'Copie (consolidé)':'Copie',{consolide:isConsolide});
+  toast('Dupliqué');
+}
+function deleteFromParamsModule(){
+  if(!ACTIVE.id)return;
+  const name=ACTIVE.name,id=ACTIVE.id;
+  if(!confirm(`Supprimer "${name}" ?\nAction irréversible.`))return;
+  const store=loadStore();delete store[id];saveStore(store);
+  const card=document.querySelector(`[data-id="${id}"]`);
+  if(card)card.remove();
+  ACTIVE={id:null,name:'',bal:{},libs:{},months:{},nbLines:0,periodStart:'',periodEnd:'',filename:'',mps:null};
+  toast(`"${name}" supprimé`);
+  goHome();
+}
+
 // ── MAPPING ENGINE (simplified, relies on ACTIVE.mps) ──
 function showAffecPanel(p,el){document.querySelectorAll('.affec-sub-panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.affec-nav').forEach(x=>x.classList.remove('active'));document.getElementById('affec-'+p)?.classList.add('active');if(el)el.classList.add('active');}
 
@@ -12648,64 +12711,28 @@ function runBilanDiagnostic() {
 
 
 
-function showParamsTabH(tab,el){
-  document.querySelectorAll('.params-nav').forEach(n=>n.classList.remove('active'));
-  if(el)el.classList.add('active');
-  else{const sn=document.querySelector(`.params-nav[onclick*="${tab}"]`);if(sn)sn.classList.add('active');}
-  document.querySelectorAll('[id^="ptab-"][id$="2"]').forEach(t=>t.classList.remove('active'));
-  const tt=document.getElementById('ptab-'+tab+'2');if(tt)tt.classList.add('active');
-  document.querySelectorAll('[id^="ppanel-"][id$="2"]').forEach(p=>p.style.display='none');
-  const pp=document.getElementById('ppanel-'+tab+'2');if(pp)pp.style.display='';
-}
-
+/**
+ * openDossierParams(card)
+ * Ouvre la modale "Paramètres" accessible depuis l'icône ⚙ d'une carte
+ * sur l'écran d'accueil (#params-overlay). Cible directement les ids
+ * réels et uniques de cette modale — auparavant, un second bloc de
+ * marquage mort partageait le même id #params-overlay (jamais visible,
+ * son propre id étant systématiquement masqué par le premier) et cette
+ * fonction maintenait à tort une double mise à jour vers ses ids
+ * suffixés "2" ; ce marquage mort a été supprimé (cf.
+ * AUDIT_CORRECTIONS.md, correctif "identifiants HTML dupliqués").
+ */
 function openDossierParams(card){
   if(!card)return;_currentParamsCard=card;
   const name=card.querySelector('.dc-name')?.textContent||'';
-  ['params-name-input','params-name-input2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=name;});
-  ['params-dossier-title','params-dossier-title2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=name;});
-  const tag2=document.getElementById('params-dossier-tag2');if(tag2)tag2.textContent=name;
-  showParamsTabH('parametres',null);
+  const nameInput=document.getElementById('params-name-input');if(nameInput)nameInput.value=name;
+  const title=document.getElementById('params-dossier-title');if(title)title.textContent=name;
+  const tag=document.getElementById('params-dossier-tag');
+  if(tag){const svg=tag.querySelector('svg');tag.textContent=name;if(svg)tag.appendChild(svg);}
+  showParamsTab('parametres',null);
   document.getElementById('params-overlay').style.display='flex';
 }
 </script>
-
-<!-- Params overlay (home screen) -->
-<div id="params-overlay" class="params-overlay" style="display:none;">
-  <div class="params-sidebar">
-    <div class="params-logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>FEC Analyse</div>
-    <button class="params-nav active" onclick="showParamsTabH('parametres',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>Paramètres</button>
-    <button class="params-nav" onclick="showParamsTabH('modele',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>Modèle</button>
-    <button class="params-nav" onclick="showParamsTabH('theme',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Thème</button>
-    <button class="params-nav" onclick="showParamsTabH('logo',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Logo</button>
-  </div>
-  <div class="params-main">
-    <div class="params-topbar">
-      <div class="params-dossier-tag" id="params-dossier-tag2">—</div>
-      <div style="flex:1;display:flex;justify-content:flex-end;"><span style="font-size:13px;color:rgba(255,255,255,.5);cursor:pointer;" onclick="closeParamsPage()">← Retour aux dossiers</span></div>
-    </div>
-    <div class="params-tabs-top">
-      <div class="params-tab active" id="ptab-parametres2" onclick="showParamsTabH('parametres',null)">Paramètres</div>
-      <div class="params-tab" id="ptab-mapping2" onclick="showParamsTabH('mapping',null)">Mapping</div>
-    </div>
-    <div class="params-content">
-      <div id="ppanel-parametres2">
-        <div id="params-dossier-title2" style="font-size:22px;font-weight:700;color:#1a1916;margin-bottom:24px;">—</div>
-        <div class="params-section">
-          <div class="params-field-label">Nom du projet</div>
-          <input class="params-field-input" id="params-name-input2" type="text">
-          <button class="params-btn-primary" onclick="saveParamsName()">Enregistrer</button>
-          <button class="params-btn-secondary" onclick="duplicateDossier()">Dupliquer le projet</button>
-          <button class="params-btn-secondary" onclick="exportDossierJSON()" title="Sauvegarde complète hors du navigateur">Sauvegarder en JSON</button>
-          <button class="params-btn-danger" onclick="deleteFromParams()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Supprimer le projet</button>
-        </div>
-      </div>
-      <div id="ppanel-mapping2" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Configurez le mapping depuis "Affectation des comptes" dans l'analyse.</div></div>
-      <div id="ppanel-modele2" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Modèle — à configurer</div></div>
-      <div id="ppanel-theme2" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Thème — à configurer</div></div>
-      <div id="ppanel-logo2" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Logo — à configurer</div></div>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
