@@ -121,6 +121,9 @@ async function main() {
   section('20. Préparation cloud — service de migration localStorage → cloud');
   await reportResults('Migration service', require('./test_migration_service.js').run(htmlPath));
 
+  section('21. Dossier Consolidé — agrégation simple de dossiers Reporting existants');
+  await reportResults('Consolidé', require('./test_consolide.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

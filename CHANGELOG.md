@@ -4,6 +4,73 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Dossier « Consolidé » : agrégation simple de plusieurs dossiers Reporting existants
+
+Remodelage du flux « + Nouveau projet » demandé : au lieu d'un unique
+format « Reporting », l'étape 1 propose désormais un choix explicite entre
+**Reporting** (flux individuel existant, inchangé) et **Consolidé** (nouveau).
+Deux décisions structurantes ont été actées avec l'utilisateur avant
+implémentation (via question de clarification) :
+
+- **Profondeur de consolidation : agrégation simple.** Un dossier Consolidé
+  additionne, compte par compte (et mois par mois), les soldes de l'exercice
+  actif de chaque dossier membre, puis réutilise **intégralement et sans
+  modification** le moteur de rendu existant (CR, SIG, Bilan, Trésorerie).
+  Volontairement, **aucune élimination des comptes réciproques** (comptes
+  courants d'associés, créances/dettes intragroupe, achats/ventes
+  intragroupe) et **aucun intérêt minoritaire** — ce n'est pas une
+  consolidation comptable réelle, et le mot « Consolidé » est utilisé au
+  sens du rapprochement de groupe demandé, pas au sens réglementaire.
+- **Rattachement : on choisit parmi les dossiers Reporting déjà existants
+  du même groupe.** Jamais de création de reporting « à l'intérieur » d'un
+  Consolidé — un Consolidé référence uniquement des `memberIds` vers des
+  dossiers Reporting déjà présents dans le même groupe (Non classés /
+  Groupe DERKX / Expand CPA), éditable après coup depuis ses Paramètres.
+
+**Modèle de données** : un dossier Consolidé est stocké comme n'importe
+quel dossier (`fec_analyse_v2`), avec `type:'consolide'` et
+`memberIds:[...]`. Il ne persiste **jamais** de `bal`/`exercices` figés :
+`computeConsolidatedData(memberIds)` recalcule l'agrégation à **chaque
+ouverture** à partir de l'exercice actif courant de chaque membre — modifier
+un dossier membre (ou changer son exercice actif) se répercute donc
+automatiquement à la prochaine ouverture du Consolidé, sans étape de
+synchronisation manuelle. Seuls le nom, les membres et le mapping (`mps` —
+personnalisable comme pour tout dossier, régénéré automatiquement à la
+première ouverture via `defaultMPS_CR`/`defaultMPS_Bilan`) sont persistés.
+
+**Interface** :
+- Étape 1 du flux « Nouveau projet » : deux cartes de type de projet
+  (Reporting / Consolidé) remplacent l'unique carte « Format ».
+- Choisir Consolidé mène à un écran de sélection : liste à cocher des
+  dossiers Reporting déjà existants dans le même groupe (jamais de dossiers
+  Consolidé imbriqués). Le dossier est créé et ouvert automatiquement dès
+  la confirmation, comme pour un Reporting classique.
+- La tuile d'un dossier Consolidé porte un badge « Consolidé » et une icône
+  dédiée (calques), sur le même fond foncé que les autres dossiers réels
+  (`active-card`) — visible directement dans la section de son groupe,
+  sans avoir besoin de créer un groupe dédié.
+- Depuis les Paramètres du dossier Consolidé ouvert : section « Dossiers
+  inclus dans ce consolidé » listant les membres actuels (avec alerte si un
+  membre a été supprimé entre-temps), et un sélecteur pour en ajouter
+  d'autres dossiers Reporting du même groupe. Ajouter/retirer un membre
+  recalcule immédiatement l'agrégation affichée.
+- « + Ajouter un exercice » est désormais explicitement désactivé (message
+  clair) sur un dossier Consolidé — un Consolidé n'a pas de FEC propre à
+  importer, ses « exercices » sont entièrement dérivés de ses membres.
+
+**Tests** : 17 nouveaux tests Node (`tests/test_consolide.js`, harnais
+existant) couvrant `computeConsolidatedData()` (somme par compte, fusion des
+mois, libellés, période globale, dossiers membres introuvables, exclusion
+d'un Consolidé listé par erreur comme membre d'un autre Consolidé),
+`openDossier()` sur un dossier consolidé (bal agrégé, type, mapping généré,
+exercice synthétique unique) et `saveActiveDossier()` (jamais de `bal` figé
+persisté, ré-agrégation après modification d'un membre) — 472 tests au
+total, suite intégralement verte. Vérification manuelle en navigateur
+headless (Playwright) du parcours complet : création d'un Consolidé à 3
+membres depuis l'écran d'accueil, ouverture automatique, CR affichant
+correctement la somme des comptes des 3 dossiers, gestion des membres
+depuis les Paramètres (ajout/retrait avec recalcul immédiat).
+
 ## v6 — Chantier SaaS multi-tenant : Phase 3 complète hors ligne (modèle multi-tenant, RLS, invitations, préparation client)
 
 Tout ce qui pouvait être préparé sans accès réseau pour les Phases 3 et
