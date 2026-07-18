@@ -4626,6 +4626,7 @@ function tmRenderTresoChart() {
   const d = TM.data;
   const canvas = document.getElementById('tm-chart-treso');
   if (!canvas) return;
+  if (typeof Chart === 'undefined') return; // Chart.js (CDN) indisponible — ne doit jamais faire échouer le reste du rendu
   if (TM.charts.treso) TM.charts.treso.destroy();
 
   TM.charts.treso = new Chart(canvas, {
@@ -4724,6 +4725,7 @@ function tmRenderFluxChart() {
   const d = TM.data;
   const canvas = document.getElementById('tm-chart-flux');
   if (!canvas) return;
+  if (typeof Chart === 'undefined') return; // Chart.js (CDN) indisponible — ne doit jamais faire échouer le reste du rendu
   if (TM.charts.flux) TM.charts.flux.destroy();
 
   TM.charts.flux = new Chart(canvas, {
@@ -4847,6 +4849,7 @@ function tmRenderProjectionChart() {
 function tmBuildProjectionChart(d, nMois) {
   const canvas = document.getElementById('tm-chart-proj');
   if (!canvas) return;
+  if (typeof Chart === 'undefined') return; // Chart.js (CDN) indisponible — ne doit jamais faire échouer le reste du rendu
   if (TM.charts.proj) TM.charts.proj.destroy();
 
   const { nb, mos, enc_arr, dec_arr, net_arr, tresoNette, MOS_FR, dso } = d;
@@ -5695,15 +5698,70 @@ function handleImportDossierInput(input) {
 }
 
 /**
+ * ALL_STORAGE_KEYS
+ * ─────────────────────────────────────────────────────────────────────────
+ * Liste EXHAUSTIVE de toutes les clés localStorage utilisées par
+ * l'application, toutes réunies ici à des fins d'audit et de suppression
+ * complète des données (cf. deleteAllLocalData()).
+ *
+ * RÈGLE IMPÉRATIVE : toute nouvelle fonctionnalité qui introduit une
+ * nouvelle clé de stockage (nouveau module, nouvelle préférence
+ * persistée...) DOIT l'ajouter à cette liste. C'est la seule source de
+ * vérité utilisée pour garantir qu'"Supprimer toutes les données" efface
+ * réellement TOUT.
+ */
+const ALL_STORAGE_KEYS = [
+  STORE_KEY,
+];
+
+/**
+ * deleteAllIndexedDbData()
+ * Supprime toute base IndexedDB créée par l'application. Aucun module ne
+ * persiste encore dans IndexedDB à ce jour (tout est en localStorage) —
+ * cette fonction est un no-op sûr aujourd'hui, préparé pour la future
+ * migration (FEC volumineux, grand livre) afin qu'une suppression
+ * complète reste réellement complète après cette migration, sans qu'il
+ * faille penser à modifier ce code à ce moment-là.
+ * Ne bloque jamais deleteAllLocalData() en cas d'échec partiel (API non
+ * supportée, base verrouillée par un autre onglet...).
+ * @returns {Promise<boolean>}
+ */
+async function deleteAllIndexedDbData() {
+  if (!('indexedDB' in window) || typeof indexedDB.databases !== 'function') return true;
+  try {
+    const dbs = await indexedDB.databases();
+    await Promise.all((dbs || []).map(db => new Promise(resolve => {
+      if (!db || !db.name) { resolve(); return; }
+      const req = indexedDB.deleteDatabase(db.name);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    })));
+    return true;
+  } catch (e) {
+    console.warn('[FEC Analyse] Suppression IndexedDB partielle ou indisponible :', e);
+    return true;
+  }
+}
+
+/**
  * deleteAllLocalData()
- * Supprime IRRÉVERSIBLEMENT toutes les données de l'application
- * (tous les dossiers, tous les mappings) du localStorage du navigateur.
+ * Supprime IRRÉVERSIBLEMENT toutes les données de l'application (tous
+ * les dossiers) du localStorage du navigateur.
  * Argument RGPD : aucune donnée n'existe ailleurs (aucun envoi réseau),
  * donc cette action est la seule façon de tout effacer.
+ *
+ * Vérifie explicitement, après suppression, qu'aucune des clés listées
+ * dans ALL_STORAGE_KEYS ne subsiste.
  */
 function deleteAllLocalData() {
   try {
-    localStorage.removeItem(STORE_KEY);
+    ALL_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    const remaining = ALL_STORAGE_KEYS.filter(key => localStorage.getItem(key) !== null);
+    if (remaining.length) {
+      toast('Échec de la suppression : des données subsistent (' + remaining.join(', ') + ')', true);
+      return false;
+    }
     return true;
   } catch (e) {
     toast('Échec de la suppression : ' + (e && e.message ? e.message : 'erreur inconnue'), true);
@@ -5744,9 +5802,20 @@ function openPrivacyModal() {
   document.body.appendChild(ov);
 }
 function closePrivacyModal() { const el = document.getElementById('privacy-overlay'); if (el) el.remove(); }
-function confirmDeleteAllData() {
-  if (!confirm('Supprimer irréversiblement TOUS les dossiers et mappings stockés localement ?\nCette action est définitive.')) return;
-  if (deleteAllLocalData()) {
+/**
+ * confirmDeleteAllData()
+ * Point d'entrée du bouton "Supprimer toutes les données" : demande une
+ * confirmation explicite, supprime TOUTES les clés applicatives
+ * (ALL_STORAGE_KEYS) + toute future base IndexedDB, vérifie qu'il ne reste
+ * rien, puis force un rechargement complet de la page pour repartir d'un
+ * état mémoire garanti propre (la variable globale ACTIVE ne doit pas
+ * survivre en mémoire après une suppression totale).
+ */
+async function confirmDeleteAllData() {
+  if (!confirm('Supprimer irréversiblement TOUTES les données de l\'application :\ntous les dossiers et leurs paramétrages ?\n\nCette action est définitive.')) return;
+  const localOk = deleteAllLocalData();
+  await deleteAllIndexedDbData();
+  if (localOk) {
     closePrivacyModal();
     toast('Toutes les données locales ont été supprimées');
     setTimeout(() => location.reload(), 800);

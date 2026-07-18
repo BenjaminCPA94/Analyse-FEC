@@ -91,6 +91,9 @@ reportResults('Multi-exercices', require('./test_multi_exercices.js').run(htmlPa
 section('11. Grand livre — détail par compte');
 reportResults('Grand livre', require('./test_grand_livre.js').run(htmlPath));
 
+section('12. Suppression complète des données (audit sécurité — correctif critique)');
+reportResults('Suppression données', require('./test_delete_all_data.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
