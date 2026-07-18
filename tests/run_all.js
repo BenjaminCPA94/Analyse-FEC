@@ -97,6 +97,9 @@ reportResults('Suppression données', require('./test_delete_all_data.js').run(h
 section('13. Injection de formule CSV (audit sécurité — correctif critique)');
 reportResults('Injection CSV', require('./test_csv_injection.js').run(htmlPath));
 
+section('14. Identifiants HTML dupliqués (audit — correctif critique)');
+reportResults('IDs HTML', require('./test_html_ids.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
