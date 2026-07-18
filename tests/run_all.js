@@ -136,6 +136,9 @@ async function main() {
   section('25. Identifiants HTML dupliqués (audit — correctif critique)');
   await reportResults('IDs HTML', require('./test_html_ids.js').run(htmlPath));
 
+  section('26. Fonctions JavaScript dupliquées (audit — correctif critique)');
+  await reportResults('Fonctions dupliquées', await require('./test_duplicate_functions.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

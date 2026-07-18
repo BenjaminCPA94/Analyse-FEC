@@ -9489,7 +9489,13 @@ function deleteFromParamsModule(){
 }
 
 // ── MAPPING ENGINE (simplified, relies on ACTIVE.mps) ──
-function showAffecPanel(p,el){document.querySelectorAll('.affec-sub-panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.affec-nav').forEach(x=>x.classList.remove('active'));document.getElementById('affec-'+p)?.classList.add('active');if(el)el.classList.add('active');}
+// showAffecPanel() était auparavant déclarée une seconde fois ici, sans le
+// rafraîchissement du panneau des comptes non affectés (cf. la déclaration
+// complète plus haut dans le fichier) — cette redéclaration écrasait
+// silencieusement la première (deux fonctions globales de même nom, la
+// dernière déclarée l'emporte), ce qui empêchait le panneau "Comptes non
+// affectés" de se rafraîchir au changement d'onglet SIG/Bilan dans l'écran
+// d'affectation. Cf. AUDIT_CORRECTIONS.md.
 
 // Mapping rendering uses ACTIVE.mps and ACTIVE.bal
 // (Uses same renderMapping/chipHtml/mpRename/etc from previous version but reading ACTIVE state)
