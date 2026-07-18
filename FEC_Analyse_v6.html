@@ -4131,7 +4131,7 @@ function buildBilanTables() {
 
   const totalActif  = buildBilanHalf('tbActif',  actifGroups,  'actif');
   const totalPassif = buildBilanHalf('tbPassif', passifGroups, 'passif', resultatAInjecter);
-  renderComptesMixtesAlerte();
+  ComptesMixtesEngine.renderAlerte();
 
   // ── Contrôle d'équilibre ──────────────────────────────────────────────
   // Actif = Passif (capitaux propres + résultat + dettes)
@@ -12323,8 +12323,9 @@ function _renderOrphanBlock(elId, orphans, dupes, key, bal) {
  * actif/passif dépend du signe réel du solde plutôt que d'être fixe.
  * Hissée au niveau module (au lieu d'une const locale à
  * autoAffectOrphans()) pour être réutilisable par
- * detecterComptesMixtesIncoherents() (Phase 3 de l'audit demandé) — la
- * même règle déjà validée avec l'expert-comptable doit s'appliquer de la
+ * ComptesMixtesEngine.detecterIncoherences() (Phase 3 de l'audit
+ * demandé) — la même règle déjà validée avec l'expert-comptable doit
+ * s'appliquer de la
  * même façon au premier classement (autoAffectOrphans, comptes
  * orphelins) et à la réévaluation d'un exercice ultérieur (comptes déjà
  * classés dont le solde change de signe).
@@ -12943,7 +12944,7 @@ function autoAffectOrphans() {
    * 486/487, 409/419, 439... — cf. commentaires dans ROUTING).
    *
    * Table MIXED_ROUTES hissée au niveau module (cf. juste avant cette
-   * fonction) — réutilisée par detecterComptesMixtesIncoherents().
+   * fonction) — réutilisée par ComptesMixtesEngine.detecterIncoherences().
    */
 
   // Trier du plus long au plus court → match le plus précis gagne
@@ -13062,10 +13063,17 @@ function autoAffectOrphans() {
 }
 
 /**
- * detecterComptesMixtesIncoherents()
- * ─────────────────────────────────────────────────────────────────────────
- * Phase 3 de l'audit demandé. LIMITE CONNUE (déjà documentée dans
- * addExerciceToActiveDossier()) : un compte "mixte" (cf. MIXED_ROUTES —
+ * ComptesMixtesEngine — Phase 6 de l'audit demandé (modularisation
+ * interne progressive, un seul fichier) : premier module extrait selon
+ * le motif déjà établi par PrevisionnelEngine/TnsEngine/
+ * RemunerationEngine/IrppEngine (IIFE exposant une API publique
+ * restreinte, état/logique interne encapsulés). Reste dans le même
+ * fichier HTML — aucun changement de la distribution en fichier unique
+ * ouvrable directement (`file://`), aucun impact sur le harnais de tests.
+ *
+ * Regroupe la détection et la correction des comptes "mixtes" (Phase 3
+ * de l'audit demandé). LIMITE CONNUE (déjà documentée dans
+ * addExerciceToActiveDossier()) : un compte mixte (cf. MIXED_ROUTES —
  * classes 4 principalement) n'est réévalué par autoAffectOrphans() qu'au
  * moment de son PREMIER classement, car ce compte n'est plus "orphelin"
  * ensuite. Si son solde change de signe sur un exercice ultérieur du même
@@ -13077,102 +13085,117 @@ function autoAffectOrphans() {
  * choisi intentionnellement, ou déplacerait un compte sans que
  * l'expert-comptable ne le voie) : conformément à la règle impérative n°8
  * de la demande d'audit ("si une règle comptable est incertaine, ne
- * l'invente pas ; affiche une alerte claire"), cette fonction se contente
- * de DÉTECTER l'incohérence entre le classement actuel et ce que la règle
+ * l'invente pas ; affiche une alerte claire"), ce module se contente de
+ * DÉTECTER l'incohérence entre le classement actuel et ce que la règle
  * déjà validée (signe du solde, cf. AUDIT.md §(o)) donnerait pour
  * l'exercice actuellement affiché — la correction reste un geste explicite
- * de l'utilisateur (reaffecterCompteMixte() / reaffecterTousComptesMixtes()).
- * @returns {Array<{compte:string, libelle:string, solde:number, actuel:object, attendu:object}>}
+ * de l'utilisateur (`reaffecterCompte()`/`reaffecterTous()`).
+ *
+ * MIXED_ROUTES reste une constante partagée au niveau module (et non
+ * interne à cet IIFE) : elle est aussi utilisée par `autoAffectOrphans()`
+ * (moteur d'affectation initiale), une dépendance de DONNÉES commune à
+ * deux modules, normale et volontairement conservée telle quelle.
  */
-function detecterComptesMixtesIncoherents() {
-  if (!ACTIVE.mps || !ACTIVE.bal || ACTIVE.type === 'consolide') return [];
-  const prefixes = Object.keys(MIXED_ROUTES).sort((a, b) => b.length - a.length);
-  const bilanMps = ACTIVE.mps.bilan || [];
-  const localiser = (n) => {
-    for (const g of bilanMps) {
-      if ((g.accounts || []).includes(n)) return { gid: g.id, subId: null };
-      for (const s of (g.subs || [])) {
-        if ((s.accounts || []).includes(n)) return { gid: g.id, subId: s.id };
+const ComptesMixtesEngine = (function () {
+  /**
+   * detecterIncoherences()
+   * @returns {Array<{compte:string, libelle:string, solde:number, actuel:object, attendu:object}>}
+   */
+  function detecterIncoherences() {
+    if (!ACTIVE.mps || !ACTIVE.bal || ACTIVE.type === 'consolide') return [];
+    const prefixes = Object.keys(MIXED_ROUTES).sort((a, b) => b.length - a.length);
+    const bilanMps = ACTIVE.mps.bilan || [];
+    const localiser = (n) => {
+      for (const g of bilanMps) {
+        if ((g.accounts || []).includes(n)) return { gid: g.id, subId: null };
+        for (const s of (g.subs || [])) {
+          if ((s.accounts || []).includes(n)) return { gid: g.id, subId: s.id };
+        }
       }
-    }
-    return null;
-  };
-  const incoherents = [];
-  Object.keys(ACTIVE.bal).forEach(n => {
-    const pfx = prefixes.find(p => n.startsWith(p));
-    if (!pfx) return;
-    const loc = localiser(n);
-    if (!loc) return; // pas encore classé (orphelin) — pris en charge par autoAffectOrphans()
-    const v = ACTIVE.bal[n] || 0;
-    const attendu = v >= 0 ? MIXED_ROUTES[pfx].actif : MIXED_ROUTES[pfx].passif;
-    if (loc.gid !== attendu.gid || (attendu.subId && loc.subId !== attendu.subId)) {
-      incoherents.push({ compte: n, libelle: ACTIVE.libs?.[n] || '', solde: v, actuel: loc, attendu });
-    }
-  });
-  return incoherents;
-}
-/** appliquerReaffectationCompteMixte(item) Déplace un compte mixte vers sa destination attendue (mutation seule, sans rendu — cf. reaffecterCompteMixte()/reaffecterTousComptesMixtes()). */
-function appliquerReaffectationCompteMixte(item) {
-  const n = item.compte;
-  ['cr', 'bilan'].forEach(k => {
-    (ACTIVE.mps[k] || []).forEach(g => {
-      g.accounts = (g.accounts || []).filter(x => x !== n);
-      (g.subs || []).forEach(s => { s.accounts = (s.accounts || []).filter(x => x !== n); });
+      return null;
+    };
+    const incoherents = [];
+    Object.keys(ACTIVE.bal).forEach(n => {
+      const pfx = prefixes.find(p => n.startsWith(p));
+      if (!pfx) return;
+      const loc = localiser(n);
+      if (!loc) return; // pas encore classé (orphelin) — pris en charge par autoAffectOrphans()
+      const v = ACTIVE.bal[n] || 0;
+      const attendu = v >= 0 ? MIXED_ROUTES[pfx].actif : MIXED_ROUTES[pfx].passif;
+      if (loc.gid !== attendu.gid || (attendu.subId && loc.subId !== attendu.subId)) {
+        incoherents.push({ compte: n, libelle: ACTIVE.libs?.[n] || '', solde: v, actuel: loc, attendu });
+      }
     });
-  });
-  const destG = ACTIVE.mps.bilan?.find(g => g.id === item.attendu.gid);
-  if (!destG) return false;
-  if (item.attendu.subId) {
-    let sub = destG.subs?.find(s => s.id === item.attendu.subId);
-    if (!sub && destG.subs) { sub = { id: item.attendu.subId, label: item.attendu.subId, accounts: [] }; destG.subs.push(sub); }
-    if (sub) { if (!sub.accounts) sub.accounts = []; if (!sub.accounts.includes(n)) sub.accounts.push(n); }
-  } else {
-    if (!destG.accounts) destG.accounts = [];
-    if (!destG.accounts.includes(n)) destG.accounts.push(n);
+    return incoherents;
   }
-  return true;
-}
-/** reaffecterCompteMixte(n) Réaffecte UN compte mixte incohérent selon le signe de son solde dans l'exercice affiché (déclenché explicitement par l'utilisateur, cf. detecterComptesMixtesIncoherents()). */
-function reaffecterCompteMixte(n) {
-  const item = detecterComptesMixtesIncoherents().find(x => x.compte === n);
-  if (!item) return;
-  appliquerReaffectationCompteMixte(item);
-  renderMapping('bilan'); buildCRTable(); buildLegalCRTable(); buildBilanTables(); schedSave();
-  toast(`Compte ${n} réaffecté selon le solde de l'exercice affiché`);
-}
-/** reaffecterTousComptesMixtes() Réaffecte en une fois tous les comptes mixtes incohérents détectés. */
-function reaffecterTousComptesMixtes() {
-  const incoherents = detecterComptesMixtesIncoherents();
-  if (!incoherents.length) return;
-  incoherents.forEach(appliquerReaffectationCompteMixte);
-  renderMapping('bilan'); buildCRTable(); buildLegalCRTable(); buildBilanTables(); schedSave();
-  toast(`${incoherents.length} compte(s) mixte(s) réaffecté(s) selon le solde de l'exercice affiché`);
-}
-/**
- * renderComptesMixtesAlerte()
- * Bandeau signalant les comptes mixtes détectés en §detecterComptesMixtesIncoherents()
- * dans la page Bilan (#comptes-mixtes-alerte). Appelé depuis buildBilanTables()
- * (fonction de RENDU pure : cette détection est en LECTURE SEULE, elle ne
- * réécrit jamais ACTIVE.mps — seuls reaffecterCompteMixte()/
- * reaffecterTousComptesMixtes(), déclenchés explicitement par un clic,
- * modifient le mapping).
- */
-function renderComptesMixtesAlerte() {
-  const el = document.getElementById('comptes-mixtes-alerte');
-  if (!el) return;
-  const incoherents = detecterComptesMixtesIncoherents();
-  if (!incoherents.length) { el.innerHTML = ''; return; }
-  const lignes = incoherents.map(item => `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
-    <span>Compte <b>${escHtml(item.compte)}</b>${item.libelle ? ' — ' + escHtml(item.libelle) : ''} (solde ${item.solde >= 0 ? 'débiteur' : 'créditeur'}) actuellement classé en <b>${item.actuel.gid.startsWith('bp') ? 'Passif' : 'Actif'}</b></span>
-    <span style="cursor:pointer;color:#185FA5;text-decoration:underline;white-space:nowrap;margin-left:12px;" onclick="reaffecterCompteMixte('${item.compte}')">Réaffecter en ${item.attendu.gid.startsWith('bp') ? 'Passif' : 'Actif'}</span>
-  </div>`).join('');
-  el.innerHTML = `<div style="background:#fff3e0;border:1.5px solid #d4a72c;color:#7a5c00;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;">
-    <div style="font-weight:700;margin-bottom:6px;">⚠ ${incoherents.length} compte(s) mixte(s) à revérifier pour cet exercice</div>
-    <div style="font-weight:400;margin-bottom:6px;">Le classement actif/passif de ces comptes a été fixé pour un autre exercice de ce dossier et ne reflète peut-être plus le signe réel de leur solde sur l'exercice actuellement affiché.</div>
-    ${lignes}
-    <div style="margin-top:8px;"><span style="cursor:pointer;color:#185FA5;text-decoration:underline;font-weight:600;" onclick="reaffecterTousComptesMixtes()">Tout réaffecter selon le solde de cet exercice</span></div>
-  </div>`;
-}
+
+  /** appliquerReaffectation(item) Déplace un compte mixte vers sa destination attendue (mutation seule, sans rendu — privé, cf. reaffecterCompte()/reaffecterTous()). */
+  function appliquerReaffectation(item) {
+    const n = item.compte;
+    ['cr', 'bilan'].forEach(k => {
+      (ACTIVE.mps[k] || []).forEach(g => {
+        g.accounts = (g.accounts || []).filter(x => x !== n);
+        (g.subs || []).forEach(s => { s.accounts = (s.accounts || []).filter(x => x !== n); });
+      });
+    });
+    const destG = ACTIVE.mps.bilan?.find(g => g.id === item.attendu.gid);
+    if (!destG) return false;
+    if (item.attendu.subId) {
+      let sub = destG.subs?.find(s => s.id === item.attendu.subId);
+      if (!sub && destG.subs) { sub = { id: item.attendu.subId, label: item.attendu.subId, accounts: [] }; destG.subs.push(sub); }
+      if (sub) { if (!sub.accounts) sub.accounts = []; if (!sub.accounts.includes(n)) sub.accounts.push(n); }
+    } else {
+      if (!destG.accounts) destG.accounts = [];
+      if (!destG.accounts.includes(n)) destG.accounts.push(n);
+    }
+    return true;
+  }
+
+  /** reaffecterCompte(n) Réaffecte UN compte mixte incohérent selon le signe de son solde dans l'exercice affiché (déclenché explicitement par l'utilisateur). */
+  function reaffecterCompte(n) {
+    const item = detecterIncoherences().find(x => x.compte === n);
+    if (!item) return;
+    appliquerReaffectation(item);
+    renderMapping('bilan'); buildCRTable(); buildLegalCRTable(); buildBilanTables(); schedSave();
+    toast(`Compte ${n} réaffecté selon le solde de l'exercice affiché`);
+  }
+
+  /** reaffecterTous() Réaffecte en une fois tous les comptes mixtes incohérents détectés. */
+  function reaffecterTous() {
+    const incoherents = detecterIncoherences();
+    if (!incoherents.length) return;
+    incoherents.forEach(appliquerReaffectation);
+    renderMapping('bilan'); buildCRTable(); buildLegalCRTable(); buildBilanTables(); schedSave();
+    toast(`${incoherents.length} compte(s) mixte(s) réaffecté(s) selon le solde de l'exercice affiché`);
+  }
+
+  /**
+   * renderAlerte()
+   * Bandeau signalant les comptes mixtes détectés dans la page Bilan
+   * (#comptes-mixtes-alerte). Appelé depuis buildBilanTables() (fonction
+   * de RENDU pure : cette détection est en LECTURE SEULE, elle ne réécrit
+   * jamais ACTIVE.mps — seuls reaffecterCompte()/reaffecterTous(),
+   * déclenchés explicitement par un clic, modifient le mapping).
+   */
+  function renderAlerte() {
+    const el = document.getElementById('comptes-mixtes-alerte');
+    if (!el) return;
+    const incoherents = detecterIncoherences();
+    if (!incoherents.length) { el.innerHTML = ''; return; }
+    const lignes = incoherents.map(item => `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+      <span>Compte <b>${escHtml(item.compte)}</b>${item.libelle ? ' — ' + escHtml(item.libelle) : ''} (solde ${item.solde >= 0 ? 'débiteur' : 'créditeur'}) actuellement classé en <b>${item.actuel.gid.startsWith('bp') ? 'Passif' : 'Actif'}</b></span>
+      <span style="cursor:pointer;color:#185FA5;text-decoration:underline;white-space:nowrap;margin-left:12px;" onclick="ComptesMixtesEngine.reaffecterCompte('${item.compte}')">Réaffecter en ${item.attendu.gid.startsWith('bp') ? 'Passif' : 'Actif'}</span>
+    </div>`).join('');
+    el.innerHTML = `<div style="background:#fff3e0;border:1.5px solid #d4a72c;color:#7a5c00;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;">
+      <div style="font-weight:700;margin-bottom:6px;">⚠ ${incoherents.length} compte(s) mixte(s) à revérifier pour cet exercice</div>
+      <div style="font-weight:400;margin-bottom:6px;">Le classement actif/passif de ces comptes a été fixé pour un autre exercice de ce dossier et ne reflète peut-être plus le signe réel de leur solde sur l'exercice actuellement affiché.</div>
+      ${lignes}
+      <div style="margin-top:8px;"><span style="cursor:pointer;color:#185FA5;text-decoration:underline;font-weight:600;" onclick="ComptesMixtesEngine.reaffecterTous()">Tout réaffecter selon le solde de cet exercice</span></div>
+    </div>`;
+  }
+
+  return { detecterIncoherences, reaffecterCompte, reaffecterTous, renderAlerte };
+})();
 
 /**
  * fixAllDuplicates()

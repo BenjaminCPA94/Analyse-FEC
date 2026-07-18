@@ -4,6 +4,27 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 6 (1/N) : modularisation interne — ComptesMixtesEngine
+
+L'application reste un **fichier HTML unique ouvert directement en
+local** (aucun serveur, aucun build) : de vrais modules ES répartis sur
+plusieurs fichiers ne se chargent pas via `file://` dans la plupart des
+navigateurs, ce qui aurait cassé cet usage. Décision confirmée avec
+l'utilisateur : modularisation **interne**, un seul fichier, progressive
+(un module à la fois).
+
+- Premier module extrait : `ComptesMixtesEngine` (détection/correction
+  des comptes mixtes, cf. entrée Phase 3), selon le motif IIFE déjà
+  utilisé par `PrevisionnelEngine`/`TnsEngine`/`RemunerationEngine`/
+  `IrppEngine` — API publique restreinte, logique interne encapsulée.
+- Comportement strictement identique avant/après : réorganisation
+  interne uniquement, aucun changement fonctionnel.
+- Convention de modularisation documentée dans `ARCHITECTURE.md` pour
+  les extractions futures.
+
+Suite de tests inchangée (639 tests, tous verts après renommage),
+vérification manuelle en navigateur headless.
+
 ## v6 — Phase 9 : accessibilité clavier et lecteur d'écran (périmètre restreint)
 
 Aucun attribut `aria-*` ni `role` nulle part dans l'application avant

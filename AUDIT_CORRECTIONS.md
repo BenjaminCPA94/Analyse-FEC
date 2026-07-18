@@ -689,6 +689,61 @@ déroulant via focus + Entrée, non-régression du clic souris.
 
 ---
 
+## Phase 6 — Modularisation interne progressive (un seul fichier)
+
+### 17. 🟡 Premier module extrait : `ComptesMixtesEngine`
+
+**Décision arbitrée avec l'utilisateur** avant de commencer : deux
+approches étaient possibles pour la Phase 6 (découpage en fichiers `.js`
+réels + étape de build, ou modularisation interne dans un seul fichier).
+L'application est ouverte directement en local (`file://`, sans
+serveur) — or de vrais modules ES répartis sur plusieurs fichiers ne se
+chargent pas via `file://` dans la plupart des navigateurs (restriction
+CORS). L'utilisateur a confirmé l'approche **modularisation interne, un
+seul fichier**, sans étape de build.
+
+**Correction appliquée** :
+- La table `MIXED_ROUTES` déjà hissée au niveau module (cf. §11) et les 5
+  fonctions de détection/correction des comptes mixtes
+  (`detecterComptesMixtesIncoherents`, `appliquerReaffectationCompteMixte`,
+  `reaffecterCompteMixte`, `reaffecterTousComptesMixtes`,
+  `renderComptesMixtesAlerte`) sont regroupées dans un nouvel espace de
+  noms `ComptesMixtesEngine`, selon le motif IIFE déjà établi par
+  `PrevisionnelEngine`/`TnsEngine`/`RemunerationEngine`/`IrppEngine` :
+  état et logique interne encapsulés dans la fermeture, API publique
+  restreinte (`detecterIncoherences`, `reaffecterCompte`,
+  `reaffecterTous`, `renderAlerte` — `appliquerReaffectation` reste
+  privée, jamais exposée).
+- Tous les points d'appel mis à jour vers la forme `ComptesMixtesEngine.
+  xxx(...)`, y compris les attributs `onclick="..."` générés
+  dynamiquement dans le bandeau du Bilan (une `const` de premier niveau
+  reste accessible depuis du HTML injecté via `innerHTML`, comme
+  n'importe quelle fonction globale).
+- **Comportement strictement identique avant/après** : aucun changement
+  fonctionnel, uniquement une réorganisation interne. Vérifié par la
+  suite de tests existante (renommée en conséquence, toujours 12 tests,
+  tous verts) et par une nouvelle vérification manuelle en navigateur
+  headless reproduisant exactement le scénario déjà validé en Phase 3.
+- Convention documentée dans `ARCHITECTURE.md` §1 pour les extractions
+  futures (candidats identifiés, pas encore traités dans cette passe :
+  rapport d'import FEC — entangled avec la construction du Web Worker
+  via `.toString()`, à traiter avec précaution —, sauvegarde de secours
+  IndexedDB, utilitaires de formatage/export).
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`,
+`tests/test_comptes_mixtes_multi_exercice.js` (renommage des appels,
+aucun nouveau test — la couverture existante suffit à garantir la
+non-régression d'une réorganisation interne).
+**Tests** : suite existante (12 tests) toujours verte après renommage +
+vérification manuelle en navigateur headless.
+
+**Portée volontairement limitée** : ce correctif extrait UN module,
+conformément à la règle impérative n°4 ("étapes courtes et
+vérifiables") et n°6 ("pas de réécriture totale immédiate"). La Phase 6
+reste un chantier progressif, multi-passes, à poursuivre séparément.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |

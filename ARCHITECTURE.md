@@ -9,24 +9,62 @@ et `CHANGELOG.md` pour l'historique fonctionnel complet.
 ## 1. Organisation du code
 
 L'application est un **unique fichier HTML** (`FEC_Analyse_v6.html`,
-~12 700 lignes) contenant HTML, CSS et JavaScript dans un seul
-`<script>` inline. Ce choix n'est pas accidentel : `tests/harness.js`
-(`extractMainScript()`) extrait et exécute ce script dans un bac à sable
-Node (`vm`) pour tester les fonctions métier sans navigateur — il exige
-exactement un `<script>` inline sans attribut `src`. Toute tentative de
-scinder le fichier en modules externes doit d'abord adapter le harnais de
-test, sous peine de rendre tout le code invisible aux 519 tests
-automatiques existants (cf. `AUDIT_CORRECTIONS.md`, leçon retenue lors du
-chantier SaaS Phase 2).
+~13 400 lignes) contenant HTML, CSS et JavaScript dans un seul
+`<script>` inline, **ouvert directement en local (`file://`), sans
+serveur ni build**. Ce n'est pas un détail secondaire : de vrais modules
+ES (`<script type="module" src="...">`) répartis sur plusieurs fichiers
+**ne se chargent pas via `file://`** dans la plupart des navigateurs
+(restriction CORS sur les imports de modules) — les scinder casserait
+l'usage "ouvrir le fichier et ça marche" (partage d'un seul fichier entre
+postes, aucune installation). C'est un choix délibéré, confirmé avec
+l'utilisateur lors du chantier de modularisation (Phase 6, cf. §8).
 
-Le fichier est organisé en sections thématiques séparées par des
-commentaires bannière (`// ═══...`), dans cet ordre approximatif :
+`tests/harness.js` (`extractMainScript()`) extrait et exécute ce script
+dans un bac à sable Node (`vm`) pour tester les fonctions métier sans
+navigateur — il exige exactement un `<script>` inline sans attribut
+`src`. Toute tentative de scinder le fichier en fichiers `.js` externes
+casserait donc à la fois la distribution (`file://`) et le harnais de
+699 tests existants ; c'est pourquoi la modularisation en cours se fait
+**à l'intérieur du fichier unique**.
+
+**Convention de modularisation interne** (Phase 6, en cours,
+progressive) : les parties du code correspondant à un domaine métier
+cohérent sont regroupées en **espaces de noms IIFE** exposant une API
+publique restreinte (état/fonctions internes encapsulés dans la
+fermeture, jamais accessibles depuis l'extérieur) — le même motif que
+`PrevisionnelEngine`/`TnsEngine`/`RemunerationEngine`/`IrppEngine`
+(présents avant ce chantier) étend désormais à `ComptesMixtesEngine`
+(détection/correction des comptes mixtes, cf. `AUDIT_CORRECTIONS.md`
+§11). Convention pour toute extraction future :
+```js
+const NomDuModule = (function () {
+  function fonctionPrivee() { /* jamais exposée */ }
+  function fonctionPublique() { /* ... */ }
+  return { fonctionPublique }; // API publique explicite
+})();
+```
+Les appels depuis le reste du code (y compris depuis des attributs
+`onclick="..."` générés dynamiquement) utilisent la forme
+`NomDuModule.fonctionPublique(...)` — `NomDuModule` étant une `const` de
+premier niveau, elle est bien accessible globalement comme n'importe
+quelle fonction, y compris depuis du HTML généré par `innerHTML`. Un
+module partage volontiers des constantes de données avec d'autres
+parties du code (ex. `MIXED_ROUTES`, utilisée à la fois par
+`ComptesMixtesEngine` et par `autoAffectOrphans()`) — l'objectif de cette
+modularisation est d'encapsuler la LOGIQUE et l'état internes de chaque
+domaine, pas d'éliminer tout couplage avec l'état global partagé (`ACTIVE`,
+`escHtml`, `toast`...), ce qui nécessiterait une réécriture complète hors
+de propos ici (règle impérative n°6 de la demande : pas de réécriture
+totale immédiate).
+
+Le fichier reste par ailleurs organisé en sections thématiques séparées
+par des commentaires bannière (`// ═══...`), dans cet ordre approximatif :
 constantes de stockage → état global (`ACTIVE`, etc.) → helpers de
 formatage/sécurité (`escHtml`, `csvSafeValue`, `fmtV`...) → moteur FEC
-(parsing, mapping, agrégation) → rendu CR/SIG/Bilan/Trésorerie/Grand
-livre → module Prévisionnel → module TNS → module Rémunération dirigeant
-→ module IRPP → écrans (dossiers, paramètres, import) → point d'entrée
-(`DOMContentLoaded`).
+(parsing, rapport d'import, mapping, agrégation) → rendu
+CR/SIG/Bilan/Trésorerie/Grand livre → module Prévisionnel → module TNS →
+module Rémunération dirigeant → module IRPP → écrans (dossiers,
+paramètres, import) → point d'entrée (`DOMContentLoaded`).
 
 Aucun outil de build, aucune dépendance npm pour l'application elle-même
 (`package.json` n'existe qu'à la racine pour les scripts auxiliaires, ex.
@@ -36,7 +74,10 @@ encore hébergé localement (cf. `AUDIT_CORRECTIONS.md` §"Chart.js local").
 Tous les appels à l'API Chart.js sont protégés par un garde
 `if (typeof Chart === 'undefined') return;` : l'absence du CDN (usage hors
 ligne, réseau bloqué) dégrade gracieusement (pas de graphique) au lieu de
-faire planter l'application.
+faire planter l'application. Le parsing FEC lui-même est déporté dans un
+Web Worker construit dynamiquement (cf. §3) — seul cas où un "second
+thread" existe, toujours au sein du même fichier (Worker construit via
+`Blob`/`URL.createObjectURL`, jamais un fichier `.js` séparé).
 
 ## 2. Stockage
 
@@ -62,10 +103,20 @@ FEC volumineux. Conséquence assumée et documentée dans l'UI : rouvrir un
 dossier après rechargement de page ne permet plus de consulter le détail
 d'un compte au grand livre tant que le FEC n'est pas réimporté.
 
-**IndexedDB** : non utilisé à ce jour. `deleteAllIndexedDbData()` existe
-déjà (no-op sûr) en préparation de la migration Phase 5 du chantier de
-fiabilisation, pour garantir qu'une suppression complète des données reste
-complète après cette migration.
+**IndexedDB** : sert de **miroir de secours asynchrone** (Phase 5, cf.
+`AUDIT_CORRECTIONS.md` §13) pour la clé `fec_analyse_v2` (dossiers) — PAS
+la source de vérité principale. `loadStore()`/`saveStore()` restent
+strictement synchrones (34 emplacements du code en dépendent) ;
+`saveStore()` réplique chaque sauvegarde vers IndexedDB
+(`idbBackupPutStore()`) en tâche de fond, y compris quand localStorage
+lui-même échoue par dépassement de quota. Une restauration explicite
+(`restaurerDepuisIndexedDB()`, bouton dans l'écran Confidentialité) reste
+possible si localStorage est vidé/corrompu. `deleteAllIndexedDbData()`
+(générique, `indexedDB.databases()`) supprime cette base sans
+modification lors d'une suppression totale des données. Faire
+d'IndexedDB la source de vérité principale (au lieu d'un miroir)
+nécessiterait de convertir les 34 usages synchrones en async/await —
+chantier distinct, volontairement non entrepris (cf. §8).
 
 ### Sauvegarde et restauration
 
@@ -104,23 +155,46 @@ complète après cette migration.
    règles par préfixe de compte).
 5. Le dossier est enregistré (`store[id] = {...}`) et ouvert.
 
-**Limite actuelle documentée** (Phase 2 du chantier de fiabilisation, non
-encore construite) : pas de rapport d'import structuré (comptage
-lignes valides/rejetées, écart débit/crédit, doublons, export des
-anomalies) — le parseur rejette silencieusement les lignes malformées au
-lieu de les recenser dans un écran dédié.
+En parallèle du parsing (étape 3), `analyserQualiteImportFEC(text)`
+produit un **rapport d'import structuré** (Phase 2, cf.
+`AUDIT_CORRECTIONS.md` §10) : lecture indépendante du même texte
+(n'affecte jamais les données réellement importées) comptant lignes
+valides/rejetées avec raison précise, écart débit/crédit global, lignes
+strictement dupliquées. Attaché à l'exercice (`ex.rapportImport`),
+affiché dans l'onglet "Suivi des imports" avec export CSV dédié des
+anomalies ; ne bloque jamais l'import (purement informatif).
+
+Le parsing lui-même (`parseFECFile` + `analyserQualiteImportFEC`)
+s'exécute dans un **Web Worker** construit dynamiquement
+(`getFecParserWorker()`/`parseFECEnArrierePlan()`, Phase 5, cf.
+`AUDIT_CORRECTIONS.md` §12) à partir du `.toString()` des fonctions
+elles-mêmes (aucune duplication de code entre thread principal et
+Worker), pour ne jamais geler l'interface sur un FEC volumineux — avec
+repli synchrone transparent si `Worker`/`Blob` sont indisponibles.
 
 ## 4. Moteur de mapping
 
 Un dossier a un mapping (`ACTIVE.mps = { cr: [...], bilan: [...] }`),
-partagé entre tous ses exercices (limite documentée pour les comptes
-mixtes — cf. `AUDIT_CORRECTIONS.md` §"Prochaines étapes"). Chaque groupe a
-un `id`, un `label` (renommable via `mpRename()` — **les libellés de
-mapping sont une entrée utilisateur libre, traitée comme telle du point de
-vue sécurité, cf. §5**), un `type` (`normal`/`subtotal`/`total`), des
-`accounts` et/ou `subs` (sous-catégories). `renderMapping()` affiche
-l'écran d'édition ; `toggleGroup()` gère le dépliage dans les tableaux de
-résultats.
+partagé entre tous ses exercices. Chaque groupe a un `id`, un `label`
+(renommable via `mpRename()` — **les libellés de mapping sont une entrée
+utilisateur libre, traitée comme telle du point de vue sécurité, cf.
+§6**), un `type` (`normal`/`subtotal`/`total`), des `accounts` et/ou
+`subs` (sous-catégories). `renderMapping()` affiche l'écran d'édition ;
+`toggleGroup()` gère le dépliage dans les tableaux de résultats.
+
+**Comptes mixtes** (classes 4 principalement — clients/fournisseurs,
+TVA, comptes courants associés — dont le sens actif/passif dépend du
+signe réel du solde, table `MIXED_ROUTES`) : `autoAffectOrphans()` les
+classe correctement à leur PREMIER classement, mais ne les réévalue
+jamais automatiquement si leur solde change de signe sur un exercice
+ultérieur du même dossier (mapping partagé) — limitation assumée,
+volontairement non corrigée par un déplacement automatique et silencieux
+(règle impérative n°8 : ne jamais réécrire un classement sans geste
+explicite). `ComptesMixtesEngine` (Phase 3 puis modularisé en Phase 6,
+cf. `AUDIT_CORRECTIONS.md` §11) détecte cette incohérence
+(`detecterIncoherences()`) et affiche un bandeau sur la page Bilan avec
+correction en un clic (`reaffecterCompte()`/`reaffecterTous()`), jamais
+automatique.
 
 Un dossier de type **Consolidé** (agrégation simple de plusieurs dossiers
 Reporting du même groupe — cf. CHANGELOG.md) a son propre mapping
@@ -136,14 +210,39 @@ dirigeant, IRPP) est un ensemble de fonctions pures ou quasi-pures opérant
 sur l'état global du module (`ACTIVE`, `PREV_ACTIVE`, `TNS_ACTIVE`,
 `REMU_ACTIVE`, `IRPP_ACTIVE`) et des catalogues de barèmes versionnés par
 année (`PASS_PAR_ANNEE`, caisses TNS, règles rémunération/IRPP), résolus
-via `anneeResolue()` — **actuellement un repli silencieux vers l'année
-disponible la plus proche, sans distinction "exact"/"repli" ni statut de
-validation, cf. `AUDIT_CORRECTIONS.md` §"Barèmes"**, à corriger avant de
-considérer cette partie comme fiable pour un usage professionnel réel.
+via `anneeResolue()`.
 
-Les résultats TNS/Rémunération/IRPP ne portent pas encore la mention de
-simulation à valider par un professionnel demandée — à ajouter avec le
-correctif barèmes.
+**Statut des barèmes** (Phase 1, cf. `AUDIT_CORRECTIONS.md` §7-8) : tout
+barème créé par duplication est marqué `draft` (`creerMetaBareme()`) et
+affiche un bandeau d'avertissement non ignorable
+(`baremeAvertissementHtml()`) précisant année demandée/utilisée, source
+et date, tant qu'il n'est pas explicitement validé (bouton "Valider" par
+écran) ; l'IRPP hérite du statut non validé de la Rémunération
+sous-jacente (`combinerMetaBareme()`). Les caisses TNS non paramétrées
+(11 sur 16, valeurs `null` plutôt que `0` implicite) **bloquent
+totalement** l'affichage d'un résultat chiffré
+(`validerCompletudeCaisse()`) — seul cas de blocage strict, les autres
+barèmes non validés affichent un avertissement mais ne bloquent pas
+(sinon l'application serait inutilisable entre deux publications
+officielles). Tous les résultats TNS/Rémunération/IRPP portent la
+mention `MENTION_SIMULATION_PRO` (simulation à valider par un
+professionnel).
+
+**Limite assumée et non corrigée intentionnellement** : les barèmes
+URSSAF réels (cotisations TNS) utilisent des formules progressives
+lissées, approximées ici par un système de tranches simples — insuffisant
+pour une déclaration officielle, avertissement déjà affiché à
+l'utilisateur dans l'écran de calcul (`TnsEngine`). Implémenter les
+formules réelles reviendrait à inventer/valider une règle fiscale sans
+autorité pour le faire — hors de portée de cet audit (règle impérative
+n°8).
+
+**Prévisionnel — amortissement** (Phase 8, cf. `AUDIT_CORRECTIONS.md`
+§15) : `calculerPlanAmortissement()` applique un prorata temporis
+mensuel (dotation de l'exercice d'acquisition proportionnelle au mois
+réel d'acquisition, `inv.mois`) au lieu d'une dotation pleine
+systématique — non-régression garantie pour les investissements saisis
+avec le mois par défaut (janvier).
 
 ## 6. Règles de sécurité
 
@@ -167,16 +266,21 @@ correctif barèmes.
   redéclaration écrase silencieusement la précédente en JavaScript, sans
   erreur visible.
 - **Aucune donnée fabriquée** : les barèmes fiscaux/sociaux ne sont jamais
-  extrapolés silencieusement (principe déjà appliqué à `PASS_PAR_ANNEE`
-  et aux caisses TNS ; à renforcer avec le statut `draft`/`validated`, cf.
-  `AUDIT_CORRECTIONS.md`).
+  extrapolés silencieusement — statut `draft`/`validated` explicite,
+  bandeau d'avertissement, mention de simulation obligatoire (cf. §5).
+- **Accessibilité** (Phase 9, périmètre restreint, cf.
+  `AUDIT_CORRECTIONS.md` §16) : fermeture au clavier (Échap) des fenêtres
+  modales/menus ; `aria-label`/`role`/`tabindex` sur les contrôles les
+  plus universellement présents (icône Paramètres, sélecteur de
+  dossier). Ne couvre pas l'ensemble des éléments cliquables non
+  sémantiques de l'application (99 `<div onclick>`/16 `<span onclick>`
+  recensés, hors périmètre de cette passe).
 - **CSP** : non encore mise en place (dépend de l'hébergement local de
-  Chart.js et de la réduction des `onclick=` inline — cf.
-  `AUDIT_CORRECTIONS.md`, Phase 1 restante).
+  Chart.js et de la réduction des `onclick=` inline — cf. §8).
 
 ## 7. Tests
 
-`tests/run_all.js` exécute séquentiellement ~26 suites de tests (une par
+`tests/run_all.js` exécute séquentiellement ~35 suites de tests (une par
 fichier `tests/test_*.js`), affiche un décompte par suite puis un total.
 Chaque suite exporte `run(htmlPath)` (synchrone ou retournant une
 `Promise`) et est exécutée dans un bac à sable Node isolé
@@ -184,20 +288,43 @@ Chaque suite exporte `run(htmlPath)` (synchrone ou retournant une
 unitaires. Les vérifications de parcours UI complet (rendu réel,
 interactions clavier/souris, captures d'écran) sont faites ponctuellement
 en Playwright headless, hors de la suite `run_all.js` (pas encore
-industrialisées en Phase 7).
+industrialisées — resterait à faire si la Phase 7 est reprise plus en
+profondeur).
 
-État actuel : 519 tests, 0 échec (cf. `AUDIT_CORRECTIONS.md` pour le
+État actuel : 639 tests, 0 échec (cf. `AUDIT_CORRECTIONS.md` pour le
 détail par correctif).
 
-## 8. Trajectoire (non commencée à ce stade)
+## 8. Trajectoire
 
-Les phases suivantes du chantier de fiabilisation demandé restent à
-faire, dans cet ordre de priorité (cf. `AUDIT_CORRECTIONS.md` pour le
-détail) : validation FEC structurée (Phase 2), comptes mixtes par signe
-(Phase 3), renommage du module Consolidé (Phase 4, en attente de
-confirmation), migration IndexedDB + Web Worker (Phase 5), découpage
-modulaire progressif en ES modules (Phase 6, architecture cible esquissée
-dans la demande initiale), tests automatisés étendus (Phase 7),
-améliorations fonctionnelles par module (Phase 8), accessibilité
-(Phase 9). Aucune de ces phases ne doit être entamée par une réécriture
-totale immédiate — règle impérative de la demande initiale.
+Sur les 9 phases du chantier de fiabilisation demandé, les Phases 1
+(correctifs critiques), 2 (rapport d'import), 3 (comptes mixtes), 4
+(renommage Agrégation multi-sociétés), 5 (Web Worker + sauvegarde de
+secours IndexedDB), 7 (extension ciblée des tests), 8 (prorata temporis
+Prévisionnel) et 9 (accessibilité, périmètre restreint) sont traitées —
+cf. `AUDIT_CORRECTIONS.md` pour le détail complet de chaque correctif.
+
+**Phase 6 (modularisation interne)** est **en cours, progressive** (un
+module à la fois, jamais une réécriture totale) : `ComptesMixtesEngine`
+est le premier module extrait selon la convention décrite en §1. Reste à
+faire, dans le même esprit incrémental, à traiter comme des chantiers
+distincts ultérieurs :
+- Poursuivre l'extraction module par module (candidats identifiés :
+  rapport d'import FEC — entangled avec la construction du Web Worker
+  via `.toString()`, à traiter avec précaution — sauvegarde de secours
+  IndexedDB, utilitaires de formatage/export).
+- **Hors périmètre de cette Phase 6** (décisions déjà arbitrées avec
+  l'utilisateur, cf. `AUDIT_CORRECTIONS.md`) : découpage en fichiers
+  `.js` réellement séparés — incompatible avec l'usage `file://` sans
+  build (cf. §1) — et migration complète du stockage vers IndexedDB
+  comme source de vérité principale (async/await sur 34 emplacements,
+  chantier distinct de la modularisation).
+
+**Autres points non traités, restant hors de portée de cet audit** :
+hébergement local de Chart.js (dégradation gracieuse déjà en place, cf.
+§1) ; couverture d'accessibilité au-delà du périmètre restreint de la
+Phase 9 (§6) ; formules URSSAF réelles pour les cotisations TNS
+(volontairement non implémentées, règle impérative n°8 — cf. §5).
+
+Comme pour toutes les phases précédentes, la suite de la Phase 6 doit se
+poursuivre par étapes courtes et vérifiables (règle impérative n°4),
+jamais par une réécriture totale immédiate (règle impérative n°6).

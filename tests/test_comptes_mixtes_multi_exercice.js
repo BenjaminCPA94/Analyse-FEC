@@ -12,9 +12,9 @@
  * Conformément à la règle impérative n°8 de la demande ("ne pas inventer
  * de règle incertaine, prévoir une alerte claire"), le correctif ne
  * déplace JAMAIS un compte automatiquement et silencieusement : il
- * détecte l'incohérence (detecterComptesMixtesIncoherents()) et laisse à
- * l'utilisateur le geste explicite de réaffecter (reaffecterCompteMixte()
- * / reaffecterTousComptesMixtes()), via un bandeau sur la page Bilan.
+ * détecte l'incohérence (ComptesMixtesEngine.detecterIncoherences()) et laisse à
+ * l'utilisateur le geste explicite de réaffecter (ComptesMixtesEngine.reaffecterCompte()
+ * / ComptesMixtesEngine.reaffecterTous()), via un bandeau sur la page Bilan.
  */
 const path = require('path');
 const { loadApp, runIn, getJSON } = require('./harness.js');
@@ -36,9 +36,9 @@ function run(htmlPath) {
       const sub = g.subs.find(s => s.id === 'ba6_a');
       sub.accounts.push('411000');
     `);
-    const incoherents = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
+    const incoherents = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
     results.push({
-      name: "detecterComptesMixtesIncoherents() détecte le compte 411000 classé en Actif alors qu'il est créditeur sur l'exercice affiché",
+      name: "ComptesMixtesEngine.detecterIncoherences() détecte le compte 411000 classé en Actif alors qu'il est créditeur sur l'exercice affiché",
       pass: incoherents.length === 1 && incoherents[0].compte === '411000' && incoherents[0].attendu.gid === 'bp7',
       detail: incoherents,
     });
@@ -55,7 +55,7 @@ function run(htmlPath) {
       };
       autoAffectOrphans();
     `);
-    const incoherents = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
+    const incoherents = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
     results.push({
       name: "Aucune incohérence signalée quand autoAffectOrphans() a classé le compte selon son signe actuel",
       pass: incoherents.length === 0,
@@ -73,11 +73,11 @@ function run(htmlPath) {
         mps: { cr: [], bilan: defaultMPS_Bilan({ '512000': -100 }) },
       };
     `);
-    const incoherents = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
+    const incoherents = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
     results.push({ name: "Un compte hors MIXED_ROUTES (512, banque) n'est jamais signalé, même à découvert", pass: incoherents.length === 0, detail: incoherents });
   }
 
-  // ── 4. reaffecterCompteMixte() corrige un seul compte ────────────────────
+  // ── 4. ComptesMixtesEngine.reaffecterCompte() corrige un seul compte ────────────────────
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
@@ -90,20 +90,20 @@ function run(htmlPath) {
         mps: { cr: [], bilan: defaultMPS_Bilan({ '411000': -500 }) },
       };
       ACTIVE.mps.bilan.find(g => g.id === 'ba6').subs.find(s => s.id === 'ba6_a').accounts.push('411000');
-      reaffecterCompteMixte('411000');
+      ComptesMixtesEngine.reaffecterCompte('411000');
     `);
     const stillInActif = getJSON(ctx, `ACTIVE.mps.bilan.find(g => g.id === 'ba6').subs.find(s => s.id === 'ba6_a').accounts.includes('411000')`);
     const nowInPassif = getJSON(ctx, `ACTIVE.mps.bilan.find(g => g.id === 'bp7').subs.find(s => s.id === 'bp7_b').accounts.includes('411000')`);
     results.push({
-      name: "reaffecterCompteMixte('411000') déplace le compte de l'Actif vers le Passif (bp7_b)",
+      name: "ComptesMixtesEngine.reaffecterCompte('411000') déplace le compte de l'Actif vers le Passif (bp7_b)",
       pass: !stillInActif && nowInPassif,
       detail: { stillInActif, nowInPassif },
     });
-    const incoherentsAfter = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
+    const incoherentsAfter = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
     results.push({ name: 'Après réaffectation, plus aucune incohérence détectée pour ce compte', pass: incoherentsAfter.length === 0, detail: incoherentsAfter });
   }
 
-  // ── 5. reaffecterTousComptesMixtes() corrige tous les comptes en une fois ──
+  // ── 5. ComptesMixtesEngine.reaffecterTous() corrige tous les comptes en une fois ──
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
@@ -118,13 +118,13 @@ function run(htmlPath) {
       // 411000 (client) forcé en Actif alors que créditeur ; 401000 (fournisseur) forcé en Passif alors que débiteur
       ACTIVE.mps.bilan.find(g => g.id === 'ba6').subs.find(s => s.id === 'ba6_a').accounts.push('411000');
       ACTIVE.mps.bilan.find(g => g.id === 'bp5').subs.find(s => s.id === 'bp5_a').accounts.push('401000');
-      reaffecterTousComptesMixtes();
+      ComptesMixtesEngine.reaffecterTous();
     `);
-    const incoherentsAfter = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
-    results.push({ name: 'reaffecterTousComptesMixtes() corrige tous les comptes incohérents en un seul appel', pass: incoherentsAfter.length === 0, detail: incoherentsAfter });
+    const incoherentsAfter = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
+    results.push({ name: 'ComptesMixtesEngine.reaffecterTous() corrige tous les comptes incohérents en un seul appel', pass: incoherentsAfter.length === 0, detail: incoherentsAfter });
   }
 
-  // ── 6. renderComptesMixtesAlerte() : bandeau non intrusif, échappement HTML ──
+  // ── 6. ComptesMixtesEngine.renderAlerte() : bandeau non intrusif, échappement HTML ──
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
@@ -134,15 +134,15 @@ function run(htmlPath) {
         mps: { cr: [], bilan: defaultMPS_Bilan({ '411000': -500 }) },
       };
       ACTIVE.mps.bilan.find(g => g.id === 'ba6').subs.find(s => s.id === 'ba6_a').accounts.push('411000');
-      renderComptesMixtesAlerte();
+      ComptesMixtesEngine.renderAlerte();
     `);
     const html = runIn(ctx, "document._elements.get('comptes-mixtes-alerte').innerHTML");
-    results.push({ name: 'renderComptesMixtesAlerte() affiche un bandeau mentionnant le compte incohérent', pass: html.includes('411000') && html.includes('Réaffecter'), detail: html.slice(0, 200) });
-    results.push({ name: "renderComptesMixtesAlerte() échappe le libellé de compte (pas d'injection HTML)", pass: !html.includes('<script>alert'), detail: html });
+    results.push({ name: 'ComptesMixtesEngine.renderAlerte() affiche un bandeau mentionnant le compte incohérent', pass: html.includes('411000') && html.includes('Réaffecter'), detail: html.slice(0, 200) });
+    results.push({ name: "ComptesMixtesEngine.renderAlerte() échappe le libellé de compte (pas d'injection HTML)", pass: !html.includes('<script>alert'), detail: html });
 
-    runIn(ctx, `ACTIVE.bal['411000'] = 500; reaffecterCompteMixte('411000'); renderComptesMixtesAlerte();`);
+    runIn(ctx, `ACTIVE.bal['411000'] = 500; ComptesMixtesEngine.reaffecterCompte('411000'); ComptesMixtesEngine.renderAlerte();`);
     const htmlClean = runIn(ctx, "document._elements.get('comptes-mixtes-alerte').innerHTML");
-    results.push({ name: 'renderComptesMixtesAlerte() reste vide quand aucune incohérence ne subsiste', pass: htmlClean === '', detail: htmlClean });
+    results.push({ name: 'ComptesMixtesEngine.renderAlerte() reste vide quand aucune incohérence ne subsiste', pass: htmlClean === '', detail: htmlClean });
   }
 
   // ── 7. Scénario bout en bout : ajout d'un 2e exercice avec signe inversé ──
@@ -166,15 +166,15 @@ function run(htmlPath) {
     runIn(ctx, `
       addExerciceToActiveDossier({ bal: { '411000': -800 }, libs: {}, months: {}, nbLines: 1, periodStart: '202601', periodEnd: '202612', ledger: {} }, 'ex2.txt');
     `);
-    const incoherentsEx2 = getJSON(ctx, 'detecterComptesMixtesIncoherents()');
+    const incoherentsEx2 = getJSON(ctx, 'ComptesMixtesEngine.detecterIncoherences()');
     results.push({
       name: "Exercice 2 (solde inversé) : le compte reste sur son ancien classement (Actif) et l'incohérence est détectée — reproduit la LIMITE CONNUE documentée",
       pass: incoherentsEx2.length === 1 && incoherentsEx2[0].compte === '411000',
       detail: incoherentsEx2,
     });
-    runIn(ctx, `reaffecterTousComptesMixtes();`);
+    runIn(ctx, `ComptesMixtesEngine.reaffecterTous();`);
     const nowInPassifEx2 = getJSON(ctx, `ACTIVE.mps.bilan.find(g => g.id === 'bp7').subs.find(s => s.id === 'bp7_b').accounts.includes('411000')`);
-    results.push({ name: "L'utilisateur peut corriger explicitement (reaffecterTousComptesMixtes()) sans que la correction ne soit jamais silencieuse/automatique", pass: nowInPassifEx2 });
+    results.push({ name: "L'utilisateur peut corriger explicitement (ComptesMixtesEngine.reaffecterTous()) sans que la correction ne soit jamais silencieuse/automatique", pass: nowInPassifEx2 });
   }
 
   return results;
