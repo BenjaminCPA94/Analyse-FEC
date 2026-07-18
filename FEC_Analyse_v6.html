@@ -10925,8 +10925,32 @@ function schedSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveActiveDo
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Échappe une valeur pour une cellule CSV (RFC 4180 : séparateur ';'). */
+/**
+ * csvSafeValue(value)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Neutralise l'injection de formule CSV (OWASP "CSV Injection") : Excel,
+ * LibreOffice et Google Sheets interprètent comme une FORMULE toute
+ * cellule commençant par =, +, -, @ (ou une tabulation/retour chariot en
+ * tête) à l'ouverture d'un fichier CSV — pas seulement dans une vraie
+ * feuille de calcul. Un libellé de compte, un nom de dossier, un
+ * commentaire ou une catégorie malveillants (ex. "=HYPERLINK(""http://
+ * attaquant"",""clic"")") pourraient ainsi déclencher l'exécution d'une
+ * formule dès l'ouverture du fichier exporté par l'utilisateur (ou par
+ * un tiers à qui il aurait transmis l'export).
+ * On préfixe la valeur d'une apostrophe : tous les tableurs l'affichent
+ * alors comme texte littéral, jamais comme formule.
+ * @param {*} value
+ * @returns {string}
+ */
+function csvSafeValue(value) {
+  const text = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(text)) {
+    return "'" + text;
+  }
+  return text;
+}
 function csvEscapeCell(v) {
-  const s = String(v ?? '');
+  const s = csvSafeValue(v);
   return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function csvFromRows(rows) {
