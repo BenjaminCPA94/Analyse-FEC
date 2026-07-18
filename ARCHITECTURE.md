@@ -35,15 +35,21 @@ fermeture, jamais accessibles depuis l'extérieur) — le même motif que
 `PrevisionnelEngine`/`TnsEngine`/`RemunerationEngine`/`IrppEngine`
 (présents avant ce chantier) étend désormais à `ComptesMixtesEngine`
 (détection/correction des comptes mixtes, cf. `AUDIT_CORRECTIONS.md`
-§11) et `IndexedDbBackupEngine` (sauvegarde de secours, cf. §18). Cette
-seconde extraction a révélé un effet de bord attendu : une fonction
-privée (`ouvrir()`) référencée depuis l'intérieur de la fermeture ne
-peut plus être doublée par simple réaffectation d'une propriété
-publique depuis un test externe — preuve que l'encapsulation empêche
-bien un "monkey-patch" accidentel, mais à anticiper en écrivant les
-tests d'un futur module extrait (simuler le comportement externe réel
-plutôt que d'essayer de doubler une fonction interne). Convention pour
-toute extraction future :
+§11), `IndexedDbBackupEngine` (sauvegarde de secours, cf. §18) et
+`ImportQualiteEngine` (rapport d'import FEC, cf. §19). La seconde
+extraction a révélé un effet de bord attendu : une fonction privée
+(`ouvrir()`) référencée depuis l'intérieur de la fermeture ne peut plus
+être doublée par simple réaffectation d'une propriété publique depuis un
+test externe — preuve que l'encapsulation empêche bien un
+"monkey-patch" accidentel, mais à anticiper en écrivant les tests d'un
+futur module extrait (simuler le comportement externe réel plutôt que
+d'essayer de doubler une fonction interne). La troisième a montré qu'une
+fonction MEMBRE d'un tel espace de noms reste aussi facilement
+sérialisable via `.toString()` (utile pour `ImportQualiteEngine.analyser`,
+injectée dans le Web Worker de parsing, cf. §12/§19) qu'une fonction
+globale ordinaire — seul le point d'appel du `.toString()` doit être mis
+à jour, le code produit reste identique. Convention pour toute
+extraction future :
 ```js
 const NomDuModule = (function () {
   function fonctionPrivee() { /* jamais exposée */ }
@@ -314,15 +320,21 @@ Prévisionnel) et 9 (accessibilité, périmètre restreint) sont traitées —
 cf. `AUDIT_CORRECTIONS.md` pour le détail complet de chaque correctif.
 
 **Phase 6 (modularisation interne)** est **en cours, progressive** (un
-module à la fois, jamais une réécriture totale) : `ComptesMixtesEngine`
-et `IndexedDbBackupEngine` sont les deux premiers modules extraits selon
-la convention décrite en §1. Reste à faire, dans le même esprit
-incrémental, à traiter comme des chantiers
+module à la fois, jamais une réécriture totale) : `ComptesMixtesEngine`,
+`IndexedDbBackupEngine` et `ImportQualiteEngine` sont les trois premiers
+modules extraits selon la convention décrite en §1. Reste à faire, dans
+le même esprit incrémental, à traiter comme des chantiers
 distincts ultérieurs :
-- Poursuivre l'extraction module par module (candidats restants :
-  rapport d'import FEC — entangled avec la construction du Web Worker
-  via `.toString()`, à traiter avec précaution — utilitaires de
-  formatage/export).
+- Poursuivre l'extraction module par module si d'autres domaines
+  cohérents avec état/logique interne à protéger se dégagent (les
+  candidats évidents restants — TNS/Rémunération/IRPP — sont déjà des
+  modules IIFE depuis avant ce chantier).
+- **Délibérément écarté** : les utilitaires de formatage/export (`fmtV`,
+  `fmtK`, `csvFromRows`...) — 200+ points d'appel pour un bénéfice
+  d'encapsulation nul (fonctions pures sans état ni logique interne à
+  protéger) ; les regrouper serait une abstraction sans justification
+  réelle, pour un risque mécanique de renommage disproportionné (cf.
+  `AUDIT_CORRECTIONS.md` §19).
 - **Hors périmètre de cette Phase 6** (décisions déjà arbitrées avec
   l'utilisateur, cf. `AUDIT_CORRECTIONS.md`) : découpage en fichiers
   `.js` réellement séparés — incompatible avec l'usage `file://` sans

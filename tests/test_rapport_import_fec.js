@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Tests du rapport d'import FEC structuré (Phase 2 de l'audit demandé,
- * cf. AUDIT_CORRECTIONS.md). analyserQualiteImportFEC() est une passe de
+ * cf. AUDIT_CORRECTIONS.md). ImportQualiteEngine.analyser() est une passe de
  * lecture INDÉPENDANTE de parseFECFile() : elle ne modifie jamais les
  * données réellement importées, elle produit uniquement un diagnostic
  * (lignes valides/rejetées + raison, écart débit/crédit, doublons) affiché
@@ -25,7 +25,7 @@ function run(htmlPath) {
       ['VE','Ventes','1','20250115','707000','Ventes','','','F1','20250115','Vente A','','1000',,'','','',''],
       ['VE','Ventes','2','20250116','411000','Client','','','F1','20250116','Vente A','1000','',,'','','',''],
     ]);
-    const r = getJSON(ctx, `analyserQualiteImportFEC(${JSON.stringify(text)})`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser(${JSON.stringify(text)})`);
     results.push({ name: 'FEC bien formé : toutes les lignes sont valides (0 rejet)', pass: r.lignesValides === 2 && r.lignesRejetees === 0, detail: r });
     results.push({ name: 'FEC équilibré : écart débit/crédit nul', pass: r.ecartDebitCredit === 0, detail: r.ecartDebitCredit });
     results.push({ name: 'FEC sans doublon : aucune ligne dupliquée signalée', pass: r.doublons.length === 0 });
@@ -36,7 +36,7 @@ function run(htmlPath) {
   {
     const ctx = loadApp(htmlPath);
     const text = "JournalCode\tEcritureLib\r\nVE\tVente sans les bonnes colonnes";
-    const r = getJSON(ctx, `analyserQualiteImportFEC(${JSON.stringify(text)})`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser(${JSON.stringify(text)})`);
     results.push({
       name: 'Colonnes CompteNum/Debit/Credit absentes de l\'en-tête : signalées et toutes les lignes rejetées',
       pass: r.colonnesManquantes.includes('CompteNum') && r.colonnesManquantes.includes('Debit') && r.colonnesManquantes.includes('Credit') && r.lignesRejetees === 1,
@@ -53,7 +53,7 @@ function run(htmlPath) {
       ['VE'], // ligne incomplète
       ['VE','Ventes','4','20250117','411000','Client','','','F1','20250117','OK','500','',,'','','',''], // valide
     ]);
-    const r = getJSON(ctx, `analyserQualiteImportFEC(${JSON.stringify(text)})`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser(${JSON.stringify(text)})`);
     results.push({ name: 'Ligne à compte vide détectée et rejetée', pass: r.rejets.some(x => x.raison.includes('compte vide')), detail: r.rejets });
     results.push({ name: 'Ligne à montant non numérique détectée et rejetée', pass: r.rejets.some(x => x.raison.includes('montant')), detail: r.rejets });
     results.push({ name: 'Ligne incomplète (colonnes manquantes) détectée et rejetée', pass: r.rejets.some(x => x.raison.includes('incomplète')), detail: r.rejets });
@@ -67,7 +67,7 @@ function run(htmlPath) {
       ['VE','Ventes','1','20250115','707000','Ventes','','','F1','20250115','Vente','','1000',,'','','',''],
       ['VE','Ventes','2','20250116','411000','Client','','','F1','20250116','Vente','900','',,'','','',''], // 900 au lieu de 1000 : écart de 100
     ]);
-    const r = getJSON(ctx, `analyserQualiteImportFEC(${JSON.stringify(text)})`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser(${JSON.stringify(text)})`);
     results.push({ name: 'Écart débit/crédit de 100 € correctement calculé (signe : débit - crédit)', pass: r.ecartDebitCredit === -100, detail: r.ecartDebitCredit });
   }
 
@@ -76,14 +76,14 @@ function run(htmlPath) {
     const ctx = loadApp(htmlPath);
     const dup = ['VE','Ventes','1','20250115','411000','Client','','','F1','20250115','Vente dupliquée','500','',,'','','',''];
     const text = fec([dup, dup, ['VE','Ventes','2','20250116','707000','Ventes','','','F1','20250116','Autre','','500',,'','','','']]);
-    const r = getJSON(ctx, `analyserQualiteImportFEC(${JSON.stringify(text)})`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser(${JSON.stringify(text)})`);
     results.push({ name: 'Ligne strictement dupliquée (2 occurrences) détectée', pass: r.doublons.length === 1 && r.doublons[0].occurrences === 2, detail: r.doublons });
   }
 
   // ── 6. Fichier vide/illisible ─────────────────────────────────────────────
   {
     const ctx = loadApp(htmlPath);
-    const r = getJSON(ctx, `analyserQualiteImportFEC('')`);
+    const r = getJSON(ctx, `ImportQualiteEngine.analyser('')`);
     results.push({ name: 'Fichier vide : signalé sans planter', pass: r.colonnesManquantes.includes('fichier vide ou illisible'), detail: r });
   }
 
@@ -119,37 +119,37 @@ function run(htmlPath) {
     results.push({ name: "addExerciceToActiveDossier() attache le rapport d'import au nouvel exercice", pass: stored && stored.totalLignes === 5, detail: stored });
   }
 
-  // ── 9. toastRapportImport() : silence si tout va bien, alerte sinon ─────
+  // ── 9. ImportQualiteEngine.notifier() : silence si tout va bien, alerte sinon ─────
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `function toast(msg){ __lastToast = msg; }`);
-    runIn(ctx, `__lastToast = null; toastRapportImport({ lignesRejetees:0, ecartDebitCredit:0, doublons:[] });`);
+    runIn(ctx, `__lastToast = null; ImportQualiteEngine.notifier({ lignesRejetees:0, ecartDebitCredit:0, doublons:[] });`);
     const silent = runIn(ctx, '__lastToast');
-    results.push({ name: "toastRapportImport() reste silencieux si le rapport ne signale rien d'anormal", pass: silent === null });
+    results.push({ name: "ImportQualiteEngine.notifier() reste silencieux si le rapport ne signale rien d'anormal", pass: silent === null });
 
-    runIn(ctx, `__lastToast = null; toastRapportImport({ lignesRejetees:3, ecartDebitCredit:0, doublons:[] });`);
+    runIn(ctx, `__lastToast = null; ImportQualiteEngine.notifier({ lignesRejetees:3, ecartDebitCredit:0, doublons:[] });`);
     const withIssue = runIn(ctx, '__lastToast');
-    results.push({ name: "toastRapportImport() alerte si des lignes ont été rejetées", pass: /3 ligne/.test(withIssue || ''), detail: withIssue });
+    results.push({ name: "ImportQualiteEngine.notifier() alerte si des lignes ont été rejetées", pass: /3 ligne/.test(withIssue || ''), detail: withIssue });
   }
 
-  // ── 10. rapportImportResumeHtml() : échappement HTML des données issues du FEC ──
+  // ── 10. ImportQualiteEngine.resumeHtml() : échappement HTML des données issues du FEC ──
   {
     const ctx = loadApp(htmlPath);
-    const html = getJSON(ctx, `rapportImportResumeHtml({
+    const html = getJSON(ctx, `ImportQualiteEngine.resumeHtml({
       lignesValides: 1, lignesRejetees: 1, ecartDebitCredit: 0,
       rejets: [{ligne:2, raison:'<script>alert(1)</script>'}],
       doublons: [{apercu:'<img src=x onerror=alert(1)>', occurrences:2}],
       colonnesManquantes: [],
     }, 'ex-test')`);
     results.push({
-      name: "rapportImportResumeHtml() échappe le contenu brut du FEC dans le panneau de détail (pas d'injection HTML)",
+      name: "ImportQualiteEngine.resumeHtml() échappe le contenu brut du FEC dans le panneau de détail (pas d'injection HTML)",
       pass: !html.includes('<script>') && !html.includes('<img src=x'),
       detail: html,
     });
-    results.push({ name: "rapportImportResumeHtml() affiche le lien d'export CSV quand des anomalies existent", pass: html.includes('exporterAnomaliesImport') });
+    results.push({ name: "ImportQualiteEngine.resumeHtml() affiche le lien d'export CSV quand des anomalies existent", pass: html.includes('ImportQualiteEngine.exporterAnomalies') });
   }
 
-  // ── 11. exporterAnomaliesImport() : export CSV neutralisé (formule) ────
+  // ── 11. ImportQualiteEngine.exporterAnomalies() : export CSV neutralisé (formule) ────
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
@@ -158,12 +158,12 @@ function run(htmlPath) {
       ACTIVE = { id:'d1', name:'Test Export', exercices: { 'ex1': {
         rapportImport: { rejets: [{ligne:5, raison:'test'}], doublons: [{apercu:'=HYPERLINK("http://evil")', occurrences:2}] }
       }}};
-      exporterAnomaliesImport('ex1');
+      ImportQualiteEngine.exporterAnomalies('ex1');
     `);
     const dl = getJSON(ctx, '__lastDownload');
-    results.push({ name: "exporterAnomaliesImport() déclenche un téléchargement CSV nommé sans planter", pass: !!dl && dl.filename.endsWith('.csv'), detail: dl && dl.filename });
+    results.push({ name: "ImportQualiteEngine.exporterAnomalies() déclenche un téléchargement CSV nommé sans planter", pass: !!dl && dl.filename.endsWith('.csv'), detail: dl && dl.filename });
     results.push({
-      name: "exporterAnomaliesImport() neutralise une valeur de type formule (=HYPERLINK) via csvSafeValue",
+      name: "ImportQualiteEngine.exporterAnomalies() neutralise une valeur de type formule (=HYPERLINK) via csvSafeValue",
       pass: dl && dl.content.includes("'=HYPERLINK") && !/[^']=HYPERLINK/.test(dl.content),
       detail: dl && dl.content,
     });

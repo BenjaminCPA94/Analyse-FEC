@@ -2987,7 +2987,7 @@ function renderImportsTracking() {
           <div style="font-size:11px;color:#a09d96;margin-top:2px;">Importé le ${dateStr}${!isActive ? ` · <span style="color:#185FA5;cursor:pointer;font-weight:600;" onclick="switchExercice('${ex.id}')">Afficher</span>` : ''}</div>
         </div>
       </div>
-      ${rapportImportResumeHtml(ex.rapportImport, ex.id)}
+      ${ImportQualiteEngine.resumeHtml(ex.rapportImport, ex.id)}
     </div>`;
   }).join('');
 }
@@ -9518,13 +9518,27 @@ function parseFECFile(text){
 }
 
 /**
- * analyserQualiteImportFEC(text)
- * ─────────────────────────────────────────────────────────────────────────
- * Rapport d'import structuré (Phase 2 de l'audit demandé) : passe de
- * lecture INDÉPENDANTE de parseFECFile() — elle ne modifie ni ne remplace
- * le parseur existant (qui fonctionne et reste seul responsable des
- * données réellement importées), elle se contente de ré-examiner le même
- * texte pour produire un diagnostic de qualité à afficher à l'utilisateur :
+ * ImportQualiteEngine — Phase 6 de l'audit demandé (modularisation
+ * interne, troisième module extrait selon le motif établi par
+ * `ComptesMixtesEngine`/`IndexedDbBackupEngine`, cf. `ARCHITECTURE.md` §1).
+ * Regroupe le rapport d'import FEC structuré (Phase 2 de l'audit demandé).
+ *
+ * ATTENTION — particularité de ce module (documentée pour toute
+ * extraction future du même genre) : `analyser()` (l'ancienne fonction
+ * globale `analyserQualiteImportFEC`) est sérialisée via `.toString()`
+ * pour construire le Web Worker de parsing (cf. `getFecParserWorker()`
+ * plus bas, Phase 5) — une fonction MEMBRE d'un objet EXPOSÉ par l'IIFE
+ * (`ImportQualiteEngine.analyser`) reste parfaitement sérialisable de la
+ * même façon qu'une fonction globale ordinaire ; seul le point d'appel du
+ * `.toString()` doit être mis à jour (`ImportQualiteEngine.analyser.toString()`
+ * au lieu de `analyserQualiteImportFEC.toString()`), le code JavaScript
+ * injecté dans le Worker reste rigoureusement identique.
+ *
+ * `analyser(text)` : passe de lecture INDÉPENDANTE de parseFECFile() —
+ * elle ne modifie ni ne remplace le parseur existant (qui fonctionne et
+ * reste seul responsable des données réellement importées), elle se
+ * contente de ré-examiner le même texte pour produire un diagnostic de
+ * qualité à afficher à l'utilisateur :
  *  - nombre de lignes valides / rejetées, avec la raison de chaque rejet
  *    (colonnes obligatoires absentes, numéro de compte vide, montant non
  *    numérique) ;
@@ -9537,138 +9551,145 @@ function parseFECFile(text){
  * qui est effectivement importé, ce rapport est un signal d'alerte pour
  * l'utilisateur, pas un filtre.
  */
-function analyserQualiteImportFEC(text) {
-  const report = {
-    totalLignes: 0, lignesValides: 0, lignesRejetees: 0, rejets: [],
-    totalDebit: 0, totalCredit: 0, ecartDebitCredit: 0,
-    doublons: [], separateurDetecte: null, colonnesManquantes: [],
-  };
-  const REJETS_MAX = 200; // évite un rapport disproportionné sur un FEC massivement corrompu
-  const lines = (text || '').split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) {
-    report.colonnesManquantes = ['fichier vide ou illisible'];
+const ImportQualiteEngine = (function () {
+  function analyser(text) {
+    const report = {
+      totalLignes: 0, lignesValides: 0, lignesRejetees: 0, rejets: [],
+      totalDebit: 0, totalCredit: 0, ecartDebitCredit: 0,
+      doublons: [], separateurDetecte: null, colonnesManquantes: [],
+    };
+    const REJETS_MAX = 200; // évite un rapport disproportionné sur un FEC massivement corrompu
+    const lines = (text || '').split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) {
+      report.colonnesManquantes = ['fichier vide ou illisible'];
+      return report;
+    }
+    const sep = lines[0].includes('\t') ? '\t' : '|';
+    report.separateurDetecte = sep === '\t' ? 'tabulation' : 'pipe (|)';
+    const hdr = lines[0].split(sep).map(h => h.trim().toLowerCase()
+      .replace(/[éèêë]/g, 'e').replace(/[àâä]/g, 'a').replace(/[ùûü]/g, 'u')
+      .replace(/[ôö]/g, 'o').replace(/[îï]/g, 'i').replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, ''));
+    const col = (...ns) => { for (const n of ns) { const i = hdr.findIndex(h => h === n || h.includes(n)); if (i >= 0) return i; } return -1; };
+    const iC = col('comptenum', 'comptnum');
+    const iD = col('debit', 'montantdebit');
+    const iCr = col('credit', 'montantcredit');
+    [['CompteNum', iC], ['Debit', iD], ['Credit', iCr]].forEach(([label, i]) => {
+      if (i < 0) report.colonnesManquantes.push(label);
+    });
+    if (iC < 0 || iD < 0 || iCr < 0) {
+      report.lignesRejetees = lines.length - 1;
+      report.totalLignes = lines.length - 1;
+      return report;
+    }
+    const pn = s => parseFloat((s || '').replace(/\s/g, '').replace(',', '.'));
+    const vus = new Map();
+    const requiredCols = Math.max(iC, iD, iCr) + 1;
+    for (let i = 1; i < lines.length; i++) {
+      report.totalLignes++;
+      const c = lines[i].split(sep);
+      if (c.length < requiredCols) {
+        report.lignesRejetees++;
+        if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'ligne incomplète (colonnes manquantes)' });
+        continue;
+      }
+      const num = (c[iC] || '').trim();
+      if (!num) {
+        report.lignesRejetees++;
+        if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'numéro de compte vide' });
+        continue;
+      }
+      const dRaw = (c[iD] || '').trim(), crRaw = (c[iCr] || '').trim();
+      const d = dRaw === '' ? 0 : pn(dRaw), cr = crRaw === '' ? 0 : pn(crRaw);
+      if (isNaN(d) || isNaN(cr)) {
+        report.lignesRejetees++;
+        if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'montant débit/crédit non numérique' });
+        continue;
+      }
+      report.lignesValides++;
+      report.totalDebit += d;
+      report.totalCredit += cr;
+      const cle = lines[i];
+      vus.set(cle, (vus.get(cle) || 0) + 1);
+    }
+    report.ecartDebitCredit = Math.round((report.totalDebit - report.totalCredit) * 100) / 100;
+    for (const [cle, occurrences] of vus) {
+      if (occurrences > 1) report.doublons.push({ apercu: cle.length > 160 ? cle.slice(0, 160) + '…' : cle, occurrences });
+    }
     return report;
   }
-  const sep = lines[0].includes('\t') ? '\t' : '|';
-  report.separateurDetecte = sep === '\t' ? 'tabulation' : 'pipe (|)';
-  const hdr = lines[0].split(sep).map(h => h.trim().toLowerCase()
-    .replace(/[éèêë]/g, 'e').replace(/[àâä]/g, 'a').replace(/[ùûü]/g, 'u')
-    .replace(/[ôö]/g, 'o').replace(/[îï]/g, 'i').replace(/ç/g, 'c')
-    .replace(/[^a-z0-9]/g, ''));
-  const col = (...ns) => { for (const n of ns) { const i = hdr.findIndex(h => h === n || h.includes(n)); if (i >= 0) return i; } return -1; };
-  const iC = col('comptenum', 'comptnum');
-  const iD = col('debit', 'montantdebit');
-  const iCr = col('credit', 'montantcredit');
-  [['CompteNum', iC], ['Debit', iD], ['Credit', iCr]].forEach(([label, i]) => {
-    if (i < 0) report.colonnesManquantes.push(label);
-  });
-  if (iC < 0 || iD < 0 || iCr < 0) {
-    report.lignesRejetees = lines.length - 1;
-    report.totalLignes = lines.length - 1;
-    return report;
-  }
-  const pn = s => parseFloat((s || '').replace(/\s/g, '').replace(',', '.'));
-  const vus = new Map();
-  const requiredCols = Math.max(iC, iD, iCr) + 1;
-  for (let i = 1; i < lines.length; i++) {
-    report.totalLignes++;
-    const c = lines[i].split(sep);
-    if (c.length < requiredCols) {
-      report.lignesRejetees++;
-      if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'ligne incomplète (colonnes manquantes)' });
-      continue;
-    }
-    const num = (c[iC] || '').trim();
-    if (!num) {
-      report.lignesRejetees++;
-      if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'numéro de compte vide' });
-      continue;
-    }
-    const dRaw = (c[iD] || '').trim(), crRaw = (c[iCr] || '').trim();
-    const d = dRaw === '' ? 0 : pn(dRaw), cr = crRaw === '' ? 0 : pn(crRaw);
-    if (isNaN(d) || isNaN(cr)) {
-      report.lignesRejetees++;
-      if (report.rejets.length < REJETS_MAX) report.rejets.push({ ligne: i + 1, raison: 'montant débit/crédit non numérique' });
-      continue;
-    }
-    report.lignesValides++;
-    report.totalDebit += d;
-    report.totalCredit += cr;
-    const cle = lines[i];
-    vus.set(cle, (vus.get(cle) || 0) + 1);
-  }
-  report.ecartDebitCredit = Math.round((report.totalDebit - report.totalCredit) * 100) / 100;
-  for (const [cle, occurrences] of vus) {
-    if (occurrences > 1) report.doublons.push({ apercu: cle.length > 160 ? cle.slice(0, 160) + '…' : cle, occurrences });
-  }
-  return report;
-}
 
-/**
- * toastRapportImport(rapport)
- * Notification courte affichée immédiatement après un import si le
- * rapport d'import (analyserQualiteImportFEC) signale un problème. Reste
- * silencieux si tout est normal, pour ne pas ajouter de bruit au toast de
- * succès déjà existant ("Dossier créé" / "Exercice ajouté").
- */
-function toastRapportImport(rapport) {
-  if (!rapport) return;
-  const problemes = [];
-  if (rapport.lignesRejetees > 0) problemes.push(`${rapport.lignesRejetees} ligne(s) rejetée(s)`);
-  if (Math.abs(rapport.ecartDebitCredit) >= 0.01) problemes.push(`écart débit/crédit de ${rapport.ecartDebitCredit.toFixed(2)} €`);
-  if (rapport.doublons.length > 0) problemes.push(`${rapport.doublons.length} doublon(s) détecté(s)`);
-  if (!problemes.length) return;
-  toast(`⚠ Rapport d'import : ${problemes.join(' · ')} — détail dans "Suivi des imports"`, true);
-}
-/** toggleRapportDetail(id) Affiche/masque le panneau de détail du rapport d'import d'un exercice. */
-function toggleRapportDetail(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-/**
- * rapportImportResumeHtml(rapport, exId)
- * Bandeau de synthèse du rapport d'import (Phase 2 de l'audit) affiché
- * sous chaque exercice dans "Suivi des imports" : lignes valides/rejetées,
- * écart débit/crédit, doublons détectés. Neutre (aucune alerte) si le
- * rapport ne signale rien d'anormal.
- */
-function rapportImportResumeHtml(rapport, exId) {
-  if (!rapport) return '';
-  const detailId = `rapport-detail-${exId}`;
-  const hasIssues = rapport.lignesRejetees > 0 || Math.abs(rapport.ecartDebitCredit) >= 0.01 || rapport.doublons.length > 0 || (rapport.colonnesManquantes || []).length > 0;
-  const chips = [];
-  chips.push(`<span style="color:#2f7a3d;">✓ ${rapport.lignesValides.toLocaleString('fr-FR')} ligne(s) valide(s)</span>`);
-  if (rapport.lignesRejetees > 0) chips.push(`<span style="color:#A32D2D;font-weight:700;">⚠ ${rapport.lignesRejetees.toLocaleString('fr-FR')} ligne(s) rejetée(s)</span>`);
-  if (Math.abs(rapport.ecartDebitCredit) >= 0.01) chips.push(`<span style="color:#A32D2D;font-weight:700;">⚠ écart débit/crédit : ${rapport.ecartDebitCredit.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>`);
-  if (rapport.doublons.length > 0) chips.push(`<span style="color:#7a5c00;font-weight:700;">⚠ ${rapport.doublons.length} doublon(s)</span>`);
-  const detail = hasIssues ? `
-    <div id="${detailId}" style="display:none;margin-top:8px;padding:10px 12px;background:#faf9f7;border-radius:8px;font-size:11px;color:#4a4844;max-height:220px;overflow:auto;">
-      ${(rapport.colonnesManquantes||[]).length ? `<div style="margin-bottom:6px;"><b>Colonnes obligatoires absentes :</b> ${rapport.colonnesManquantes.map(escHtml).join(', ')}</div>` : ''}
-      ${rapport.rejets.length ? `<div style="margin-bottom:6px;"><b>Lignes rejetées (${rapport.lignesRejetees}${rapport.rejets.length < rapport.lignesRejetees ? `, ${rapport.rejets.length} premières affichées` : ''}) :</b><br>${rapport.rejets.map(r=>`ligne ${r.ligne} — ${escHtml(r.raison)}`).join('<br>')}</div>` : ''}
-      ${rapport.doublons.length ? `<div><b>Lignes dupliquées :</b><br>${rapport.doublons.slice(0,50).map(d=>`× ${d.occurrences} — ${escHtml(d.apercu)}`).join('<br>')}</div>` : ''}
-    </div>` : '';
-  return `<div style="margin-top:6px;font-size:11px;">
-    <span style="cursor:${hasIssues?'pointer':'default'};" ${hasIssues?`onclick="toggleRapportDetail('${detailId}')"`:''}>${chips.join(' · ')}${hasIssues?' · <span style="color:#185FA5;text-decoration:underline;">Voir le détail</span>':''}</span>
-    ${hasIssues ? ` · <span style="color:#185FA5;cursor:pointer;text-decoration:underline;" onclick="exporterAnomaliesImport('${exId}')">Exporter les anomalies (CSV)</span>` : ''}
-    ${detail}
-  </div>`;
-}
-/**
- * exporterAnomaliesImport(exId)
- * Export CSV des lignes rejetées et dupliquées du rapport d'import de
- * l'exercice donné — réutilise csvFromRows/csvEscapeCell (donc
- * csvSafeValue) comme tous les autres exports de l'application.
- */
-function exporterAnomaliesImport(exId) {
-  const ex = ACTIVE.exercices && ACTIVE.exercices[exId];
-  const rapport = ex && ex.rapportImport;
-  if (!rapport) return;
-  const rows = [['Type', 'Ligne', 'Détail']];
-  rapport.rejets.forEach(r => rows.push(['Ligne rejetée', r.ligne, r.raison]));
-  rapport.doublons.forEach(d => rows.push(['Doublon', `× ${d.occurrences}`, d.apercu]));
-  downloadTextFile(`anomalies-import-${safeFilePart(ACTIVE.name)}-${exId}.csv`, csvFromRows(rows), 'text/csv');
-}
+  /**
+   * notifier(rapport)
+   * Notification courte affichée immédiatement après un import si le
+   * rapport d'import signale un problème. Reste silencieux si tout est
+   * normal, pour ne pas ajouter de bruit au toast de succès déjà
+   * existant ("Dossier créé" / "Exercice ajouté").
+   */
+  function notifier(rapport) {
+    if (!rapport) return;
+    const problemes = [];
+    if (rapport.lignesRejetees > 0) problemes.push(`${rapport.lignesRejetees} ligne(s) rejetée(s)`);
+    if (Math.abs(rapport.ecartDebitCredit) >= 0.01) problemes.push(`écart débit/crédit de ${rapport.ecartDebitCredit.toFixed(2)} €`);
+    if (rapport.doublons.length > 0) problemes.push(`${rapport.doublons.length} doublon(s) détecté(s)`);
+    if (!problemes.length) return;
+    toast(`⚠ Rapport d'import : ${problemes.join(' · ')} — détail dans "Suivi des imports"`, true);
+  }
+
+  /** toggleDetail(id) Affiche/masque le panneau de détail du rapport d'import d'un exercice. */
+  function toggleDetail(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+
+  /**
+   * resumeHtml(rapport, exId)
+   * Bandeau de synthèse du rapport d'import affiché sous chaque exercice
+   * dans "Suivi des imports" : lignes valides/rejetées, écart
+   * débit/crédit, doublons détectés. Neutre (aucune alerte) si le
+   * rapport ne signale rien d'anormal.
+   */
+  function resumeHtml(rapport, exId) {
+    if (!rapport) return '';
+    const detailId = `rapport-detail-${exId}`;
+    const hasIssues = rapport.lignesRejetees > 0 || Math.abs(rapport.ecartDebitCredit) >= 0.01 || rapport.doublons.length > 0 || (rapport.colonnesManquantes || []).length > 0;
+    const chips = [];
+    chips.push(`<span style="color:#2f7a3d;">✓ ${rapport.lignesValides.toLocaleString('fr-FR')} ligne(s) valide(s)</span>`);
+    if (rapport.lignesRejetees > 0) chips.push(`<span style="color:#A32D2D;font-weight:700;">⚠ ${rapport.lignesRejetees.toLocaleString('fr-FR')} ligne(s) rejetée(s)</span>`);
+    if (Math.abs(rapport.ecartDebitCredit) >= 0.01) chips.push(`<span style="color:#A32D2D;font-weight:700;">⚠ écart débit/crédit : ${rapport.ecartDebitCredit.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>`);
+    if (rapport.doublons.length > 0) chips.push(`<span style="color:#7a5c00;font-weight:700;">⚠ ${rapport.doublons.length} doublon(s)</span>`);
+    const detail = hasIssues ? `
+      <div id="${detailId}" style="display:none;margin-top:8px;padding:10px 12px;background:#faf9f7;border-radius:8px;font-size:11px;color:#4a4844;max-height:220px;overflow:auto;">
+        ${(rapport.colonnesManquantes||[]).length ? `<div style="margin-bottom:6px;"><b>Colonnes obligatoires absentes :</b> ${rapport.colonnesManquantes.map(escHtml).join(', ')}</div>` : ''}
+        ${rapport.rejets.length ? `<div style="margin-bottom:6px;"><b>Lignes rejetées (${rapport.lignesRejetees}${rapport.rejets.length < rapport.lignesRejetees ? `, ${rapport.rejets.length} premières affichées` : ''}) :</b><br>${rapport.rejets.map(r=>`ligne ${r.ligne} — ${escHtml(r.raison)}`).join('<br>')}</div>` : ''}
+        ${rapport.doublons.length ? `<div><b>Lignes dupliquées :</b><br>${rapport.doublons.slice(0,50).map(d=>`× ${d.occurrences} — ${escHtml(d.apercu)}`).join('<br>')}</div>` : ''}
+      </div>` : '';
+    return `<div style="margin-top:6px;font-size:11px;">
+      <span style="cursor:${hasIssues?'pointer':'default'};" ${hasIssues?`onclick="ImportQualiteEngine.toggleDetail('${detailId}')"`:''}>${chips.join(' · ')}${hasIssues?' · <span style="color:#185FA5;text-decoration:underline;">Voir le détail</span>':''}</span>
+      ${hasIssues ? ` · <span style="color:#185FA5;cursor:pointer;text-decoration:underline;" onclick="ImportQualiteEngine.exporterAnomalies('${exId}')">Exporter les anomalies (CSV)</span>` : ''}
+      ${detail}
+    </div>`;
+  }
+
+  /**
+   * exporterAnomalies(exId)
+   * Export CSV des lignes rejetées et dupliquées du rapport d'import de
+   * l'exercice donné — réutilise csvFromRows/csvEscapeCell (donc
+   * csvSafeValue) comme tous les autres exports de l'application.
+   */
+  function exporterAnomalies(exId) {
+    const ex = ACTIVE.exercices && ACTIVE.exercices[exId];
+    const rapport = ex && ex.rapportImport;
+    if (!rapport) return;
+    const rows = [['Type', 'Ligne', 'Détail']];
+    rapport.rejets.forEach(r => rows.push(['Ligne rejetée', r.ligne, r.raison]));
+    rapport.doublons.forEach(d => rows.push(['Doublon', `× ${d.occurrences}`, d.apercu]));
+    downloadTextFile(`anomalies-import-${safeFilePart(ACTIVE.name)}-${exId}.csv`, csvFromRows(rows), 'text/csv');
+  }
+
+  return { analyser, notifier, toggleDetail, resumeHtml, exporterAnomalies };
+})();
 
 function filterGroup(group,el){document.querySelectorAll('.hs-group-item').forEach(i=>i.classList.remove('active'));el.classList.add('active');document.querySelectorAll('.home-section').forEach(s=>s.style.display=(group==='all'||s.dataset.group===group)?'':'none');}
 function filterDossiers(query){const q=query.toLowerCase();document.querySelectorAll('.dossier-card').forEach(c=>c.style.display=(c.dataset.name||'').includes(q)||q===''?'':'none');}
@@ -9820,7 +9841,7 @@ function getFecParserWorker() {
   try {
     const src = `
       const parseFECFile = ${parseFECFile.toString()};
-      const analyserQualiteImportFEC = ${analyserQualiteImportFEC.toString()};
+      const analyserQualiteImportFEC = ${ImportQualiteEngine.analyser.toString()};
       self.onmessage = function(e) {
         const { id, text } = e.data;
         try {
@@ -9870,7 +9891,7 @@ function parseFECEnArrierePlan(text) {
     return new Promise((resolve, reject) => {
       try {
         const parsed = parseFECFile(text);
-        if (parsed) parsed.rapportImport = analyserQualiteImportFEC(text);
+        if (parsed) parsed.rapportImport = ImportQualiteEngine.analyser(text);
         resolve(parsed);
       } catch (err) { reject(err); }
     });
@@ -9931,7 +9952,7 @@ function finishNpConfirm(parsed){
     saveStore(store);
     closeNpModal();
     addDossierCard(_npNewName,_npGroup,id,`FEC ${year} · analysé`);
-    toastRapportImport(parsed.rapportImport);
+    ImportQualiteEngine.notifier(parsed.rapportImport);
     // Ouvrir le dossier puis affecter automatiquement les orphelins selon PCG 2026
     setTimeout(()=>{
       openDossier(id);
@@ -9979,7 +10000,7 @@ function addExerciceToActiveDossier(parsed, filename) {
   // Affecter les comptes de ce nouvel exercice non encore connus du mapping partagé
   setTimeout(() => { if (ACTIVE.exercices && ACTIVE.exercices[exId]) autoAffectOrphans(); }, 600);
   toast(`Exercice "${label}" ajouté (${Object.keys(ACTIVE.exercices).length} exercices dans ce dossier)`);
-  toastRapportImport(parsed.rapportImport);
+  ImportQualiteEngine.notifier(parsed.rapportImport);
 }
 function closeNpModal(){const el=document.getElementById('np-overlay');if(el)el.remove();}
 function handleHomeUpload(input){if(input.files[0]){_npFile=input.files[0];_npNewName='Nouveau dossier';showNpStep(2);setTimeout(()=>npSetFile(_npFile),100);}}

@@ -781,6 +781,52 @@ réussie via le bouton de Confidentialité).
 **Tests** : 10 tests (640 au total), tous verts + vérification manuelle
 en navigateur headless.
 
+### 19. 🟡 Troisième module extrait : `ImportQualiteEngine`
+
+**Correction appliquée** : les 5 fonctions du rapport d'import FEC
+(Phase 2, cf. §10) — `analyserQualiteImportFEC`, `toastRapportImport`,
+`toggleRapportDetail`, `rapportImportResumeHtml`,
+`exporterAnomaliesImport` — sont regroupées dans un nouvel espace de
+noms `ImportQualiteEngine` (`analyser`, `notifier`, `toggleDetail`,
+`resumeHtml`, `exporterAnomalies`), même motif que les deux modules
+précédents.
+
+**Particularité gérée avec précaution** (identifiée dès la Phase 5, cf.
+§12) : `analyser()` (l'ancienne fonction globale
+`analyserQualiteImportFEC`) est sérialisée via `.toString()` pour
+construire le Web Worker de parsing (`getFecParserWorker()`). Une
+fonction MEMBRE d'un objet exposé par une IIFE reste parfaitement
+sérialisable de la même façon qu'une fonction globale ordinaire — seul
+le point d'appel du `.toString()` a été mis à jour
+(`ImportQualiteEngine.analyser.toString()` au lieu de
+`analyserQualiteImportFEC.toString()`), le code JavaScript injecté dans
+le Worker reste rigoureusement identique (vérifié : un FEC de 50 000
+lignes importé avec succès via le Worker après ce correctif, résultats
+numériques identiques).
+
+**Comportement strictement identique avant/après** : vérifié en
+navigateur headless — import réel avec anomalies volontaires (ligne
+rejetée, doublon, écart débit/crédit), bandeau et détail affichés à
+l'identique dans "Suivi des imports", export CSV fonctionnel.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`,
+`tests/test_rapport_import_fec.js` et `tests/test_fec_worker_parsing.js`
+(renommage des appels, aucun nouveau test).
+**Tests** : 26 tests (21 + 5, inchangé), tous verts + vérification
+manuelle en navigateur headless (import Worker + écran Suivi des imports).
+
+**Bilan de la Phase 6 à ce stade** : 3 modules extraits
+(`ComptesMixtesEngine`, `IndexedDbBackupEngine`, `ImportQualiteEngine`).
+Les utilitaires de formatage/export (`fmtV`, `fmtK`, `csvFromRows`...)
+ont été délibérément **écartés** comme candidats : appelés depuis 200+
+emplacements du code (contre 3 à 13 pour les modules déjà extraits), ce
+sont des fonctions pures sans état ni logique interne à protéger — le
+bénéfice d'encapsulation est nul, alors que le risque mécanique d'un
+renommage à cette échelle (une seule référence oubliée = régression
+visuelle sur un écran) est réel. Les regrouper dans un espace de noms
+serait une abstraction sans justification (contraire au principe de ne
+pas ajouter de structure au-delà du besoin réel).
+
 ---
 
 ## Suites de tests

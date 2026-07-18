@@ -45,7 +45,7 @@ async function run(htmlPath) {
     // Le repli synchrone résout la Promise sur le même tick (microtask) — attendre un macrotask suffit.
     await runIn(ctx, `new Promise(r => setTimeout(r, 10))`);
     const result = getJSON(ctx, 'globalThis.__result');
-    const direct = getJSON(ctx, `(() => { const p = parseFECFile(${JSON.stringify(text)}); p.rapportImport = analyserQualiteImportFEC(${JSON.stringify(text)}); return p; })()`);
+    const direct = getJSON(ctx, `(() => { const p = parseFECFile(${JSON.stringify(text)}); p.rapportImport = ImportQualiteEngine.analyser(${JSON.stringify(text)}); return p; })()`);
     results.push({
       name: 'parseFECEnArrierePlan() (repli synchrone) renvoie exactement le même bal/nbLines que parseFECFile() direct',
       pass: JSON.stringify(result.bal) === JSON.stringify(direct.bal) && result.nbLines === direct.nbLines,
@@ -77,10 +77,10 @@ async function run(htmlPath) {
     // Vérifie que le code source du Worker est bien construit à partir du .toString() des fonctions
     // réelles (pas d'une copie figée qui pourrait diverger) — en simulant un Worker minimal.
     const workerSrcContainsRealFunctions = getJSON(ctx, `(() => {
-      const src = parseFECFile.toString() + analyserQualiteImportFEC.toString();
+      const src = parseFECFile.toString() + ImportQualiteEngine.analyser.toString();
       return src.includes('function') && src.length > 500;
     })()`);
-    results.push({ name: 'Les fonctions parseFECFile/analyserQualiteImportFEC sont bien sérialisables via .toString() (base du Worker construit dynamiquement)', pass: workerSrcContainsRealFunctions });
+    results.push({ name: 'Les fonctions parseFECFile/ImportQualiteEngine.analyser sont bien sérialisables via .toString() (base du Worker construit dynamiquement)', pass: workerSrcContainsRealFunctions });
   }
 
   return results;

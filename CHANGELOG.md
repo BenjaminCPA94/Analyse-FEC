@@ -4,6 +4,27 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 6 (3/N) : modularisation interne — ImportQualiteEngine
+
+Troisième module extrait : le rapport d'import FEC (Phase 2) devient
+`ImportQualiteEngine` (`analyser`/`notifier`/`toggleDetail`/`resumeHtml`/
+`exporterAnomalies`), même motif que les deux modules précédents.
+
+Particularité gérée avec précaution : `analyser()` est sérialisée via
+`.toString()` pour construire le Web Worker de parsing (Phase 5) — une
+fonction membre d'un objet exposé par une IIFE reste parfaitement
+sérialisable de la même façon qu'une fonction globale, seul le point
+d'appel du `.toString()` a changé. Vérifié : import d'un FEC de 50 000
+lignes via le Worker après ce correctif, résultats identiques.
+
+Comportement strictement identique avant/après, vérifié en navigateur
+headless (import avec anomalies volontaires, écran "Suivi des imports").
+
+**Bilan Phase 6 à ce stade** : 3 modules extraits. Les utilitaires de
+formatage/export (`fmtV`, `fmtK`...) sont délibérément écartés comme
+candidats : 200+ points d'appel pour un bénéfice d'encapsulation nul
+(fonctions pures sans état), le risque mécanique dépasserait le gain.
+
 ## v6 — Phase 6 (2/N) : modularisation interne — IndexedDbBackupEngine
 
 Deuxième module extrait selon le même motif que `ComptesMixtesEngine` :
