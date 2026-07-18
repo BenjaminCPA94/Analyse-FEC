@@ -94,6 +94,9 @@ reportResults('Grand livre', require('./test_grand_livre.js').run(htmlPath));
 section('12. Suppression complète des données (audit sécurité — correctif critique)');
 reportResults('Suppression données', require('./test_delete_all_data.js').run(htmlPath));
 
+section('13. Injection de formule CSV (audit sécurité — correctif critique)');
+reportResults('Injection CSV', require('./test_csv_injection.js').run(htmlPath));
+
 // ── Bilan final ───────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════');
 console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
