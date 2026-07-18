@@ -4,6 +4,49 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Consolidé : vue « Contributif en colonnes » (détail par société) sur Bilan/CR/SIG
+
+Sur un dossier Consolidé, le Compte de résultat (présentation légale), la
+SIG et le Bilan proposaient jusqu'ici uniquement le total agrégé des
+sociétés membres. Une bascule **« Vue » (Total / Contributif en
+colonnes)** apparaît maintenant en haut de ces 3 pages — uniquement pour
+un dossier Consolidé, aucun effet sur un dossier Reporting classique.
+
+- **Mode "Contributif en colonnes"** : chaque poste, sous-poste et compte
+  s'affiche avec une colonne par dossier membre (nom du dossier en
+  en-tête) + une colonne « Total » identique à la somme déjà affichée en
+  mode "Total". Le dépliage par clic (chevron) fonctionne à l'identique
+  jusqu'au niveau compte, avec le détail par société pour chaque compte
+  individuel — comme demandé, jusqu'au niveau le plus fin.
+- **Aucune donnée fabriquée** : les colonnes par société lisent
+  directement le `bal` propre de chaque dossier membre (déjà conservé par
+  `computeConsolidatedData()` pour l'agrégation, désormais aussi exposé
+  via `ACTIVE.consolideMembers`) — la liste des comptes affichés pour
+  chaque poste est prise sur la colonne Total (qui contient toujours
+  l'union des comptes de tous les membres) pour ne jamais en omettre un
+  qui existerait chez un membre mais s'annulerait dans la somme.
+- Le clic sur un compte individuel ouvre toujours le Grand livre
+  (`openGrandLivre()`) — comportement inchangé, y compris le message
+  explicite déjà existant quand le détail écriture par écriture n'est pas
+  disponible (le ledger n'est jamais persisté, cf. limite déjà documentée).
+- Le résultat net calculé (compte 12x absent du FEC) est recalculé
+  indépendamment par colonne au Bilan : un dossier membre peut avoir son
+  12x déjà affecté quand un autre ne l'a pas encore.
+- L'indicateur d'équilibre Actif/Passif et le graphique de structure du
+  bilan restent basés sur la colonne Total, à l'identique du mode "Total"
+  existant — aucun changement de leur comportement.
+- Bascule volontairement absente de la Trésorerie pour l'instant (hors
+  périmètre de cette demande — CR/SIG/Bilan uniquement).
+
+**Tests** : 11 nouveaux tests Node (`tests/test_consolide_contributif.js`)
+vérifiant la délégation `buildCRTable()`/`buildLegalCRTable()`/
+`buildBilanTables()` → leurs variantes `*Contributif()`, les montants par
+société et Total, la non-régression du mode "Total" par défaut, et
+qu'un dossier Reporting ignore totalement `_consolideView` — 483 tests au
+total, suite intégralement verte. Vérification manuelle en navigateur
+headless (Playwright) du parcours complet sur les 3 pages (bascule,
+en-têtes, détail par compte déplié, retour au mode Total).
+
 ## v6 — Dossier « Consolidé » : agrégation simple de plusieurs dossiers Reporting existants
 
 Remodelage du flux « + Nouveau projet » demandé : au lieu d'un unique

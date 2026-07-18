@@ -124,6 +124,14 @@
   .dr-total .amt{color:#fff;font-size:14px;}
   .dr-total .pct-lbl{color:rgba(255,255,255,.4);}
 
+  /* Bascule "Vue" (Total / Contributif en colonnes) — dossiers Consolidé uniquement */
+  .consolide-view-toggle{display:none;align-items:center;gap:6px;}
+  .consolide-view-toggle .cvt-label{font-size:11px;color:var(--text3);font-weight:600;}
+  .consolide-view-toggle .cvt-group{display:flex;background:var(--surface2);border-radius:6px;padding:2px;gap:1px;border:1px solid var(--border);}
+  .consolide-view-btn{padding:4px 10px;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:var(--text2);transition:all .12s;}
+  .consolide-view-btn.active{background:var(--surface);color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+  .amt-member{color:var(--text2);}
+
   .bilan-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
   .bilan-grid.compare-mode{grid-template-columns:1fr;}
   @media(max-width:900px){.bilan-grid,.chart-row{grid-template-columns:1fr;}}
@@ -1031,6 +1039,7 @@
         <div class="drill-card">
           <div class="drill-card-header">
             <div><h2>Compte de résultat · <span id="legalcr-year">Exercice</span></h2><p>Présentation légale (PCG) · Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
+            <div class="consolide-view-toggle no-print" id="cvt-legalcr"><span class="cvt-label">Vue</span><div class="cvt-group"><button class="consolide-view-btn active" data-view="total" onclick="setConsolideView('total')">Total</button><button class="consolide-view-btn" data-view="contributif" onclick="setConsolideView('contributif')">Contributif en colonnes</button></div></div>
             <button class="no-print" onclick="exportLegalCRToCSV()" title="Exporter le Compte de résultat au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
             <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
           </div>
@@ -1045,6 +1054,7 @@
         <div class="drill-card">
           <div class="drill-card-header">
             <div><h2>SIG · <span id="cr-year">Exercice</span></h2><p>Soldes Intermédiaires de Gestion · Cliquez pour le détail · <span style="color:#3B6D11;font-weight:600;">● Live</span></p></div>
+            <div class="consolide-view-toggle no-print" id="cvt-sig"><span class="cvt-label">Vue</span><div class="cvt-group"><button class="consolide-view-btn active" data-view="total" onclick="setConsolideView('total')">Total</button><button class="consolide-view-btn" data-view="contributif" onclick="setConsolideView('contributif')">Contributif en colonnes</button></div></div>
             <button class="no-print" onclick="exportCRToCSV()" title="Exporter la SIG au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;margin-right:8px;">⬇ Export CSV</button>
             <span class="drill-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Dépliable</span>
           </div>
@@ -1062,6 +1072,7 @@
     <div class="page" id="page-bilan">
       <div style="padding:20px 32px;">
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+          <div class="consolide-view-toggle no-print" id="cvt-bilan" style="margin-right:auto;"><span class="cvt-label">Vue</span><div class="cvt-group"><button class="consolide-view-btn active" data-view="total" onclick="setConsolideView('total')">Total</button><button class="consolide-view-btn" data-view="contributif" onclick="setConsolideView('contributif')">Contributif en colonnes</button></div></div>
           <button class="no-print" onclick="exportBilanToCSV()" title="Exporter le Bilan au format CSV" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">⬇ Export CSV</button>
           <button class="no-print" onclick="window.print()" title="Imprimer / PDF" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#1a1916;cursor:pointer;">🖶 Imprimer / PDF</button>
         </div>
@@ -1976,6 +1987,12 @@ let CURRENCY = 'eur';
 let _compareExIdCR = null;
 let _compareExIdBilan = null;
 
+// Vue "Contributif en colonnes" (détail par société d'un dossier Consolidé,
+// cf. CHANGELOG) : 'total' (comportement historique, un seul montant
+// agrégé) ou 'contributif' (une colonne par dossier membre + Total).
+// Sans effet sur un dossier Reporting (une seule société, rien à détailler).
+let _consolideView = 'total';
+
 // Period state
 let PERIOD = 'monthly';
 let RANGE_N = 12;
@@ -2178,6 +2195,12 @@ function computeConsolidatedData(memberIds) {
   const bal = {}, libs = {}, months = {};
   let nbLines = 0, periodStart = '', periodEnd = '';
   const missing = [];
+  // `members` conserve le bal INDIVIDUEL (non agrégé) de chaque dossier
+  // membre — nécessaire à la vue "Contributif en colonnes" (détail par
+  // société, cf. CHANGELOG) qui a besoin de la contribution de chacun en
+  // plus de la somme. Jamais persisté, recalculé à chaque ouverture comme
+  // le reste de cette fonction.
+  const members = [];
   (memberIds || []).forEach(mid => {
     const d = store[mid];
     if (!d || d.type === 'consolide') { missing.push(mid); return; }
@@ -2193,8 +2216,9 @@ function computeConsolidatedData(memberIds) {
     nbLines += ex.nbLines || 0;
     if (ex.periodStart && (!periodStart || ex.periodStart < periodStart)) periodStart = ex.periodStart;
     if (ex.periodEnd && (!periodEnd || ex.periodEnd > periodEnd)) periodEnd = ex.periodEnd;
+    members.push({ id: d.id, name: d.name, bal: ex.bal || {} });
   });
-  return { bal, libs, months, nbLines, periodStart, periodEnd, missing };
+  return { bal, libs, months, nbLines, periodStart, periodEnd, missing, members };
 }
 
 // ── DEFAULT DOSSIER (Holdings) ──
@@ -2694,6 +2718,7 @@ function renderDashboard() {
   const pname=document.getElementById('params-name-input');if(pname)pname.value=ACTIVE.name||'';
   const ptitle=document.getElementById('params-dossier-title');if(ptitle)ptitle.textContent=ACTIVE.name||'';
   renderConsolideMembersBox();
+  renderConsolideViewToggles();
 
   // Imports
   renderImportsTracking();
@@ -2758,6 +2783,43 @@ function removeConsolideMember(id){
   openDossier(ACTIVE.id);
   switchModule('params');
   toast('Dossier retiré du consolidé');
+}
+
+/**
+ * renderConsolideViewToggles()
+ * Affiche (et synchronise l'état actif de) la bascule "Total" /
+ * "Contributif en colonnes" sur les 3 pages concernées (Compte de
+ * résultat légal, SIG, Bilan) — visible uniquement pour un dossier
+ * Consolidé ayant au moins un membre résolu. Sans effet sur un dossier
+ * Reporting (une seule société, rien à détailler par société).
+ */
+function renderConsolideViewToggles(){
+  const show = ACTIVE.type === 'consolide' && (ACTIVE.consolideMembers || []).length > 0;
+  ['cvt-legalcr', 'cvt-sig', 'cvt-bilan'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = show ? 'flex' : 'none';
+    el.querySelectorAll('.consolide-view-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === _consolideView);
+    });
+  });
+}
+/**
+ * setConsolideView(mode)
+ * Bascule le mode d'affichage ('total' | 'contributif') des 3 tableaux
+ * du dossier Consolidé ouvert, puis les reconstruit. Les fonctions de
+ * rendu existantes (buildLegalCRTable, buildCRTable, buildBilanTables)
+ * restent les points d'entrée uniques appelés partout ailleurs dans le
+ * code (renderDashboard, switchExercice, changement de devise…) — elles
+ * délèguent en interne vers leur variante *Contributif() quand ce mode
+ * est actif, ce qui évite de dupliquer tous leurs points d'appel.
+ */
+function setConsolideView(mode){
+  _consolideView = mode;
+  renderConsolideViewToggles();
+  buildLegalCRTable();
+  buildCRTable();
+  buildBilanTables();
 }
 
 /** fmtPeriodDate(p) Formate une période AAAAMM en "MM/AAAA" pour affichage. */
@@ -2864,6 +2926,9 @@ function onCompareSelectChange(key, exId) {
  * ─────────────────────────────────────────────────────────────────────────
  */
 function buildCRTable() {
+  if (_consolideView === 'contributif' && ACTIVE.type === 'consolide' && (ACTIVE.consolideMembers || []).length > 0) {
+    return buildCRTableContributif();
+  }
   const tb = document.getElementById('tbCR');
   if (!tb) return;
   const thead = document.getElementById('thead-cr');
@@ -3045,6 +3110,162 @@ function buildCRTable() {
     });
   });
 
+}
+
+/**
+ * buildCRTableContributif()
+ * Variante de buildCRTable() pour un dossier Consolidé en mode "Contributif
+ * en colonnes" (cf. CHANGELOG) : une colonne par dossier membre + une
+ * colonne Total (identique à la vue "Total" existante), pour CHAQUE poste,
+ * sous-poste et compte du même mapping (ACTIVE.mps.cr) déjà utilisé par
+ * buildCRTable(). Mêmes mécanismes de dépliage (toggleGroup(),
+ * data-parent/data-subparent) que buildCRTable()/buildCRTableCompare().
+ * Pas de colonne "% CA" ici (peu lisible avec N+1 colonnes de montant).
+ */
+function buildCRTableContributif() {
+  const tb = document.getElementById('tbCR');
+  if (!tb) return;
+  const members = ACTIVE.consolideMembers || [];
+  const n = members.length;
+  const mps = ACTIVE.mps?.cr || [];
+  const gridDc  = `20px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const gridDcs = `64px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const colspan = n + 3;
+
+  const thead = document.getElementById('thead-cr');
+  if (thead) thead.innerHTML = `<tr><th colspan="${colspan}" style="padding:0"><div class="dc dc-head" style="grid-template-columns:${gridDc}">
+      <span class="chevron"></span><span class="lbl">Poste</span>
+      ${members.map(m => `<span class="amt">${escHtml(m.name)}</span>`).join('')}
+      <span class="amt">Total</span>
+    </div></th></tr>`;
+
+  const plV = (bal, num) => {
+    const v = bal[num] || 0;
+    const cl = num[0];
+    if (cl === '7') return v;
+    if (cl === '6') return -v;
+    return 0;
+  };
+  const groupTotal = (bal, g) => {
+    let t = 0;
+    (g.accounts || []).forEach(nm => { t += plV(bal, nm); });
+    (g.subs || []).forEach(s => { (s.accounts || []).forEach(nm => { t += plV(bal, nm); }); });
+    return t;
+  };
+  // Une colonne par membre + une colonne Total (ACTIVE.bal, déjà la somme des membres)
+  const colBal = [...members.map(m => m.bal), ACTIVE.bal];
+
+  const amtCells = (vals, small) => vals.map((v, i) => {
+    const cls = i === vals.length - 1 ? (small ? 'amt-sm' : 'amt') : (small ? 'amt-sm amt-member' : 'amt amt-member');
+    return `<span class="${cls} ${v >= 0 ? 'pos' : 'neg'}">${fmtV(v)}</span>`;
+  }).join('');
+
+  let running = colBal.map(() => 0);
+  let html = '';
+
+  mps.forEach((g, idx) => {
+    const isSub = g.type === 'subtotal';
+    const isTotal = g.type === 'total';
+    const hasSubs = g.subs && g.subs.length > 0;
+    const hasAccts = g.accounts && g.accounts.length > 0;
+    let gTotals;
+
+    if (!isSub && !isTotal) {
+      gTotals = colBal.map(b => groupTotal(b, g));
+      running = running.map((r, i) => r + gTotals[i]);
+    } else {
+      gTotals = running.slice();
+    }
+
+    const bold = (isSub || isTotal) ? ' dc-bold' : '';
+    const gk = `cr_${idx}`;
+    const hasKids = !isSub && !isTotal && (hasSubs || hasAccts);
+
+    html += `<tr class="dr-group${hasKids ? ' has-kids' : ''}" data-group="${gk}" onclick="toggleGroup('${gk}')">
+      <td colspan="${colspan}" style="padding:0">
+        <div class="dc${bold}" style="grid-template-columns:${gridDc}">
+          <span class="chevron">${hasKids ? '›' : ''}</span>
+          <span class="lbl">${escHtml(g.label)}</span>
+          ${amtCells(gTotals)}
+        </div>
+      </td></tr>`;
+
+    if (hasKids) {
+      if (hasSubs) {
+        g.subs.forEach(sub => {
+          const st = colBal.map(b => (sub.accounts || []).reduce((s, nm) => s + plV(b, nm), 0));
+          const sk = `cr_sub_${idx}_${sub.id}`;
+          const shk = sub.accounts && sub.accounts.length > 0;
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="${colspan}" style="padding:0">
+              <div class="dc" style="grid-template-columns:${gridDc};padding-left:24px;font-weight:600;background:#f9f8f6;cursor:pointer;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
+                <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
+                <span class="lbl">${escHtml(sub.label)}</span>
+                ${amtCells(st)}
+              </div>
+            </td></tr>`;
+          (sub.accounts || []).forEach(num => {
+            const sv = colBal.map(b => plV(b, num));
+            html += `<tr class="dr-sub" data-parent="${gk}" data-subparent="${sk}">
+              <td colspan="${colspan}" style="padding:0">
+                <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs};padding-left:44px;" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                  <span class="num-code">${num}</span>
+                  <span class="lbl-muted">${libOf(num)}</span>
+                  ${amtCells(sv, true)}
+                </div>
+              </td></tr>`;
+          });
+        });
+        (g.accounts || []).forEach(num => {
+          const sv = colBal.map(b => plV(b, num));
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="${colspan}" style="padding:0">
+              <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs};" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                <span class="num-code">${num}</span>
+                <span class="lbl-muted">${libOf(num)}</span>
+                ${amtCells(sv, true)}
+              </div>
+            </td></tr>`;
+        });
+      } else {
+        (g.accounts || []).forEach(num => {
+          const sv = colBal.map(b => plV(b, num));
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="${colspan}" style="padding:0">
+              <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs};" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                <span class="num-code">${num}</span>
+                <span class="lbl-muted">${libOf(num)}</span>
+                ${amtCells(sv, true)}
+              </div>
+            </td></tr>`;
+        });
+      }
+    }
+  });
+
+  html += `<tr class="dr-total">
+    <td colspan="${colspan}" style="padding:0">
+      <div class="dc" style="grid-template-columns:${gridDc}">
+        <span class="chevron"></span>
+        <span class="lbl">= Résultat net de l'exercice</span>
+        ${amtCells(running)}
+      </div>
+    </td></tr>`;
+
+  tb.innerHTML = html;
+
+  document.querySelectorAll('[data-subparent]').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[data-group^="cr_sub_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`[data-subparent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
 }
 
 /**
@@ -3433,6 +3654,9 @@ function pickAutoCompareExercice() {
  * openGrandLivre()).
  */
 function buildLegalCRTable() {
+  if (_consolideView === 'contributif' && ACTIVE.type === 'consolide' && (ACTIVE.consolideMembers || []).length > 0) {
+    return buildLegalCRTableContributif();
+  }
   const tb = document.getElementById('tbLegalCR');
   if (!tb) return;
   const thead = document.getElementById('thead-legalcr');
@@ -3601,11 +3825,138 @@ function buildLegalCRTable() {
 }
 
 /**
+ * buildLegalCRTableContributif()
+ * Variante de buildLegalCRTable() (présentation légale PCG) pour un
+ * dossier Consolidé en mode "Contributif en colonnes" : une colonne par
+ * dossier membre + une colonne Total, pour chaque poste/sous-poste/compte
+ * de LEGAL_CR_STRUCTURE. Réutilise telles quelles legalCRPosteAccounts()
+ * et computeLegalCR() (fonctions pures déjà paramétrées par un bal
+ * arbitraire) appliquées à chaque membre puis au Total (= ACTIVE.bal,
+ * déjà la somme des membres). La liste des comptes par poste est prise
+ * sur la colonne Total (qui contient toujours l'union des comptes de tous
+ * les membres, même si leur somme s'annule) pour ne jamais en omettre un
+ * qui existerait chez un membre mais pas dans un autre.
+ */
+function buildLegalCRTableContributif() {
+  const tb = document.getElementById('tbLegalCR');
+  if (!tb) return;
+  const members = ACTIVE.consolideMembers || [];
+  const n = members.length;
+  const gridDc  = `20px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const gridDcs = `64px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const colspan = n + 3;
+
+  const colBal   = [...members.map(m => m.bal), ACTIVE.bal || {}];
+  const colAccts = colBal.map(b => legalCRPosteAccounts(b));
+  const colAmt   = colBal.map((b, i) => computeLegalCR(b, colAccts[i]));
+  const totalAccts = colAccts[colAccts.length - 1];
+
+  const year = ACTIVE.periodEnd ? ACTIVE.periodEnd.slice(0, 4) : new Date().getFullYear();
+  const yearEl = document.getElementById('legalcr-year');
+  if (yearEl) yearEl.textContent = `Exercice ${year}`;
+
+  const thead = document.getElementById('thead-legalcr');
+  if (thead) thead.innerHTML = `<tr><th colspan="${colspan}" style="padding:0"><div class="dc dc-head" style="grid-template-columns:${gridDc}">
+      <span class="chevron"></span><span class="lbl">Postes</span>
+      ${members.map(m => `<span class="amt">${escHtml(m.name)}</span>`).join('')}
+      <span class="amt">Total</span>
+    </div></th></tr>`;
+
+  const amtCells = (vals, small) => vals.map((v, i) => {
+    const cls = i === vals.length - 1 ? (small ? 'amt-sm' : 'amt') : (small ? 'amt-sm amt-member' : 'amt amt-member');
+    return `<span class="${cls} ${v >= 0 ? 'pos' : 'neg'}">${fmtV(v)}</span>`;
+  }).join('');
+
+  const acctRow = (gk, num) => {
+    const vals = colBal.map(b => b[num] || 0);
+    return `<tr class="dr-sub" data-parent="${gk}">
+      <td colspan="${colspan}" style="padding:0">
+        <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs}" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+          <span class="num-code">${num}</span>
+          <span class="lbl-muted">${libOf(num)}</span>
+          ${amtCells(vals, true)}
+        </div>
+      </td></tr>`;
+  };
+
+  const posteRow = (gk, label, id, bold, hasKids) => {
+    const vals = colAmt.map(a => a[id] || 0);
+    const boldCls = bold ? ' dc-bold' : '';
+    const rowCls = bold && LEGAL_CR_STRUCTURE.find(r => r.id === id)?.final ? 'dr-total' : `dr-group${hasKids ? ' has-kids' : ''}`;
+    return `<tr class="${rowCls}" data-group="${gk}" ${hasKids ? `onclick="toggleGroup('${gk}')"` : ''}>
+      <td colspan="${colspan}" style="padding:0">
+        <div class="dc${boldCls}" style="grid-template-columns:${gridDc}">
+          <span class="chevron">${hasKids ? '›' : ''}</span>
+          <span class="lbl">${escHtml(label)}</span>
+          ${amtCells(vals)}
+        </div>
+      </td></tr>`;
+  };
+
+  let html = '';
+  LEGAL_CR_STRUCTURE.forEach((row, idx) => {
+    const gk = `lcr_${idx}`;
+    if (row.k === 'section') {
+      html += `<tr><td colspan="${colspan}" style="padding:0">
+        <div class="dc dc-bold" style="grid-template-columns:${gridDc};background:#f4f3f0;">
+          <span class="chevron"></span><span class="lbl">${escHtml(row.label)}</span>
+          ${members.map(() => '<span class="amt"></span>').join('')}<span class="amt"></span>
+        </div>
+      </td></tr>`;
+      return;
+    }
+    if (row.k === 'poste') {
+      const accCur = totalAccts[row.id] || [];
+      html += posteRow(gk, row.label, row.id, false, accCur.length > 0);
+      accCur.forEach(num => { html += acctRow(gk, num); });
+      return;
+    }
+    if (row.k === 'group') {
+      html += posteRow(gk, row.label, row.id, false, true);
+      row.subs.forEach(sub => {
+        const sgk = `${gk}_${sub.id}`;
+        const subAccCur = totalAccts[sub.id] || [];
+        const subVals = colAmt.map(a => a[sub.id] || 0);
+        const hasKids = subAccCur.length > 0;
+        html += `<tr class="dr-sub" data-parent="${gk}">
+          <td colspan="${colspan}" style="padding:0">
+            <div class="dcs" style="grid-template-columns:${gridDcs};cursor:${hasKids ? 'pointer' : 'default'};font-weight:600;" data-group="${sgk}" ${hasKids ? `onclick="event.stopPropagation();toggleGroup('${sgk}')"` : ''}>
+              <span class="chevron" style="font-size:10px;">${hasKids ? '›' : ''}</span>
+              <span class="lbl">${escHtml(sub.label)}</span>
+              ${amtCells(subVals, true)}
+            </div>
+          </td></tr>`;
+        subAccCur.forEach(num => { html += acctRow(sgk, num); });
+      });
+      return;
+    }
+    html += posteRow(gk, row.label, row.id, true, false);
+  });
+
+  tb.innerHTML = html;
+
+  document.querySelectorAll('#tbLegalCR [data-group^="lcr_"][data-group*="_dot_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`#tbLegalCR [data-parent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
+}
+
+/**
  * buildBilanTables()
  * Orchestrateur principal du rendu bilan.
  * Sépare les groupes actif/passif et appelle buildBilanHalf() pour chacun.
  */
 function buildBilanTables() {
+  if (_consolideView === 'contributif' && ACTIVE.type === 'consolide' && (ACTIVE.consolideMembers || []).length > 0) {
+    return buildBilanTablesContributif();
+  }
   const theadA = document.getElementById('thead-actif');
   if (theadA) theadA.innerHTML = '<tr><th>Poste</th><th class="r">Montant</th></tr>';
   const theadP = document.getElementById('thead-passif');
@@ -4056,7 +4407,231 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
   return running;
 }
 
+/**
+ * buildBilanTablesContributif()
+ * Variante de buildBilanTables() pour un dossier Consolidé en mode
+ * "Contributif en colonnes" : une colonne par dossier membre + une
+ * colonne Total, pour chaque poste/sous-poste/compte actif et passif du
+ * même mapping (ACTIVE.mps.bilan) déjà utilisé par buildBilanTables().
+ * Le résultat net calculé (compte 12x absent, cf. CORRECTION 1 de
+ * buildBilanTables()) est recalculé indépendamment pour chaque colonne —
+ * un membre peut avoir son 12x déjà affecté quand un autre ne l'a pas.
+ * L'indicateur d'équilibre et le graphique restent basés sur la colonne
+ * Total (= ACTIVE.bal, déjà la somme des membres), à l'identique de
+ * buildBilanTables().
+ */
+function buildBilanTablesContributif() {
+  document.getElementById('bilan-grid')?.classList.remove('compare-mode');
+  const allGroups = ACTIVE.mps?.bilan || [];
+  const actifGroups = allGroups.filter(g => {
+    if (g.side) return g.side === 'actif';
+    const legacyActifIds = ['b1','b2','b3','b4','b5','b6','b7','b8','b9','b10','b11','b12','b13','b14','b15','b16'];
+    return legacyActifIds.includes(g.id) || g.id.startsWith('ba');
+  });
+  const passifGroups = allGroups.filter(g => {
+    if (g.side) return g.side === 'passif';
+    const legacyPassifIds = ['b17','b18','b19','b20'];
+    return legacyPassifIds.includes(g.id) || g.id.startsWith('bp');
+  });
 
+  const members = ACTIVE.consolideMembers || [];
+  const n = members.length;
+  const gridDc  = `20px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const gridDcs = `64px 1fr repeat(${n}, minmax(90px,1fr)) 120px`;
+  const colspan = n + 3;
+  const colBal = [...members.map(m => m.bal), ACTIVE.bal || {}];
+
+  const resultatFor = (bal) => {
+    let calc = 0;
+    Object.keys(bal).forEach(nm => {
+      const cl = nm[0];
+      if (cl === '7') calc += bal[nm];
+      if (cl === '6') calc -= bal[nm];
+    });
+    const enBilan = Object.keys(bal).filter(nm => nm.startsWith('12')).reduce((s, nm) => s + bal[nm], 0);
+    return Math.abs(enBilan) < 1 ? calc : 0;
+  };
+  const colResultat = colBal.map(resultatFor);
+
+  const headHtml = `<tr><th colspan="${colspan}" style="padding:0"><div class="dc dc-head" style="grid-template-columns:${gridDc}">
+      <span class="chevron"></span><span class="lbl">Poste</span>
+      ${members.map(m => `<span class="amt">${escHtml(m.name)}</span>`).join('')}
+      <span class="amt">Total</span>
+    </div></th></tr>`;
+  const theadA = document.getElementById('thead-actif'), theadP = document.getElementById('thead-passif');
+  if (theadA) theadA.innerHTML = headHtml;
+  if (theadP) theadP.innerHTML = headHtml;
+
+  const amtCells = (vals, small) => vals.map((v, i) => {
+    const cls = i === vals.length - 1 ? (small ? 'amt-sm' : 'amt') : (small ? 'amt-sm amt-member' : 'amt amt-member');
+    return `<span class="${cls} ${v >= 0 ? 'pos' : 'neg'}">${fmtV(v)}</span>`;
+  }).join('');
+
+  const groupSumForCols = (g, sign) => colBal.map(b => {
+    let t = 0;
+    (g.accounts || []).forEach(nm => { t += (b[nm] || 0) * sign; });
+    (g.subs || []).forEach(s => (s.accounts || []).forEach(nm => { t += (b[nm] || 0) * sign; }));
+    return t;
+  });
+
+  const renderSide = (tbId, groups, side) => {
+    const tb = document.getElementById(tbId);
+    if (!tb) return 0;
+    const sign = side === 'passif' ? -1 : 1;
+    let running = colBal.map(() => 0);
+    let html = '';
+    groups.forEach((g, idx) => {
+      const isSub = g.type === 'subtotal', isTotal = g.type === 'total';
+      const isCapPropres = side === 'passif' && (g.id === 'bp1' || g.label.toLowerCase().includes('capitaux propres'));
+      let gTotals;
+      if (!isSub && !isTotal) {
+        gTotals = groupSumForCols(g, sign);
+        if (isCapPropres) gTotals = gTotals.map((v, i) => v + colResultat[i]);
+        running = running.map((r, i) => r + gTotals[i]);
+      } else {
+        gTotals = running.slice();
+      }
+      const bold = (isSub || isTotal) ? ' dc-bold' : '';
+      const hasSubs = g.subs && g.subs.length > 0;
+      const hasAccts = g.accounts && g.accounts.length > 0;
+      const hasRN = isCapPropres && colResultat.some(v => Math.abs(v) > 1);
+      const hasKids = !isSub && !isTotal && (hasSubs || hasAccts || hasRN);
+      const gk = `bilcontrib_${tbId}_${idx}`;
+
+      html += `<tr class="dr-group${hasKids ? ' has-kids' : ''}" data-group="${gk}" onclick="toggleGroup('${gk}')">
+        <td colspan="${colspan}" style="padding:0">
+          <div class="dc${bold}" style="grid-template-columns:${gridDc}">
+            <span class="chevron">${hasKids ? '›' : ''}</span>
+            <span class="lbl">${escHtml(g.label)}</span>
+            ${amtCells(gTotals)}
+          </div>
+        </td></tr>`;
+
+      if (hasKids) {
+        if (hasSubs) {
+          g.subs.forEach(sub => {
+            const st = colBal.map(b => (sub.accounts || []).reduce((s, nm) => s + (b[nm] || 0) * sign, 0));
+            const sk = `bilcontrib_sub_${tbId}_${idx}_${sub.id}`;
+            const shk = sub.accounts && sub.accounts.length > 0;
+            html += `<tr class="dr-sub" data-parent="${gk}">
+              <td colspan="${colspan}" style="padding:0">
+                <div class="dc" style="grid-template-columns:${gridDc};padding-left:24px;font-weight:600;background:#f9f8f6;cursor:pointer;" data-group="${sk}" onclick="event.stopPropagation();toggleGroup('${sk}')">
+                  <span class="chevron" style="font-size:10px;">${shk ? '›' : ''}</span>
+                  <span class="lbl">${escHtml(sub.label)}</span>
+                  ${amtCells(st)}
+                </div>
+              </td></tr>`;
+            (sub.accounts || []).forEach(num => {
+              const sv = colBal.map(b => (b[num] || 0) * sign);
+              html += `<tr class="dr-sub" data-parent="${gk}" data-subparent="${sk}">
+                <td colspan="${colspan}" style="padding:0">
+                  <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs};padding-left:44px;" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                    <span class="num-code">${num}</span>
+                    <span class="lbl-muted">${libOf(num)}</span>
+                    ${amtCells(sv, true)}
+                  </div>
+                </td></tr>`;
+            });
+          });
+          (g.accounts || []).forEach(num => {
+            const sv = colBal.map(b => (b[num] || 0) * sign);
+            html += `<tr class="dr-sub" data-parent="${gk}">
+              <td colspan="${colspan}" style="padding:0">
+                <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs}" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                  <span class="num-code">${num}</span>
+                  <span class="lbl-muted">${libOf(num)}</span>
+                  ${amtCells(sv, true)}
+                </div>
+              </td></tr>`;
+          });
+        } else {
+          (g.accounts || []).forEach(num => {
+            const sv = colBal.map(b => (b[num] || 0) * sign);
+            html += `<tr class="dr-sub" data-parent="${gk}">
+              <td colspan="${colspan}" style="padding:0">
+                <div class="dcs dcs-acct" style="grid-template-columns:${gridDcs}" onclick="event.stopPropagation();openGrandLivre('${num}')" title="Voir le grand livre du compte ${num}">
+                  <span class="num-code">${num}</span>
+                  <span class="lbl-muted">${libOf(num)}</span>
+                  ${amtCells(sv, true)}
+                </div>
+              </td></tr>`;
+          });
+        }
+        if (hasRN) {
+          html += `<tr class="dr-sub" data-parent="${gk}">
+            <td colspan="${colspan}" style="padding:0">
+              <div class="dcs" style="grid-template-columns:${gridDcs}">
+                <span class="num-code" style="color:#185FA5;font-weight:700;">12x</span>
+                <span class="lbl-muted">Résultat de l'exercice (calculé)</span>
+                ${amtCells(colResultat, true)}
+              </div>
+            </td></tr>`;
+        }
+      }
+    });
+    tb.innerHTML = html;
+    return running[running.length - 1];
+  };
+
+  const totalActif = renderSide('tbActif', actifGroups, 'actif');
+  const totalPassif = renderSide('tbPassif', passifGroups, 'passif');
+
+  // Équilibre — identique à buildBilanTables(), basé sur la colonne Total
+  const ecart = Math.abs(totalActif - totalPassif);
+  const equilibreEl = document.getElementById('bilan-equilibre');
+  if (equilibreEl) {
+    if (ecart < BALANCE_TOLERANCE_EUR) {
+      equilibreEl.innerHTML = `<span style="color:#3B6D11;font-weight:700;">
+        ✓ Bilan équilibré — Total Actif = Total Passif = ${fmtV(totalActif)}
+        ${ecart > 0 ? `<span style="font-weight:400;font-size:10px;opacity:.7;">(écart ${fmtV(ecart)} = arrondi FEC)</span>` : ''}
+      </span>`;
+    } else {
+      equilibreEl.innerHTML = `<span style="color:#A32D2D;font-weight:700;">
+        ⚠ Bilan déséquilibré — Écart : ${fmtV(ecart)}
+      </span>
+      <div style="margin-top:4px;font-size:11px;color:#6b6960;">
+        Actif : ${fmtV(totalActif)} &nbsp;|&nbsp; Passif : ${fmtV(totalPassif)}
+      </div>`;
+    }
+  }
+
+  document.querySelectorAll('[data-subparent]').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[data-group^="bilcontrib_sub_"]').forEach(el => {
+    const sg = el.dataset.group;
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const rows = document.querySelectorAll(`[data-subparent="${sg}"]`);
+      const chev = el.querySelector('.chevron');
+      const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+      if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+    });
+  });
+
+  // Graphique bilan — basé sur la colonne Total (= ACTIVE.bal), identique à buildBilanTables()
+  const bilanData = [
+    ...actifGroups.filter(g => g.type === 'normal'),
+    ...passifGroups.filter(g => g.type === 'normal'),
+  ].map(g => ({ label: g.label.slice(0, 25), val: Math.abs(tmGroupSum(g, g.side || 'actif')) }))
+    .filter(d => d.val > 0).slice(0, 10);
+  const colors = ['#B5D4F4','#9FE1CB','#CED3F8','#85B7EB','#97C459','#FAC775','#F5C4B3','#F09595','#D3D1C7','#a0c4a0'];
+  if (!CH.cBilan) {
+    mkChart('cBilan', 'bar',
+      { labels: bilanData.map(d => d.label),
+        datasets: [{ data: bilanData.map(d => d.val),
+          backgroundColor: bilanData.map((_, i) => colors[i % 10]),
+          borderRadius: 4 }] },
+      { plugins: { tooltip: { callbacks: { label: c => fmtV(c.raw) } } },
+        scales: { x: { ticks: { font: { size: 9 }, maxRotation: 30 } } } }
+    );
+  } else {
+    updateChart('cBilan',
+      bilanData.map(d => d.label),
+      [{ data: bilanData.map(d => d.val),
+         backgroundColor: bilanData.map((_, i) => colors[i % 10]) }]
+    );
+  }
+}
 
 function setCurrency(c) {
   CURRENCY = c;
@@ -4264,6 +4839,7 @@ function openDossier(id){
   Object.values(CH).forEach(c=>c.destroy());Object.keys(CH).forEach(k=>delete CH[k]);
   _mappingRenderedOnce = false; // Reset so subcategories auto-open on next affectation view
   _openGroups.clear();
+  _consolideView = 'total'; // Toujours revenir sur "Total" en changeant de dossier
 
   const store=loadStore();
   const d=store[id];
@@ -4272,7 +4848,7 @@ function openDossier(id){
     const exId = 'consolide-agg';
     const label = agg.periodEnd ? exerciceLabelFromPeriod(agg.periodStart, agg.periodEnd) : 'Consolidé';
     const activeEx = {id:exId, label, bal:agg.bal, libs:agg.libs, months:agg.months, nbLines:agg.nbLines, periodStart:agg.periodStart, periodEnd:agg.periodEnd, filename:'', importedAt:Date.now()};
-    ACTIVE={id:d.id,name:d.name,group:d.group,type:'consolide',memberIds:d.memberIds||[],bal:activeEx.bal,libs:activeEx.libs,months:activeEx.months,nbLines:activeEx.nbLines,periodStart:activeEx.periodStart,periodEnd:activeEx.periodEnd,filename:'',mps:d.mps||null,isRDCompany:false,revenueTypes:{},savedAt:d.savedAt,exercices:{[exId]:activeEx},activeExerciceId:exId,ledger:null};
+    ACTIVE={id:d.id,name:d.name,group:d.group,type:'consolide',memberIds:d.memberIds||[],consolideMembers:agg.members,bal:activeEx.bal,libs:activeEx.libs,months:activeEx.months,nbLines:activeEx.nbLines,periodStart:activeEx.periodStart,periodEnd:activeEx.periodEnd,filename:'',mps:d.mps||null,isRDCompany:false,revenueTypes:{},savedAt:d.savedAt,exercices:{[exId]:activeEx},activeExerciceId:exId,ledger:null};
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
     if(!ACTIVE.mps || mpsOutdated){
       ACTIVE.mps={cr:defaultMPS_CR(ACTIVE.bal),bilan:defaultMPS_Bilan(ACTIVE.bal)};
