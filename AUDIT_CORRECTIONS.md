@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 598 tests automatiques, tous verts.
+**État au moment de la rédaction** : 617 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -559,6 +559,41 @@ localStorage, restauration réussie via le bouton de Confidentialité.
 
 ---
 
+## Phase 7 — Extension des tests automatiques
+
+### 14. 🟡 Moteur d'agrégation par période et formatage monétaire jamais testés — ✅ Corrigé
+
+**Constat** : `getPeriodData()` (agrégation mensuelle/trimestrielle/
+semestrielle/annuelle utilisée par le tableau de bord ET le module
+Trésorerie pour les graphiques de flux et la position de trésorerie
+cumulée) et les fonctions de formatage monétaire `fmtV()`/`fmtK()`/`pct()`
+(bascule €/K€/M€, utilisée partout où un montant est affiché) n'avaient
+aucun test dédié malgré leur rôle central dans tous les chiffres présentés
+à l'utilisateur.
+
+**Correction appliquée** :
+- 10 nouveaux tests sur `getPeriodData()` : agrégation correcte pour
+  chacune des 4 périodicités, calcul de la position de trésorerie
+  cumulée (`treso`), troncature `RANGE_N` aux N dernières périodes,
+  non-crash sur un dossier sans aucun mois.
+- 9 nouveaux tests sur `fmtV()`/`fmtK()`/`pct()` couvrant les 3 devises
+  (€/K€/M€), les montants négatifs, et la protection division par zéro.
+
+**Bug réel détecté par cette nouvelle couverture** (🟡 mineure, corrigée
+au passage) : en mode M€, `fmtV()` et `fmtK()` utilisaient `.toFixed()`
+sans remplacer le point décimal par une virgule, produisant par exemple
+"2.50 M€" au lieu de "2,50 M€" — incohérent avec le reste de
+l'application, qui utilise systématiquement la convention décimale
+française (virgule). Corrigé par un simple `.replace('.', ',')`, vérifié
+en navigateur headless.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html` (2 lignes, `fmtV()`/`fmtK()`).
+**Tests** : `tests/test_period_data_tresorerie.js` (19 tests, dont celui
+qui a révélé la régression décimale M€) + vérification manuelle en
+navigateur headless.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -574,8 +609,9 @@ localStorage, restauration réussie via le bouton de Confidentialité.
 | `tests/test_comptes_mixtes_multi_exercice.js` | 12 | Comptes mixtes multi-exercices (Phase 3) |
 | `tests/test_fec_worker_parsing.js` | 5 | Parsing FEC déporté (Web Worker, Phase 5) |
 | `tests/test_indexeddb_backup.js` | 9 | Sauvegarde de secours IndexedDB (Phase 5) |
+| `tests/test_period_data_tresorerie.js` | 19 | Agrégation par période + formatage monétaire (Phase 7) |
 
-Total suite complète (`node tests/run_all.js`) : **598 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **617 tests, 0 échec**.
 
 ---
 

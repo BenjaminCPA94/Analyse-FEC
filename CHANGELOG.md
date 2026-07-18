@@ -4,6 +4,21 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 7 : tests sur l'agrégation par période et le formatage monétaire
+
+`getPeriodData()` (agrégation mensuelle/trimestrielle/semestrielle/
+annuelle, position de trésorerie cumulée) et `fmtV()`/`fmtK()`/`pct()`
+(bascule €/K€/M€) n'avaient aucun test dédié malgré leur rôle central
+dans tous les chiffres affichés.
+
+- 19 nouveaux tests (617 au total, tous verts) couvrant les 4
+  périodicités, le calcul de trésorerie cumulée, la troncature
+  `RANGE_N`, et les 3 devises.
+- **Bug réel détecté et corrigé au passage** : en mode M€, `fmtV()`/
+  `fmtK()` affichaient un point décimal anglais ("2.50 M€") au lieu de
+  la virgule française utilisée partout ailleurs dans l'application —
+  corrigé par un simple `.replace('.', ',')`.
+
 ## v6 — Phase 5 (2/2) : sauvegarde de secours IndexedDB
 
 En cas de dépassement de quota localStorage (~5-10 Mo selon le

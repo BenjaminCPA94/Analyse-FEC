@@ -2015,13 +2015,13 @@ function fmtV(n) {
   }
   if (CURRENCY === 'meur') {
     const a=Math.abs(n/1e6), s=n<0?'−':'';
-    return s + (a < 1 ? a.toFixed(3) : a.toFixed(2)) + ' M€';
+    return s + (a < 1 ? a.toFixed(3) : a.toFixed(2)).replace('.', ',') + ' M€';
   }
   return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
 }
 function fmtK(n) {
   const a=Math.abs(n), s=n<0?'−':'';
-  if(CURRENCY==='meur') return s+(a/1e6).toFixed(a<1e6?2:1)+'M€';
+  if(CURRENCY==='meur') return s+(a/1e6).toFixed(a<1e6?2:1).replace('.', ',')+'M€';
   if(CURRENCY==='keur') return s+Math.round(a/1e3)+'K€';
   if(a>=1e6) return s+(a/1e6).toFixed(1).replace('.',',')+'M€';
   if(a>=1e4) return s+Math.round(a/1e3)+'K€';

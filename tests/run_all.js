@@ -157,6 +157,9 @@ async function main() {
   section('32. Sauvegarde de secours IndexedDB — Phase 5 de l\'audit');
   await reportResults('Sauvegarde de secours IndexedDB', await require('./test_indexeddb_backup.js').run(htmlPath));
 
+  section('33. Agrégation par période et formatage monétaire (Phase 7 — extension des tests)');
+  await reportResults('Période / Trésorerie / formatage', require('./test_period_data_tresorerie.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
