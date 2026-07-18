@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 639 tests automatiques, tous verts.
+**État au moment de la rédaction** : 640 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -742,6 +742,45 @@ conformément à la règle impérative n°4 ("étapes courtes et
 vérifiables") et n°6 ("pas de réécriture totale immédiate"). La Phase 6
 reste un chantier progressif, multi-passes, à poursuivre séparément.
 
+### 18. 🟡 Deuxième module extrait : `IndexedDbBackupEngine`
+
+**Correction appliquée** : les 4 fonctions de la sauvegarde de secours
+IndexedDB (Phase 5, cf. §13) — `ouvrirIndexedDBSecours`,
+`idbBackupPutStore`, `idbBackupGetStore`, `restaurerDepuisIndexedDB` —
+sont regroupées dans un nouvel espace de noms `IndexedDbBackupEngine`,
+même motif IIFE que `ComptesMixtesEngine` (§17) : `ouvrir()` (l'ancienne
+`ouvrirIndexedDBSecours()`) reste **privée**, jamais exposée ; l'API
+publique expose `put()`, `get()`, `restaurer()`. Tous les points d'appel
+mis à jour (`saveStore()` → `IndexedDbBackupEngine.put(data)`, bouton
+Confidentialité → `onclick="IndexedDbBackupEngine.restaurer()"`).
+
+**Effet de bord découvert et documenté (positif — preuve que
+l'encapsulation fonctionne)** : la technique de test utilisée jusqu'ici
+pour simuler un échec/succès IndexedDB (réaffecter une fonction globale,
+ex. `idbBackupGetStore = async () => {...}`) ne fonctionne plus après
+l'extraction : `restaurer()` référence en interne la fonction privée
+`get` de la fermeture, pas la propriété publique `IndexedDbBackupEngine.get`
+— réaffecter cette dernière depuis l'extérieur n'a donc plus d'effet sur
+le comportement interne du module. C'est le comportement RECHERCHÉ d'une
+vraie encapsulation (empêche un "monkey-patch" accidentel de casser la
+cohérence interne), mais cela a nécessité de réécrire le test
+correspondant : au lieu de doubler `get()`, le test simule désormais un
+`indexedDB` minimal en mémoire (avec la bonne référence d'objet `tx`
+partagée entre `transaction()` et `put()` — piège classique repéré et
+corrigé pendant l'écriture du test) pour exercer le flux réel
+`put()` → `get()` → `restaurer()` de bout en bout dans le bac à sable Node.
+
+**Comportement strictement identique avant/après** en navigateur réel
+(vérifié en Playwright avec une vraie base IndexedDB : réplication après
+`saveStore()`, suppression simulée du localStorage, restauration
+réussie via le bouton de Confidentialité).
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`,
+`tests/test_indexeddb_backup.js` (1 nouveau test net : le flux complet
+`put()`/`get()` via IndexedDB simulé, en plus du renommage des appels).
+**Tests** : 10 tests (640 au total), tous verts + vérification manuelle
+en navigateur headless.
+
 ---
 
 ## Suites de tests
@@ -758,12 +797,12 @@ reste un chantier progressif, multi-passes, à poursuivre séparément.
 | `tests/test_rapport_import_fec.js` | 21 | Rapport d'import FEC structuré (Phase 2) |
 | `tests/test_comptes_mixtes_multi_exercice.js` | 12 | Comptes mixtes multi-exercices (Phase 3) |
 | `tests/test_fec_worker_parsing.js` | 5 | Parsing FEC déporté (Web Worker, Phase 5) |
-| `tests/test_indexeddb_backup.js` | 9 | Sauvegarde de secours IndexedDB (Phase 5) |
+| `tests/test_indexeddb_backup.js` | 10 | Sauvegarde de secours IndexedDB (Phase 5, `IndexedDbBackupEngine`) |
 | `tests/test_period_data_tresorerie.js` | 19 | Agrégation par période + formatage monétaire (Phase 7) |
 | `tests/test_previsionnel_prorata_temporis.js` | 10 | Amortissement au prorata temporis mensuel (Phase 8) |
 | `tests/test_accessibilite.js` | 12 | Fermeture au clavier + aria-labels (Phase 9) |
 
-Total suite complète (`node tests/run_all.js`) : **639 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **640 tests, 0 échec**.
 
 ---
 

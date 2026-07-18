@@ -35,7 +35,15 @@ fermeture, jamais accessibles depuis l'extérieur) — le même motif que
 `PrevisionnelEngine`/`TnsEngine`/`RemunerationEngine`/`IrppEngine`
 (présents avant ce chantier) étend désormais à `ComptesMixtesEngine`
 (détection/correction des comptes mixtes, cf. `AUDIT_CORRECTIONS.md`
-§11). Convention pour toute extraction future :
+§11) et `IndexedDbBackupEngine` (sauvegarde de secours, cf. §18). Cette
+seconde extraction a révélé un effet de bord attendu : une fonction
+privée (`ouvrir()`) référencée depuis l'intérieur de la fermeture ne
+peut plus être doublée par simple réaffectation d'une propriété
+publique depuis un test externe — preuve que l'encapsulation empêche
+bien un "monkey-patch" accidentel, mais à anticiper en écrivant les
+tests d'un futur module extrait (simuler le comportement externe réel
+plutôt que d'essayer de doubler une fonction interne). Convention pour
+toute extraction future :
 ```js
 const NomDuModule = (function () {
   function fonctionPrivee() { /* jamais exposée */ }
@@ -104,14 +112,16 @@ dossier après rechargement de page ne permet plus de consulter le détail
 d'un compte au grand livre tant que le FEC n'est pas réimporté.
 
 **IndexedDB** : sert de **miroir de secours asynchrone** (Phase 5, cf.
-`AUDIT_CORRECTIONS.md` §13) pour la clé `fec_analyse_v2` (dossiers) — PAS
-la source de vérité principale. `loadStore()`/`saveStore()` restent
-strictement synchrones (34 emplacements du code en dépendent) ;
-`saveStore()` réplique chaque sauvegarde vers IndexedDB
-(`idbBackupPutStore()`) en tâche de fond, y compris quand localStorage
-lui-même échoue par dépassement de quota. Une restauration explicite
-(`restaurerDepuisIndexedDB()`, bouton dans l'écran Confidentialité) reste
-possible si localStorage est vidé/corrompu. `deleteAllIndexedDbData()`
+`AUDIT_CORRECTIONS.md` §13, modularisé en `IndexedDbBackupEngine` en
+Phase 6 §18) pour la clé `fec_analyse_v2` (dossiers) — PAS la source de
+vérité principale. `loadStore()`/`saveStore()` restent strictement
+synchrones (34 emplacements du code en dépendent) ; `saveStore()`
+réplique chaque sauvegarde vers IndexedDB
+(`IndexedDbBackupEngine.put()`) en tâche de fond, y compris quand
+localStorage lui-même échoue par dépassement de quota. Une restauration
+explicite (`IndexedDbBackupEngine.restaurer()`, bouton dans l'écran
+Confidentialité) reste possible si localStorage est vidé/corrompu.
+`deleteAllIndexedDbData()`
 (générique, `indexedDB.databases()`) supprime cette base sans
 modification lors d'une suppression totale des données. Faire
 d'IndexedDB la source de vérité principale (au lieu d'un miroir)
@@ -291,7 +301,7 @@ en Playwright headless, hors de la suite `run_all.js` (pas encore
 industrialisées — resterait à faire si la Phase 7 est reprise plus en
 profondeur).
 
-État actuel : 639 tests, 0 échec (cf. `AUDIT_CORRECTIONS.md` pour le
+État actuel : 640 tests, 0 échec (cf. `AUDIT_CORRECTIONS.md` pour le
 détail par correctif).
 
 ## 8. Trajectoire
@@ -305,13 +315,14 @@ cf. `AUDIT_CORRECTIONS.md` pour le détail complet de chaque correctif.
 
 **Phase 6 (modularisation interne)** est **en cours, progressive** (un
 module à la fois, jamais une réécriture totale) : `ComptesMixtesEngine`
-est le premier module extrait selon la convention décrite en §1. Reste à
-faire, dans le même esprit incrémental, à traiter comme des chantiers
+et `IndexedDbBackupEngine` sont les deux premiers modules extraits selon
+la convention décrite en §1. Reste à faire, dans le même esprit
+incrémental, à traiter comme des chantiers
 distincts ultérieurs :
-- Poursuivre l'extraction module par module (candidats identifiés :
+- Poursuivre l'extraction module par module (candidats restants :
   rapport d'import FEC — entangled avec la construction du Web Worker
-  via `.toString()`, à traiter avec précaution — sauvegarde de secours
-  IndexedDB, utilitaires de formatage/export).
+  via `.toString()`, à traiter avec précaution — utilitaires de
+  formatage/export).
 - **Hors périmètre de cette Phase 6** (décisions déjà arbitrées avec
   l'utilisateur, cf. `AUDIT_CORRECTIONS.md`) : découpage en fichiers
   `.js` réellement séparés — incompatible avec l'usage `file://` sans

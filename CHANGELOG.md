@@ -4,6 +4,22 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 6 (2/N) : modularisation interne — IndexedDbBackupEngine
+
+Deuxième module extrait selon le même motif que `ComptesMixtesEngine` :
+la sauvegarde de secours IndexedDB (Phase 5) est désormais un espace de
+noms `IndexedDbBackupEngine` (`put()`/`get()`/`restaurer()` publics,
+`ouvrir()` privé). Comportement strictement identique avant/après,
+vérifié en navigateur headless avec une vraie base IndexedDB.
+
+Fait notable : l'ancienne technique de test (doubler une fonction
+globale) ne fonctionne plus après extraction — preuve que
+l'encapsulation du module empêche bien un monkey-patch externe
+d'affecter son comportement interne. Le test a été réécrit pour simuler
+un IndexedDB minimal en mémoire et exercer le flux réel de bout en bout.
+
+10 tests (640 au total, tous verts).
+
 ## v6 — Phase 6 (1/N) : modularisation interne — ComptesMixtesEngine
 
 L'application reste un **fichier HTML unique ouvert directement en

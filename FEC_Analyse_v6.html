@@ -2031,15 +2031,16 @@ function pct(v,b){ return b?((v/b)*100).toFixed(1)+' %':'—'; }
 
 // ── STORAGE ──
 /**
- * INDEXEDDB — sauvegarde de secours des dossiers (Phase 5, volet 2 de
- * l'audit demandé : lever une partie du plafond de capacité du
- * localStorage ~5-10 Mo).
+ * IndexedDbBackupEngine — sauvegarde de secours des dossiers (Phase 5,
+ * volet 2 de l'audit demandé : lever une partie du plafond de capacité
+ * du localStorage ~5-10 Mo). Deuxième module extrait selon le motif IIFE
+ * établi en Phase 6 (cf. `ComptesMixtesEngine`, `ARCHITECTURE.md` §1).
  * ─────────────────────────────────────────────────────────────────────────
  * loadStore()/saveStore() restent strictement SYNCHRONES : 34 emplacements
  * du code en dépendent (cf. AUDIT_CORRECTIONS.md §12) et une conversion
- * async/await de tous ces appels serait un chantier de l'ampleur de la
- * Phase 6 (refactorisation), à ne jamais mélanger avec un correctif ciblé
- * (règle impérative n°6 de la demande). localStorage reste donc la source
+ * async/await de tous ces appels serait un chantier bien plus vaste que
+ * la modularisation interne, à ne jamais mélanger avec elle (règle
+ * impérative n°6 de la demande). localStorage reste donc la source
  * de vérité PRINCIPALE, inchangée dans son fonctionnement.
  *
  * IndexedDB (quota généralement bien supérieur, souvent plusieurs
@@ -2047,79 +2048,88 @@ function pct(v,b){ return b?((v/b)*100).toFixed(1)+' %':'—'; }
  * best-effort, à chaque sauvegarde — y compris quand localStorage
  * lui-même échoue par dépassement de quota : les données ne sont alors
  * plus silencieusement perdues, une restauration explicite reste possible
- * (cf. restaurerDepuisIndexedDB(), bouton dans Confidentialité).
+ * (cf. `restaurer()`, bouton dans Confidentialité).
  */
-const IDB_BACKUP_NAME = 'fec_analyse_idb_v1';
-const IDB_BACKUP_STORE = 'dossiers';
-const IDB_BACKUP_KEY = 'store';
-let _idbBackupPromise = null;
-function ouvrirIndexedDBSecours() {
-  if (_idbBackupPromise) return _idbBackupPromise;
-  if (typeof indexedDB === 'undefined') { _idbBackupPromise = Promise.resolve(null); return _idbBackupPromise; }
-  _idbBackupPromise = new Promise((resolve) => {
+const IndexedDbBackupEngine = (function () {
+  const IDB_BACKUP_NAME = 'fec_analyse_idb_v1';
+  const IDB_BACKUP_STORE = 'dossiers';
+  const IDB_BACKUP_KEY = 'store';
+  let _idbBackupPromise = null;
+
+  /** ouvrir() Ouvre (ou réutilise) la connexion IndexedDB — privé, jamais appelé depuis l'extérieur du module. */
+  function ouvrir() {
+    if (_idbBackupPromise) return _idbBackupPromise;
+    if (typeof indexedDB === 'undefined') { _idbBackupPromise = Promise.resolve(null); return _idbBackupPromise; }
+    _idbBackupPromise = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(IDB_BACKUP_NAME, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore(IDB_BACKUP_STORE); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => { console.warn('[FEC Analyse] IndexedDB (sauvegarde de secours) indisponible :', req.error); resolve(null); };
+      } catch (err) {
+        console.warn('[FEC Analyse] IndexedDB (sauvegarde de secours) indisponible :', err);
+        resolve(null);
+      }
+    });
+    return _idbBackupPromise;
+  }
+
+  /** put(data) Miroir asynchrone best-effort de l'ensemble des dossiers vers IndexedDB — n'échoue jamais bruyamment (erreur journalisée seulement, jamais remontée à l'utilisateur). */
+  async function put(data) {
     try {
-      const req = indexedDB.open(IDB_BACKUP_NAME, 1);
-      req.onupgradeneeded = () => { req.result.createObjectStore(IDB_BACKUP_STORE); };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => { console.warn('[FEC Analyse] IndexedDB (sauvegarde de secours) indisponible :', req.error); resolve(null); };
+      const db = await ouvrir();
+      if (!db) return false;
+      return await new Promise((resolve) => {
+        const tx = db.transaction(IDB_BACKUP_STORE, 'readwrite');
+        tx.objectStore(IDB_BACKUP_STORE).put(data, IDB_BACKUP_KEY);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => { console.warn('[FEC Analyse] Échec de la réplication vers la sauvegarde de secours IndexedDB :', tx.error); resolve(false); };
+      });
     } catch (err) {
-      console.warn('[FEC Analyse] IndexedDB (sauvegarde de secours) indisponible :', err);
-      resolve(null);
+      console.warn('[FEC Analyse] Échec de la réplication vers la sauvegarde de secours IndexedDB :', err);
+      return false;
     }
-  });
-  return _idbBackupPromise;
-}
-/** idbBackupPutStore(data) Miroir asynchrone best-effort de l'ensemble des dossiers vers IndexedDB — n'échoue jamais bruyamment (erreur journalisée seulement, jamais remontée à l'utilisateur). */
-async function idbBackupPutStore(data) {
-  try {
-    const db = await ouvrirIndexedDBSecours();
-    if (!db) return false;
-    return await new Promise((resolve) => {
-      const tx = db.transaction(IDB_BACKUP_STORE, 'readwrite');
-      tx.objectStore(IDB_BACKUP_STORE).put(data, IDB_BACKUP_KEY);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => { console.warn('[FEC Analyse] Échec de la réplication vers la sauvegarde de secours IndexedDB :', tx.error); resolve(false); };
-    });
-  } catch (err) {
-    console.warn('[FEC Analyse] Échec de la réplication vers la sauvegarde de secours IndexedDB :', err);
-    return false;
   }
-}
-/** idbBackupGetStore() Lit la sauvegarde de secours IndexedDB (ou null si absente/indisponible). */
-async function idbBackupGetStore() {
-  try {
-    const db = await ouvrirIndexedDBSecours();
-    if (!db) return null;
-    return await new Promise((resolve) => {
-      const tx = db.transaction(IDB_BACKUP_STORE, 'readonly');
-      const req = tx.objectStore(IDB_BACKUP_STORE).get(IDB_BACKUP_KEY);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch (err) {
-    return null;
+
+  /** get() Lit la sauvegarde de secours IndexedDB (ou null si absente/indisponible). */
+  async function get() {
+    try {
+      const db = await ouvrir();
+      if (!db) return null;
+      return await new Promise((resolve) => {
+        const tx = db.transaction(IDB_BACKUP_STORE, 'readonly');
+        const req = tx.objectStore(IDB_BACKUP_STORE).get(IDB_BACKUP_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (err) {
+      return null;
+    }
   }
-}
-/**
- * restaurerDepuisIndexedDB()
- * Action EXPLICITE (jamais automatique) proposée depuis l'écran
- * Confidentialité pour récupérer la dernière sauvegarde de secours
- * IndexedDB — utile si localStorage a été vidé/corrompu, ou si une
- * sauvegarde a échoué par dépassement de quota (cf. saveStore()) tout en
- * ayant été répliquée avec succès vers IndexedDB.
- */
-async function restaurerDepuisIndexedDB() {
-  const data = await idbBackupGetStore();
-  if (!data) { toast('Aucune sauvegarde de secours trouvée dans IndexedDB', true); return; }
-  if (!confirm('Restaurer la dernière sauvegarde de secours ?\nCeci remplacera les dossiers actuellement enregistrés localement.')) return;
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    toast('Sauvegarde de secours restaurée — rechargement…');
-    setTimeout(() => location.reload(), 800);
-  } catch (err) {
-    toast('Échec de la restauration : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
+
+  /**
+   * restaurer()
+   * Action EXPLICITE (jamais automatique) proposée depuis l'écran
+   * Confidentialité pour récupérer la dernière sauvegarde de secours
+   * IndexedDB — utile si localStorage a été vidé/corrompu, ou si une
+   * sauvegarde a échoué par dépassement de quota (cf. saveStore()) tout en
+   * ayant été répliquée avec succès vers IndexedDB.
+   */
+  async function restaurer() {
+    const data = await get();
+    if (!data) { toast('Aucune sauvegarde de secours trouvée dans IndexedDB', true); return; }
+    if (!confirm('Restaurer la dernière sauvegarde de secours ?\nCeci remplacera les dossiers actuellement enregistrés localement.')) return;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      toast('Sauvegarde de secours restaurée — rechargement…');
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      toast('Échec de la restauration : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
+    }
   }
-}
+
+  return { put, get, restaurer };
+})();
 
 /**
  * loadStore()
@@ -2137,7 +2147,7 @@ function loadStore() {
 /**
  * saveStore(data)
  * Persiste tous les dossiers dans localStorage, et réplique en tâche de
- * fond (best-effort, cf. idbBackupPutStore()) vers IndexedDB comme
+ * fond (best-effort, cf. IndexedDbBackupEngine.put()) vers IndexedDB comme
  * sauvegarde de secours. En cas de quota localStorage dépassé
  * (QuotaExceededError), affiche un message actionnable plutôt qu'un
  * simple "stockage insuffisant" — la réplication IndexedDB (quota
@@ -2145,7 +2155,7 @@ function loadStore() {
  * silencieusement les données si elle réussit.
  */
 function saveStore(data) {
-  idbBackupPutStore(data); // miroir asynchrone, ne bloque jamais la sauvegarde principale
+  IndexedDbBackupEngine.put(data); // miroir asynchrone, ne bloque jamais la sauvegarde principale
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
     return true;
@@ -11900,7 +11910,7 @@ function openPrivacyModal() {
     <p style="font-size:12px;color:#6b6960;margin-bottom:18px;">Une sauvegarde de secours de vos dossiers est répliquée en arrière-plan dans IndexedDB (capacité plus grande que le stockage local) — utile si le stockage local est vidé ou corrompu, ou en cas de dépassement de quota lors d'une sauvegarde.</p>
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
       <button onclick="closePrivacyModal()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Fermer</button>
-      <button onclick="restaurerDepuisIndexedDB()" style="padding:8px 18px;border-radius:7px;border:1px solid #185FA5;background:#fff;color:#185FA5;font-size:13px;font-weight:600;cursor:pointer;">Restaurer depuis la sauvegarde de secours</button>
+      <button onclick="IndexedDbBackupEngine.restaurer()" style="padding:8px 18px;border-radius:7px;border:1px solid #185FA5;background:#fff;color:#185FA5;font-size:13px;font-weight:600;cursor:pointer;">Restaurer depuis la sauvegarde de secours</button>
       <button onclick="confirmDeleteAllData()" style="padding:8px 18px;border-radius:7px;border:none;background:#A32D2D;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Supprimer toutes les données</button>
     </div>
   </div>`;
