@@ -4,6 +4,31 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 3 : comptes mixtes non réévalués entre exercices d'un même dossier
+
+Un compte "mixte" (clients/fournisseurs, TVA, comptes courants associés,
+organismes sociaux — dont le classement actif/passif dépend du signe réel
+du solde, cf. `MIXED_ROUTES`) n'était réévalué qu'au moment de son
+**premier** classement. Le mapping étant partagé entre tous les exercices
+d'un dossier, un compte qui change de signe sur un exercice ultérieur
+(ex. un client devenu créditeur) restait affiché du mauvais côté du bilan
+sans aucun signal — limite déjà documentée dans le code
+(`addExerciceToActiveDossier()`).
+
+- Nouvelle fonction `detecterComptesMixtesIncoherents()` : détection en
+  lecture seule (ne modifie jamais le mapping), comparant le classement
+  actuel de chaque compte mixte à ce que donnerait la règle déjà validée
+  avec l'expert-comptable pour l'exercice affiché.
+- Nouveau bandeau sur la page Bilan listant les comptes incohérents, avec
+  réaffectation en un clic — **jamais automatique ni silencieuse** :
+  conformément à la règle de prudence de cet audit, aucune règle
+  comptable incertaine n'est inventée, et aucun classement existant n'est
+  modifié sans un geste explicite de l'utilisateur.
+
+12 nouveaux tests (584 au total, tous verts), vérification manuelle en
+navigateur headless (Playwright) reproduisant le scénario exact (ajout
+d'un 2ᵉ exercice à solde inversé, bandeau affiché, correction en un clic).
+
 ## v6 — Phase 2 : rapport d'import FEC structuré
 
 Jusqu'ici, `parseFECFile()` importait silencieusement ce qu'il parvenait à

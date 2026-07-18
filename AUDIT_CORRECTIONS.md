@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 572 tests automatiques, tous verts.
+**État au moment de la rédaction** : 584 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -395,6 +395,65 @@ correctement détectés, affichés et exportables.
 
 ---
 
+## Phase 3 — Comptes mixtes du mapping comptable
+
+### 11. 🟠 Compte mixte non réévalué entre exercices d'un même dossier — ✅ Corrigé
+
+**Anomalie initiale** (déjà documentée dans un commentaire de
+`addExerciceToActiveDossier()`) : un compte "mixte" (classes 4
+principalement — clients/fournisseurs, TVA, comptes courants associés,
+organismes sociaux… cf. `MIXED_ROUTES`, dont l'affectation actif/passif
+dépend du signe réel du solde et non d'une nature fixe) n'est réévalué
+par `autoAffectOrphans()` qu'au moment de son **premier** classement,
+puisque le mapping (`ACTIVE.mps`) est partagé entre tous les exercices
+d'un même dossier et qu'un compte déjà classé n'est plus considéré comme
+"orphelin". Si son solde change de signe sur un exercice ultérieur (ex.
+un compte client devenu créditeur suite à une avance reçue), il reste
+affiché du mauvais côté du bilan pour ce nouvel exercice, sans qu'aucun
+signal n'alerte l'utilisateur.
+
+**Décision explicite (règle impérative n°8 de la demande)** : cette
+incohérence n'est **jamais** corrigée automatiquement et silencieusement
+— un déplacement invisible pourrait annuler un classement que
+l'utilisateur avait choisi intentionnellement pour une raison précise, ou
+modifier le bilan sans que l'expert-comptable ne le voie. La correction
+reste un geste explicite, déclenché par un clic, après une alerte claire.
+
+**Correction appliquée** :
+- La table `MIXED_ROUTES` (comptes mixtes déjà validée avec
+  l'expert-comptable, cf. AUDIT.md §(o)) est hissée du périmètre local de
+  `autoAffectOrphans()` au niveau module, pour être réutilisable sans
+  duplication.
+- Nouvelle fonction `detecterComptesMixtesIncoherents()` : pour chaque
+  compte mixte déjà classé, compare son emplacement actuel (actif/passif)
+  à celui que donnerait la règle déjà validée (signe du solde) pour
+  l'exercice **actuellement affiché**. Purement en lecture : ne modifie
+  jamais `ACTIVE.mps` (comme `buildBilanTables()`, dont c'est la règle
+  documentée).
+- Nouveau bandeau (`renderComptesMixtesAlerte()`, `#comptes-mixtes-alerte`
+  sur la page Bilan) listant chaque compte incohérent (numéro, libellé,
+  sens actuel, sens attendu) avec un lien "Réaffecter" par compte
+  (`reaffecterCompteMixte()`) et un bouton "Tout réaffecter selon le
+  solde de cet exercice" (`reaffecterTousComptesMixtes()`) — actions
+  explicites, jamais déclenchées automatiquement.
+- Rafraîchi à chaque rendu du Bilan (appelé depuis `buildBilanTables()`),
+  donc à jour après chaque changement d'exercice, import, ou modification
+  du mapping.
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_comptes_mixtes_multi_exercice.js` (12 tests :
+détection d'une incohérence, absence de faux positif quand le classement
+est déjà correct, comptes hors `MIXED_ROUTES` jamais signalés,
+réaffectation d'un seul compte, réaffectation groupée, échappement HTML
+du bandeau, et un scénario bout en bout reproduisant exactement la
+LIMITE CONNUE documentée — ajout d'un 2ᵉ exercice avec un solde inversé,
+détection de l'incohérence, correction explicite) + vérification manuelle
+en navigateur headless (Playwright) : import d'un exercice, ajout d'un
+2ᵉ exercice à solde inversé, bandeau affiché avec le bon compte, clic sur
+"Tout réaffecter" qui corrige et efface le bandeau.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -407,8 +466,9 @@ correctement détectés, affichés et exportables.
 | `tests/test_baremes_non_valides.js` | 24 | Statut des barèmes + caisses TNS incomplètes |
 | `tests/test_agregation_rename.js` | 8 | Renommage "Consolidé" → "Agrégation multi-sociétés" + bannière |
 | `tests/test_rapport_import_fec.js` | 21 | Rapport d'import FEC structuré (Phase 2) |
+| `tests/test_comptes_mixtes_multi_exercice.js` | 12 | Comptes mixtes multi-exercices (Phase 3) |
 
-Total suite complète (`node tests/run_all.js`) : **572 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **584 tests, 0 échec**.
 
 ---
 
@@ -421,12 +481,10 @@ Total suite complète (`node tests/run_all.js`) : **572 tests, 0 échec**.
    ci-dessus).
 3. ~~**Phase 2 — Validation FEC**~~ — ✅ traité : rapport d'import
    structuré ajouté sans modifier le parseur existant (cf. §10 ci-dessus).
-4. **Phase 3 — Comptes mixtes** : le mapping est aujourd'hui partagé entre
-   exercices sans règle de présentation conditionnelle par signe pour les
-   comptes réellement mixtes (TVA, comptes courants...) — limite déjà
-   documentée dans `addExerciceToActiveDossier()` (cf. commentaire
-   existant dans le code). Nécessite un audit de la convention de signe
-   réelle avant toute règle automatique, comme demandé.
+4. ~~**Phase 3 — Comptes mixtes**~~ — ✅ traité : détection de
+   l'incohérence + correction explicite (jamais automatique/silencieuse),
+   sans inventer de nouvelle règle de convention de signe (cf. §11
+   ci-dessus).
 5. **Chart.js local** : dépendance CDN actuelle déjà neutralisée par des
    gardes défensifs (§6 + correctif préexistant) — reste à héberger
    réellement le fichier en local pour un fonctionnement 100% hors ligne
