@@ -6456,6 +6456,74 @@ function anneeResolue(catalogue, anneeDemandee) {
   const inferieures = annees.filter(a => a <= anneeDemandee);
   return inferieures.length ? inferieures[inferieures.length - 1] : annees[0];
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * STATUT DES BARÈMES CRÉÉS PAR DUPLICATION (TNS / Rémunération / IRPP)
+ * ═══════════════════════════════════════════════════════════════════════
+ * Les barèmes 2023-2025 fournis par l'application (PASS_PAR_ANNEE,
+ * TNS_CAISSES_DEFAUT, REGLES_REMUNERATION_2025, REGLES_IR_2025) sont des
+ * valeurs publiées (JO, barèmes officiels), déjà vérifiées — considérées
+ * "validées" implicitement (absence de `_meta`/`__meta` = validé).
+ *
+ * Tout barème créé par l'utilisateur via « Dupliquer vers une nouvelle
+ * année » reçoit des métadonnées `{ statut, creeLe, source, auteur }` —
+ * TOUJOURS statut='draft' à la création, jamais 'validated' par défaut :
+ * une copie de l'année précédente n'est PAS le barème réel de la nouvelle
+ * année tant qu'un professionnel ne l'a pas vérifiée/mise à jour et
+ * validée explicitement (cf. AUDIT_CORRECTIONS.md §"Barèmes non validés").
+ *
+ * Ne fabrique jamais de date ni d'auteur : `creeLe` est un horodatage réel
+ * (Date.now()) ; `auteur` reste vide par défaut — cette application 100%
+ * locale n'a pas de notion d'identité utilisateur/session à ce jour,
+ * inventer un nom serait une donnée fabriquée. Le champ existe pour que
+ * l'utilisateur puisse le renseigner lui-même s'il le souhaite.
+ */
+function creerMetaBareme(source) {
+  return { statut: 'draft', creeLe: new Date().toISOString(), source: source || '', auteur: '' };
+}
+/** baremeEstValide(meta) — true si le barème est validé (ou historique, sans _meta = fourni par l'application). */
+function baremeEstValide(meta) {
+  return !meta || meta.statut === 'validated';
+}
+/**
+ * combinerMetaBareme(metaPropre, metaHeritee)
+ * Combine le statut d'un barème avec surcharge propre (ex. IRPP) et celui
+ * d'un barème dont il hérite une partie de ses paramètres (ex. tranches
+ * empruntées à la Rémunération) : le statut le moins favorable l'emporte
+ * ("draft"/"obsolete" priment sur "validated") — valider l'un des deux
+ * ne doit jamais masquer que l'autre reste non vérifié.
+ */
+function combinerMetaBareme(metaPropre, metaHeritee) {
+  if (metaPropre && metaPropre.statut !== 'validated') return metaPropre;
+  if (metaHeritee && metaHeritee.statut !== 'validated') return metaHeritee;
+  return metaPropre || metaHeritee || null;
+}
+/**
+ * baremeAvertissementHtml(meta, { anneeDemandee, anneeUtilisee })
+ * Bandeau d'avertissement affiché dans les écrans de résultats TNS/
+ * Rémunération/IRPP tant que le barème utilisé n'est pas validé, ou
+ * qu'un repli d'année a eu lieu (aucun barème, même validé, propre à
+ * l'année demandée). Jamais une simple ligne discrète : un professionnel
+ * doit voir immédiatement qu'un résultat repose sur une donnée non
+ * vérifiée avant de s'en servir.
+ */
+function baremeAvertissementHtml(meta, ctx) {
+  ctx = ctx || {};
+  const repliAnnee = ctx.anneeUtilisee !== undefined && ctx.anneeDemandee !== undefined && ctx.anneeUtilisee !== ctx.anneeDemandee;
+  if (baremeEstValide(meta) && !repliAnnee) return '';
+  const parts = [];
+  if (repliAnnee) {
+    parts.push(`Aucun barème pour ${ctx.anneeDemandee} — dernier barème disponible utilisé : ${ctx.anneeUtilisee}.`);
+  }
+  if (!baremeEstValide(meta)) {
+    const label = meta.statut === 'obsolete' ? 'marqué obsolète' : 'non validé (créé par duplication, pas encore vérifié)';
+    parts.push(`Barème ${label}${meta.source ? ' — ' + escHtml(meta.source) : ''}${meta.creeLe ? ' (créé le ' + new Date(meta.creeLe).toLocaleDateString('fr-FR') + ')' : ''}.`);
+  }
+  return `<div style="background:#fff3e0;border:1.5px solid #d4a72c;color:#7a5c00;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;margin-bottom:14px;">⚠ ${parts.join(' ')} Ce résultat est une simulation à valider avant toute utilisation professionnelle.</div>`;
+}
+/** MENTION_SIMULATION_PRO — rappel obligatoire (toujours affiché) sur les résultats TNS/Rémunération/IRPP. */
+const MENTION_SIMULATION_PRO = 'Cette simulation est indicative et doit être validée par un professionnel (expert-comptable, avocat) avant toute décision.';
 /**
  * PASS_PAR_ANNEE — Plafond Annuel de la Sécurité Sociale par année.
  * Valeurs publiées au Journal Officiel (arrêté annuel), stables et
@@ -6559,19 +6627,24 @@ function baremeReelAvecPass(bareme, pass) {
  * existant (aucune duplication de valeur : mêmes objets que
  * TNS_BAREME_REEL_DEFAUT).
  */
+// NOTE — null vs 0 (cf. AUDIT_CORRECTIONS.md §"Caisses TNS incomplètes") :
+// les postes non vérifiés utilisent `null`, JAMAIS 0, pour un montant/taux
+// inconnu. 0 signifierait "vérifié, réellement nul", ce qui serait une
+// donnée fabriquée. validerCompletudeCaisse() bloque tout calcul tant
+// qu'un `null` subsiste sur un paramètre obligatoire.
 function tnsCaisseClassesVide(code, label, categorie) {
-  const posteVide = () => ({ classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: 0 }], classeParDefaut: 'unique' });
+  const posteVide = () => ({ classes: [{ code: 'unique', label: 'Cotisation annuelle', montant: null }], classeParDefaut: 'unique' });
   return {
     code, label, categorie, mode: 'classes', aParametrer: true,
     postesClasses: {
       retraiteBase: posteVide(), retraiteComplementaire: posteVide(),
       invaliditeDeces: posteVide(), formationPro: posteVide(),
     },
-    csgDeductibleTaux: 0, csgNonDeductibleTaux: 0,
+    csgDeductibleTaux: null, csgNonDeductibleTaux: null,
   };
 }
 function tnsCaisseTranchesVide(code, label, categorie) {
-  const posteVide = () => [{ jusquPASS: 1, taux: 0 }, { jusquPASS: null, taux: 0 }];
+  const posteVide = () => [{ jusquPASS: 1, taux: null }, { jusquPASS: null, taux: null }];
   return {
     code, label, categorie, mode: 'tranches', aParametrer: true,
     lignes: {
@@ -6579,8 +6652,39 @@ function tnsCaisseTranchesVide(code, label, categorie) {
       invaliditeDeces: posteVide(), allocationsFamiliales: posteVide(),
       maladie: posteVide(), indemnitesJournalieres: posteVide(),
     },
-    formationProTauxPASS: 0, csgDeductibleTaux: 0, csgNonDeductibleTaux: 0,
+    formationProTauxPASS: null, csgDeductibleTaux: null, csgNonDeductibleTaux: null,
   };
+}
+/**
+ * validerCompletudeCaisse(caisse)
+ * Vérifie qu'aucun paramètre obligatoire d'une caisse n'est resté à
+ * `null` (jamais renseigné) — appelée AVANT tout calcul de cotisations,
+ * cf. AUDIT_CORRECTIONS.md §"Caisses TNS incomplètes". Un taux/montant à
+ * 0 explicitement renseigné (réellement nul) est accepté ; seul `null`
+ * bloque. Retourne la liste précise des paramètres manquants (jamais un
+ * simple booléen) pour que l'utilisateur sache exactement quoi saisir.
+ * @returns {{complete:boolean, manquants:string[]}}
+ */
+function validerCompletudeCaisse(caisse) {
+  const manquants = [];
+  const estManquant = v => v === null || v === undefined;
+  if (caisse.mode === 'classes') {
+    Object.entries(caisse.postesClasses || {}).forEach(([poste, def]) => {
+      (def.classes || []).forEach(c => {
+        if (estManquant(c.montant)) manquants.push(`${TNS_LABELS_POSTES[poste] || poste} — ${c.label || c.code}`);
+      });
+    });
+  } else if (caisse.mode === 'tranches') {
+    Object.entries(caisse.lignes || {}).forEach(([poste, tranches]) => {
+      (tranches || []).forEach((t, i) => {
+        if (estManquant(t.taux)) manquants.push(`${TNS_LABELS_POSTES[poste] || poste} — tranche ${i + 1}`);
+      });
+    });
+    if (estManquant(caisse.formationProTauxPASS)) manquants.push('Taux formation professionnelle');
+  }
+  if (estManquant(caisse.csgDeductibleTaux)) manquants.push('Taux CSG déductible');
+  if (estManquant(caisse.csgNonDeductibleTaux)) manquants.push('Taux CSG non déductible');
+  return { complete: manquants.length === 0, manquants };
 }
 const TNS_CAISSES_DEFAUT = {
   ava_artisan: {
@@ -6679,8 +6783,20 @@ function chargerCaissesEffectives(annee) {
   const anneeUtilisee = anneeResolue(catalogueAnnees, annee);
   const caisses = JSON.parse(JSON.stringify(TNS_CAISSES_DEFAUT));
   const overrides = overridesParAnnee[anneeUtilisee] || {};
-  Object.keys(overrides).forEach(id => { if (caisses[id]) caisses[id] = overrides[id]; });
-  return { caisses, anneeUtilisee };
+  Object.keys(overrides).forEach(id => { if (id !== '__meta' && caisses[id]) caisses[id] = overrides[id]; });
+  // meta = null pour l'année par défaut (TNS_ANNEE_DEFAUT, barèmes fournis
+  // par l'application, déjà vérifiés) ou pour une année dupliquée déjà
+  // validée manuellement — cf. creerMetaBareme()/baremeEstValide().
+  const meta = (overrides.__meta) || null;
+  return { caisses, anneeUtilisee, meta };
+}
+/** tnsValiderAnneeCaisses(annee) — marque le barème des caisses de l'année comme validé (action manuelle explicite uniquement). */
+function tnsValiderAnneeCaisses(annee) {
+  const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
+  if (!overridesParAnnee[annee] || !overridesParAnnee[annee].__meta) { toast('Aucun barème à valider pour cette année', true); return false; }
+  overridesParAnnee[annee].__meta.statut = 'validated';
+  try { localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overridesParAnnee)); toast(`Barème des caisses ${annee} validé`); return true; }
+  catch (e) { toast('Échec de la validation : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
 function sauvegarderCaisseOverride(annee, id, caisse) {
   const overridesParAnnee = migrerOverridesSiAncienFormat(loadTnsCaissesOverridesRaw());
@@ -6701,9 +6817,10 @@ function tnsDupliquerAnneeCaisses(anneeSource, anneeCible) {
   if (overridesParAnnee[anneeCible] && !confirm(`Les caisses de l'année ${anneeCible} existent déjà et seront remplacées par une copie de ${anneeSource}. Continuer ?`)) return false;
   const { caisses } = chargerCaissesEffectives(anneeSource);
   overridesParAnnee[anneeCible] = JSON.parse(JSON.stringify(caisses));
+  overridesParAnnee[anneeCible].__meta = creerMetaBareme(`Copié depuis l'année ${anneeSource} par duplication`);
   try {
     localStorage.setItem(TNS_CAISSES_STORE_KEY, JSON.stringify(overridesParAnnee));
-    toast(`Année ${anneeCible} créée à partir de ${anneeSource}`);
+    toast(`Année ${anneeCible} créée à partir de ${anneeSource} (non validé)`);
     return true;
   } catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
@@ -6868,6 +6985,10 @@ function renderTns() {
   const caissesRes = isCaisse ? chargerCaissesEffectives(t.annee) : null;
   const caisses = isCaisse ? caissesRes.caisses : null;
   const caisse = isCaisse ? (caisses[t.caisseId] || caisses.ava_artisan) : null;
+  // Contrôle de complétude AVANT tout calcul — cf. AUDIT_CORRECTIONS.md
+  // §"Caisses TNS incomplètes" : un paramètre jamais renseigné (null) ne
+  // doit jamais produire silencieusement un résultat basé sur un 0.
+  const caisseCompletude = isCaisse ? validerCompletudeCaisse(caisse) : null;
 
   let resultat, assiette;
   if (isReel) {
@@ -6875,7 +6996,9 @@ function renderTns() {
     resultat = TnsEngine.calculerTNSReel(t.revenu, baremeReelAvecPass(t.baremeReel, t.pass), { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
   } else if (isCaisse) {
     assiette = t.revenu;
-    resultat = TnsEngine.calculerCotisationsCaisse(caisse, t.revenu, t.classesChoisies, t.pass, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE });
+    resultat = caisseCompletude.complete
+      ? TnsEngine.calculerCotisationsCaisse(caisse, t.revenu, t.classesChoisies, t.pass, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE })
+      : null;
   } else {
     assiette = t.ca;
     resultat = TnsEngine.calculerTNSMicro(t.ca, t.baremeMicro, { acre: t.acre, tauxReductionACRE: t.tauxReductionACRE, versementLiberatoire: t.versementLiberatoire });
@@ -6926,11 +7049,18 @@ function renderTns() {
   }
   html += `</div>`;
 
-  if (isCaisse && Number(t.annee || TNS_ANNEE_DEFAUT) !== caissesRes.anneeUtilisee) {
-    html += `<div style="background:#e6f1fb;border:1px solid #185FA5;color:#185FA5;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">ℹ Aucune donnée de caisse spécifique à l'année ${t.annee} — les barèmes ${caissesRes.anneeUtilisee} sont appliqués. Utilisez « Paramétrage des caisses » pour créer l'année ${t.annee} (« Dupliquer vers une nouvelle année »).</div>`;
-  }
-  if (isCaisse && caisse.aParametrer) {
-    html += `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">⚠ La caisse « ${escHtml(caisse.label)} » n'est pas encore paramétrée (montants/taux à 0) — ouvrez « Paramétrage des caisses » pour saisir les valeurs réelles avant d'utiliser ce résultat.</div>`;
+  html += baremeAvertissementHtml(caissesRes && caissesRes.meta, isCaisse ? { anneeDemandee: Number(t.annee || TNS_ANNEE_DEFAUT), anneeUtilisee: caissesRes.anneeUtilisee } : {});
+
+  if (isCaisse && caisseCompletude && !caisseCompletude.complete) {
+    html += `<div class="drill-card" style="padding:20px;margin-bottom:16px;background:#fcebeb;border-color:#f5b8b8;">
+      <h3 style="margin:0 0 10px;font-size:14px;color:#A32D2D;">⛔ Calcul bloqué — paramétrage incomplet</h3>
+      <p style="font-size:13px;color:#7a2020;margin-bottom:10px;">La caisse « ${escHtml(caisse.label)} » a ${caisseCompletude.manquants.length} paramètre${caisseCompletude.manquants.length > 1 ? 's' : ''} jamais renseigné${caisseCompletude.manquants.length > 1 ? 's' : ''} (différent d'un taux vérifié à 0 %). Aucun résultat n'est calculé tant que ces valeurs ne sont pas saisies :</p>
+      <ul style="font-size:12px;color:#7a2020;margin:0 0 14px 18px;">${caisseCompletude.manquants.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>
+      <button class="no-print" onclick="tnsOuvrirParametrageCaisses()" style="border:none;background:#A32D2D;color:#fff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">⚙ Paramétrer cette caisse</button>
+    </div>`;
+    el.innerHTML = html;
+    schedSaveTns();
+    return;
   }
 
   // Choix de classe par poste (caisses à cotisation forfaitaire par classe)
@@ -6993,7 +7123,8 @@ function renderTns() {
       <tr><td style="padding:9px 16px;">Taux global</td><td class="r" style="padding:9px 16px;">${(resultat.tauxGlobal * 100).toFixed(1)} %</td></tr>
       <tr style="font-weight:700;"><td style="padding:9px 16px;">= Revenu net après cotisations</td><td class="r" style="padding:9px 16px;">${fmtV(resultat.revenuNet)}</td></tr>
     </tbody></table>
-  </div>`;
+  </div>
+  <p style="font-size:11px;color:#a09d96;margin-top:10px;">${escHtml(MENTION_SIMULATION_PRO)}</p>`;
 
   el.innerHTML = html;
   schedSaveTns();
@@ -7147,6 +7278,7 @@ function renderTnsCaissesParametrage() {
 
   const anneesConnues = anneesTnsDisponibles();
   const anneeUtilisee = anneeResolue(Object.fromEntries(anneesConnues.map(a => [a, true])), TNS_CAISSE_PARAM_ANNEE);
+  const metaCaisses = chargerCaissesEffectives(TNS_CAISSE_PARAM_ANNEE).meta;
   const header = `
     <div class="drill-card" style="padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b6960;flex:1;min-width:220px;">Régime
@@ -7159,8 +7291,10 @@ function renderTnsCaissesParametrage() {
       </label>
       ${caisse.aParametrer ? `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff8e1;color:#8a6d1a;">À paramétrer</span>` : ''}
       <button onclick="tnsParamDupliquerAnnee()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;color:#1a1916;cursor:pointer;">⎘ Dupliquer vers une nouvelle année</button>
+      ${metaCaisses && metaCaisses.statut === 'draft' ? `<button onclick="tnsValiderAnneeCaisses(${TNS_CAISSE_PARAM_ANNEE});renderTnsCaissesParametrage();" style="border:none;background:#3B6D11;color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✓ Valider le barème ${TNS_CAISSE_PARAM_ANNEE}</button>` : ''}
       <button onclick="tnsParamDefaut()" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;color:#1a1916;cursor:pointer;">↺ Défaut</button>
     </div>
+    ${baremeAvertissementHtml(metaCaisses, { anneeDemandee: anneeUtilisee, anneeUtilisee })}
     ${anneeUtilisee !== TNS_CAISSE_PARAM_ANNEE ? `<div style="background:#e6f1fb;border:1px solid #185FA5;color:#185FA5;border-radius:8px;padding:8px 14px;font-size:12px;margin-bottom:16px;">ℹ Aucune donnée propre à l'année ${TNS_CAISSE_PARAM_ANNEE} — vous éditez actuellement une copie des barèmes ${anneeUtilisee}. Enregistrer créera des données spécifiques à ${TNS_CAISSE_PARAM_ANNEE} pour cette caisse (les autres caisses resteront héritées de ${anneeUtilisee} tant qu'elles n'auront pas été éditées ou dupliquées).</div>` : ''}
     <div style="font-size:11px;color:#a09d96;margin-bottom:16px;">Années disponibles : ${anneesConnues.join(', ')}</div>`;
 
@@ -7300,18 +7434,29 @@ function chargerReglesRemunerationEffectives(annee) {
   const catalogue = {}; anneesRemunerationDisponibles().forEach(a => { catalogue[a] = true; });
   const anneeUtilisee = anneeResolue(catalogue, annee);
   const base = overrides[anneeUtilisee] || REGLES_REMUNERATION_2025;
-  return { regles: JSON.parse(JSON.stringify(base)), anneeUtilisee };
+  // meta = null pour REGLES_REMUNERATION_2025 (barème fourni par
+  // l'application, déjà vérifié) ou pour une année dupliquée déjà validée.
+  return { regles: JSON.parse(JSON.stringify(base)), anneeUtilisee, meta: base._meta || null };
 }
-/** rmDupliquerAnnee(anneeSource, anneeCible) — copie les barèmes effectifs de anneeSource vers anneeCible (nouvelle année indépendante, immédiatement éditable sans repli). */
+/** rmDupliquerAnnee(anneeSource, anneeCible) — copie les barèmes effectifs de anneeSource vers anneeCible (nouvelle année indépendante, immédiatement éditable sans repli). Toujours marqué "draft" (non validé) — cf. creerMetaBareme(). */
 function rmDupliquerAnnee(anneeSource, anneeCible) {
   if (!Number.isInteger(anneeCible) || anneeCible < 2000 || anneeCible > 2100) { toast('Année cible invalide', true); return false; }
   const overrides = loadReglesRemunerationOverrides();
   if (overrides[anneeCible] && !confirm(`Les barèmes de l'année ${anneeCible} existent déjà et seront remplacés par une copie de ${anneeSource}. Continuer ?`)) return false;
   const { regles } = chargerReglesRemunerationEffectives(anneeSource);
   regles.annee = anneeCible;
+  regles._meta = creerMetaBareme(`Copié depuis l'année ${anneeSource} par duplication`);
   overrides[anneeCible] = regles;
-  try { localStorage.setItem(REGLES_REMUNERATION_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource}`); return true; }
+  try { localStorage.setItem(REGLES_REMUNERATION_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource} (non validé)`); return true; }
   catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
+}
+/** rmValiderAnnee(annee) — marque le barème rémunération de l'année comme validé (action manuelle explicite uniquement). */
+function rmValiderAnnee(annee) {
+  const overrides = loadReglesRemunerationOverrides();
+  if (!overrides[annee] || !overrides[annee]._meta) { toast('Aucun barème à valider pour cette année', true); return false; }
+  overrides[annee]._meta.statut = 'validated';
+  try { localStorage.setItem(REGLES_REMUNERATION_STORE_KEY, JSON.stringify(overrides)); toast(`Barème rémunération ${annee} validé`); return true; }
+  catch (e) { toast('Échec de la validation : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -7910,6 +8055,19 @@ function rmDupliquerAnneeCourante() {
   if (!Number.isFinite(cible)) return;
   if (rmDupliquerAnnee(anneeSource, cible)) { REMU_ACTIVE.anneeDemandee = cible; REMU_ACTIVE.reglesSnapshot = chargerReglesRemunerationEffectives(cible).regles; renderRemu(); }
 }
+/**
+ * rmValiderAnneeCourante()
+ * Valide le barème de l'année actuellement affichée puis RECHARGE
+ * REMU_ACTIVE.reglesSnapshot depuis le stockage — rmValiderAnnee() seul
+ * ne suffit pas : reglesSnapshot est une copie en mémoire prise au
+ * moment de l'ouverture/changement d'année, la revalider sans la
+ * recharger laisserait le bandeau "non validé" affiché à tort jusqu'au
+ * prochain changement d'année.
+ */
+function rmValiderAnneeCourante() {
+  const annee = REMU_ACTIVE.reglesSnapshot.annee;
+  if (rmValiderAnnee(annee)) { REMU_ACTIVE.reglesSnapshot = chargerReglesRemunerationEffectives(annee).regles; renderRemu(); }
+}
 
 function renderRemu() {
   if (!REMU_ACTIVE) return;
@@ -7923,7 +8081,8 @@ function renderRemu() {
       <input type="number" step="1" value="${anneeDemandee}" onchange="rmSetAnnee(this.value)" title="Année des barèmes appliqués"
         style="width:70px;padding:3px 6px;border:1px solid rgba(0,0,0,.14);border-radius:20px;font-size:11px;font-weight:700;color:#185FA5;background:#e6f1fb;text-align:center;">
       <button onclick="rmDupliquerAnneeCourante()" title="Dupliquer les barèmes vers une nouvelle année" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:#1a1916;cursor:pointer;">⎘</button>
-      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}`;
+      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}
+      ${REMU_ACTIVE.reglesSnapshot._meta && REMU_ACTIVE.reglesSnapshot._meta.statut === 'draft' ? `<button onclick="rmValiderAnneeCourante()" title="Valider ce barème (créé par duplication, jamais validé)" style="border:none;background:#3B6D11;color:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">✓ Valider</button>` : ''}`;
   }
   updateRemuModeButtons(REMU_ACTIVE.mode || 'simplifie');
 
@@ -7937,10 +8096,14 @@ function renderRemu() {
 
   const warnEl = document.getElementById('remu-warning-banner');
   const alertesUniques = [...new Set([...(compute.instantane.alertes || [])])];
+  const baremeWarn = baremeAvertissementHtml(REMU_ACTIVE.reglesSnapshot._meta, {
+    anneeDemandee: REMU_ACTIVE.anneeDemandee || REGLES_REMUNERATION_ANNEE_DEFAUT,
+    anneeUtilisee: REMU_ACTIVE.reglesSnapshot.annee,
+  });
   if (warnEl) {
-    warnEl.innerHTML = alertesUniques.length
+    warnEl.innerHTML = baremeWarn + (alertesUniques.length
       ? `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin:10px 0;">${alertesUniques.map(a => '⚠ ' + escHtml(a)).join('<br>')}</div>`
-      : '';
+      : '');
   }
 
   renderRmSociete();
@@ -8135,6 +8298,7 @@ function renderRmResultats(compute) {
       <div class="chart-card"><div class="chart-header"><span class="chart-title">Rémunération brute → revenu net final</span></div><div class="canvas-wrap" style="height:220px"><canvas id="rmChartCourbe"></canvas></div></div>
       <div class="chart-card"><div class="chart-header"><span class="chart-title">Répartition du coût total (mix optimisé)</span></div><div class="canvas-wrap" style="height:220px"><canvas id="rmChartRepartition"></canvas></div></div>
     </div>` : ''}
+    <p style="font-size:11px;color:#a09d96;margin-top:10px;">${escHtml(MENTION_SIMULATION_PRO)}</p>
   `;
   if (!compute.isIR) rmRenderCharts(compute);
 }
@@ -8338,7 +8502,7 @@ function chargerReglesIrppEffectives(annee) {
   const anneeUtilisee = anneeResolue(catalogue, annee);
   const base = overrides[anneeUtilisee] || REGLES_IR_2025;
   const regles = JSON.parse(JSON.stringify(base));
-  const { regles: reglesRemuneration } = chargerReglesRemunerationEffectives(anneeUtilisee);
+  const { regles: reglesRemuneration, meta: metaRemuneration } = chargerReglesRemunerationEffectives(anneeUtilisee);
   regles.bareme = reglesRemuneration.ir.bareme;
   regles.decote = reglesRemuneration.ir.decote;
   regles.plafondParDemiPart = reglesRemuneration.ir.plafondParDemiPart;
@@ -8346,7 +8510,12 @@ function chargerReglesIrppEffectives(annee) {
   regles.pfu = reglesRemuneration.pfu;
   regles.abattementDividendes = reglesRemuneration.bareme_dividendes.abattement;
   regles.annee = anneeUtilisee;
-  return { regles, anneeUtilisee };
+  // Le barème IRPP emprunte ses tranches à celui de la Rémunération pour
+  // la même année : s'il est non validé, l'IRPP hérite de cette réserve
+  // même si sa propre surcharge IRPP (base._meta) est validée (le statut
+  // le moins favorable des deux l'emporte, cf. combinerMetaBareme()).
+  regles._meta = combinerMetaBareme(base._meta, metaRemuneration);
+  return { regles, anneeUtilisee, meta: regles._meta };
 }
 /** irDupliquerAnnee(anneeSource, anneeCible) — copie les paramètres IRPP propres (dons/PER/niches/...) de anneeSource vers anneeCible ; le barème/décote reste toujours celui résolu en direct depuis la Rémunération. */
 function irDupliquerAnnee(anneeSource, anneeCible) {
@@ -8355,9 +8524,18 @@ function irDupliquerAnnee(anneeSource, anneeCible) {
   if (overrides[anneeCible] && !confirm(`Les barèmes IRPP de l'année ${anneeCible} existent déjà et seront remplacés par une copie de ${anneeSource}. Continuer ?`)) return false;
   const { regles } = chargerReglesIrppEffectives(anneeSource);
   regles.annee = anneeCible;
+  regles._meta = creerMetaBareme(`Copié depuis l'année ${anneeSource} par duplication`);
   overrides[anneeCible] = regles;
-  try { localStorage.setItem(REGLES_IR_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource}`); return true; }
+  try { localStorage.setItem(REGLES_IR_STORE_KEY, JSON.stringify(overrides)); toast(`Année ${anneeCible} créée à partir de ${anneeSource} (non validé)`); return true; }
   catch (e) { toast('Échec de la duplication : ' + (e && e.message || 'erreur inconnue'), true); return false; }
+}
+/** irValiderAnnee(annee) — marque le barème IRPP de l'année comme validé (action manuelle explicite uniquement). */
+function irValiderAnnee(annee) {
+  const overrides = loadReglesIrppOverrides();
+  if (!overrides[annee] || !overrides[annee]._meta) { toast('Aucun barème à valider pour cette année', true); return false; }
+  overrides[annee]._meta.statut = 'validated';
+  try { localStorage.setItem(REGLES_IR_STORE_KEY, JSON.stringify(overrides)); toast(`Barème IRPP ${annee} validé`); return true; }
+  catch (e) { toast('Échec de la validation : ' + (e && e.message || 'erreur inconnue'), true); return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -8773,6 +8951,11 @@ function irDupliquerAnneeCourante() {
   if (!Number.isFinite(cible)) return;
   if (irDupliquerAnnee(anneeSource, cible)) { IRPP_ACTIVE.anneeDemandee = cible; IRPP_ACTIVE.reglesSnapshot = chargerReglesIrppEffectives(cible).regles; renderIrpp(); }
 }
+/** irValiderAnneeCourante() — valide le barème IRPP de l'année affichée puis recharge IRPP_ACTIVE.reglesSnapshot (cf. rmValiderAnneeCourante()). */
+function irValiderAnneeCourante() {
+  const annee = IRPP_ACTIVE.reglesSnapshot.annee;
+  if (irValiderAnnee(annee)) { IRPP_ACTIVE.reglesSnapshot = chargerReglesIrppEffectives(annee).regles; renderIrpp(); }
+}
 
 function renderIrpp() {
   if (!IRPP_ACTIVE) return;
@@ -8786,7 +8969,8 @@ function renderIrpp() {
       <input type="number" step="1" value="${anneeDemandee}" onchange="irSetAnnee(this.value)" title="Année des barèmes appliqués"
         style="width:70px;padding:3px 6px;border:1px solid rgba(0,0,0,.14);border-radius:20px;font-size:11px;font-weight:700;color:#185FA5;background:#e6f1fb;text-align:center;">
       <button onclick="irDupliquerAnneeCourante()" title="Dupliquer les barèmes vers une nouvelle année" style="border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:#1a1916;cursor:pointer;">⎘</button>
-      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}`;
+      ${anneeUtilisee !== anneeDemandee ? `<span style="font-size:10px;color:#185FA5;" title="Aucun barème propre à ${anneeDemandee} — barèmes ${anneeUtilisee} appliqués">ℹ repli ${anneeUtilisee}</span>` : ''}
+      ${IRPP_ACTIVE.reglesSnapshot._meta && IRPP_ACTIVE.reglesSnapshot._meta.statut === 'draft' ? `<button onclick="irValiderAnneeCourante()" title="Valider ce barème (créé par duplication, jamais validé)" style="border:none;background:#3B6D11;color:#fff;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">✓ Valider</button>` : ''}`;
   }
   updateIrppModeButtons(IRPP_ACTIVE.mode || 'simplifie');
 
@@ -8799,10 +8983,14 @@ function renderIrpp() {
   }
 
   const warnEl = document.getElementById('irpp-warning-banner');
+  const baremeWarnIr = baremeAvertissementHtml(IRPP_ACTIVE.reglesSnapshot._meta, {
+    anneeDemandee: IRPP_ACTIVE.anneeDemandee || IRPP_ANNEE_DEFAUT,
+    anneeUtilisee: IRPP_ACTIVE.reglesSnapshot.annee,
+  });
   if (warnEl) {
-    warnEl.innerHTML = compute.alertes.length
+    warnEl.innerHTML = baremeWarnIr + (compute.alertes.length
       ? `<div style="background:#fff8e1;border:1px solid #d4a72c;color:#8a6d1a;border-radius:8px;padding:8px 14px;font-size:12px;margin:10px 0;">${compute.alertes.map(a => '⚠ ' + escHtml(a)).join('<br>')}</div>`
-      : '';
+      : '');
   }
 
   renderIrRecherche();
@@ -8992,7 +9180,8 @@ function renderIrResultats(compute) {
         <div style="font-size:22px;font-weight:700;color:#1a1916;">${fmtV(compute.irNetFinal / 12)}</div>
       </div>
     </div>
-    ${pvExportBtn('exportIrppResultatsToCSV', 'résultats de la déclaration')}`;
+    ${pvExportBtn('exportIrppResultatsToCSV', 'résultats de la déclaration')}
+    <p style="font-size:11px;color:#a09d96;margin-top:10px;">${escHtml(MENTION_SIMULATION_PRO)}</p>`;
 }
 
 function exportIrppResultatsToCSV() {

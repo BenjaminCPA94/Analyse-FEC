@@ -139,6 +139,9 @@ async function main() {
   section('26. Fonctions JavaScript dupliquées (audit — correctif critique)');
   await reportResults('Fonctions dupliquées', await require('./test_duplicate_functions.js').run(htmlPath));
 
+  section('27. Barèmes non validés + caisses TNS incomplètes (audit — correctif critique)');
+  await reportResults('Barèmes non validés', require('./test_baremes_non_valides.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

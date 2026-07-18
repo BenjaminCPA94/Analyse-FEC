@@ -39,17 +39,33 @@ Trouvaille annexe corrigée au passage : 3 graphiques du module Trésorerie
 plantaient silencieusement hors ligne (même garde Chart.js indisponible
 que le reste de l'application, jusqu'ici oublié à ces 3 endroits).
 
-**Restent confirmés mais non corrigés dans cette passe** (dimensionnés
-dans `AUDIT_CORRECTIONS.md`) : gestion des barèmes fiscaux/sociaux non
-validés par année (repli silencieux actuel vers l'année disponible la
-plus proche, sans statut ni avertissement) et blocage des caisses TNS
-incomplètes (un paramètre non renseigné se comporte aujourd'hui comme un
-taux à 0 %, sans distinction). Les phases 2 à 9 de la demande (validation
-FEC structurée, comptes mixtes par signe, renommage du module Consolidé,
-IndexedDB, Web Worker, refactorisation modulaire, tests étendus,
-améliorations de modules, accessibilité) n'ont pas été commencées.
+6. **Barèmes fiscaux/sociaux non validés par année** : `anneeResolue()`
+   basculait silencieusement vers l'année disponible la plus proche, sans
+   aucune distinction entre une correspondance exacte et un repli, ni
+   statut de validation. Un barème créé par duplication (TNS caisses,
+   Rémunération dirigeant, IRPP) est maintenant marqué `draft` dès sa
+   création (`creerMetaBareme()`), affiche un bandeau d'avertissement non
+   ignorable (`baremeAvertissementHtml()`, précisant l'année demandée,
+   l'année réellement utilisée, la source et la date) tant qu'il n'a pas
+   été explicitement validé (bouton « ✓ Valider »), et l'IRPP hérite du
+   statut non validé de la Rémunération sous-jacente dont il emprunte les
+   tranches (`combinerMetaBareme()`). Tous les résultats TNS, Rémunération
+   et IRPP portent désormais la mention obligatoire de simulation à
+   valider par un professionnel.
+7. **Caisses TNS incomplètes** : un paramètre non renseigné (`0` implicite)
+   se comportait comme un taux réellement nul, produisant un résultat
+   chiffré plausible mais faux. Les 11 caisses non vérifiées utilisent
+   maintenant `null` pour tout champ non renseigné ; `renderTns()`
+   détecte l'incomplétude via `validerCompletudeCaisse()` et bloque
+   totalement l'affichage d'un résultat chiffré (aucune approximation)
+   tant que la caisse n'est pas entièrement paramétrée.
 
-47 nouveaux tests (519 au total, tous verts), vérifications manuelles en
+Les phases 2 à 9 de la demande (validation FEC structurée, comptes mixtes
+par signe, renommage du module Consolidé, IndexedDB, Web Worker,
+refactorisation modulaire, tests étendus, améliorations de modules,
+accessibilité) n'ont pas été commencées.
+
+71 nouveaux tests (543 au total, tous verts), vérifications manuelles en
 navigateur headless (Playwright) pour chaque correctif à surface UI.
 
 ## v6 — Consolidé : vue « Contributif en colonnes » (détail par société) sur Bilan/CR/SIG

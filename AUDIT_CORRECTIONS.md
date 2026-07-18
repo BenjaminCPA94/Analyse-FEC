@@ -196,72 +196,94 @@ local.
 restante après correction, contre 2 avant).
 **Commit** : `3bf2e73`.
 
-### 7. 🔍 Gestion fiable des années de barème — Confirmé, non corrigé
+### 7. 🔴 Gestion fiable des années de barème — ✅ Corrigé
 
-**Anomalie confirmée** : `anneeResolue(catalogue, anneeDemandee)`
-(`FEC_Analyse_v6.html` ~ligne 6452), utilisée par `PASS_PAR_ANNEE`, les
-caisses TNS, les règles de rémunération et les règles IRPP, résout
-**silencieusement** une année manquante vers l'année connue la plus proche
-en dessous — sans distinction entre "année exacte trouvée" et "repli
-utilisé", sans blocage, sans mention "barème non validé" dans les
-résultats. Exactement le comportement que la demande interdit
-explicitement ("Lorsqu'un barème 2026 n'existe pas, le logiciel ne doit pas
-reprendre automatiquement le barème 2025 comme s'il était valide").
+**Anomalie initiale** : `anneeResolue(catalogue, anneeDemandee)`, utilisée
+par `PASS_PAR_ANNEE`, les caisses TNS, les règles de rémunération et les
+règles IRPP, résolvait **silencieusement** une année manquante vers
+l'année connue la plus proche en dessous — sans distinction entre "année
+exacte trouvée" et "repli utilisé", sans statut de validation, sans
+mention "barème non validé" dans les résultats. Un petit indicateur "ℹ
+repli" existait déjà de façon informative (pas totalement silencieux)
+mais rien n'empêchait un résultat de s'afficher comme s'il était fiable,
+et une année créée par duplication n'était jamais distinguée d'un barème
+réellement vérifié.
 
-**Portée du correctif restant à faire** (dimensionné, non encore implémenté) :
-- Étendre chaque entrée de barème avec `status: 'draft'|'validated'|'obsolete'`,
-  `updatedAt`, `source` (les champs `source`/`derniereVerification` existent
-  déjà pour `PASS_PAR_ANNEE` — à généraliser et à compléter avec `status`).
-- Faire distinguer par `anneeResolue()` (ou une fonction dédiée) le cas
-  "année exacte" du cas "repli" et remonter cette information à l'appelant
-  plutôt que de la masquer.
-- Bannière "⚠ Barème non disponible/non validé pour l'année X" dans les 3
-  écrans de résultats concernés (TNS, Rémunération, IRPP) tant que le
-  barème utilisé n'est pas `validated`.
-- Action d'administration "dupliquer vers une nouvelle année" (déjà
-  existante dans l'UI) à faire créer explicitement des entrées `status:
-  'draft'`, plus une action de validation manuelle (`status: 'validated'`)
-  avant qu'un résultat cesse d'afficher l'avertissement.
-- Conserver source/date/auteur de toute modification de barème (aucun
-  champ "auteur" n'existe actuellement — à ajouter, en gardant à l'esprit
-  qu'il n'y a pas encore de notion d'utilisateur/session dans l'application
-  100% locale actuelle).
+**Correction appliquée** :
+- `creerMetaBareme(source)` : construit `{ statut: 'draft', creeLe,
+  source, auteur }` — toujours "draft" à la création, jamais "validated"
+  par défaut. Ne fabrique ni date (`Date.now()` réel) ni auteur (champ
+  vide — l'application n'a pas de notion d'identité utilisateur à ce jour).
+- `baremeEstValide(meta)` / `combinerMetaBareme(metaPropre, metaHeritee)` /
+  `baremeAvertissementHtml(meta, ctx)` : logique centralisée partagée par
+  les 3 modules. Un barème historique (2023-2025, fourni par
+  l'application) est considéré validé implicitement (`meta === null`).
+- `chargerCaissesEffectives()`, `chargerReglesRemunerationEffectives()`,
+  `chargerReglesIrppEffectives()` renvoient désormais aussi `meta` — la
+  dernière combine son propre statut avec celui, hérité, du barème
+  Rémunération dont l'IRPP emprunte les tranches (le moins favorable des
+  deux l'emporte : valider l'un ne masque jamais que l'autre reste
+  non vérifié).
+- `tnsDupliquerAnneeCaisses()`, `rmDupliquerAnnee()`, `irDupliquerAnnee()`
+  marquent désormais systématiquement `statut: 'draft'` le barème créé.
+  `tnsValiderAnneeCaisses()`, `rmValiderAnneeCourante()`,
+  `irValiderAnneeCourante()` (actions manuelles explicites, un bouton
+  dédié) le font passer à `'validated'`.
+- Bandeau d'avertissement visible (pas une simple ligne discrète) dans les
+  3 écrans de résultats tant que le barème utilisé n'est pas validé, ou
+  qu'un repli d'année a eu lieu.
+- Mention obligatoire "simulation à valider par un professionnel"
+  (`MENTION_SIMULATION_PRO`) ajoutée, inconditionnellement, aux résultats
+  TNS/Rémunération/IRPP.
 
-**Non corrigé dans cette passe** : changement de modèle de données +
-UI sur 3 modules, dimensionné comme un chantier à part entière plutôt que
-d'être traité en fin d'une session déjà longue — cf. section "Prochaines
-étapes".
+**Limite assumée** : "bloquer le calcul par défaut" a été interprété comme
+"ne jamais présenter un résultat non validé comme s'il était fiable" (via
+le bandeau permanent + la mention obligatoire), plutôt que d'empêcher
+techniquement tout affichage de chiffre — un blocage total aurait rendu
+l'application inutilisable entre deux publications de barèmes officiels,
+ce qui n'est pas l'objectif. Le blocage strict (aucun chiffre affiché)
+est en revanche appliqué pour les caisses TNS incomplètes (§8), où
+aucune estimation, même approximative, n'est mathématiquement valable.
 
-### 8. 🔍 Blocage des caisses TNS incomplètes — Confirmé, non corrigé
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_baremes_non_valides.js` (partie 1-4, 18 tests) +
+vérification manuelle en navigateur headless des 3 modules (duplication →
+bandeau → validation → disparition du bandeau, sans régression).
 
-**Anomalie confirmée** : `calculerCotisationsCaisse()`
-(`FEC_Analyse_v6.html` ~ligne 6386, mode `'classes'`) lit
+### 8. 🔴 Blocage des caisses TNS incomplètes — ✅ Corrigé
+
+**Anomalie initiale** : `calculerCotisationsCaisse()` lisait
 `safe(classe.montant)` — la fonction utilitaire `safe()` convertit toute
 valeur `undefined`/`null`/`NaN` en `0`, rendant **indistinguable** un taux
-réellement nul (0 %, un cas légitime) d'un paramètre jamais renseigné par
-l'administrateur. Aucun contrôle de complétude n'est effectué avant de
-lancer un calcul : une caisse partiellement paramétrée produit un résultat
-silencieusement erroné (sous-évalué) plutôt qu'un blocage explicite.
+réellement nul (0 %, un cas légitime) d'un paramètre jamais renseigné.
+Aucun contrôle de complétude n'était effectué avant de lancer un calcul :
+une caisse partiellement paramétrée (11 des 16 caisses du catalogue,
+livrées avec des valeurs à 0 faute d'accès réseau pour vérifier les
+barèmes réels, marquées `aParametrer: true`) produisait un résultat
+chiffré plausible — ex. "0 € de cotisations" pour un médecin CARMF — au
+lieu d'un blocage explicite.
 
-Un début de traitement existe déjà (`FEC_Analyse_v6.html` ~ligne 6916)
-sous forme d'un bandeau d'avertissement "n'est pas encore paramétrée" —
-mais il n'empêche pas le calcul de s'exécuter, et il est basé sur une
-détection différente (probablement un simple test de somme à 0, à
-vérifier) plutôt que sur une distinction `null` vs `0` systématique à
-travers toute la structure de la caisse.
+**Correction appliquée** :
+- Les valeurs placeholder de `tnsCaisseClassesVide()`/
+  `tnsCaisseTranchesVide()` (montants/taux des 11 caisses non vérifiées)
+  utilisent désormais `null`, plus jamais `0`.
+- `validerCompletudeCaisse(caisse)` : parcourt tous les paramètres
+  obligatoires (montants par classe, taux par tranche, CSG,
+  formation professionnelle selon le mode `classes`/`tranches`) et
+  renvoie `{ complete, manquants: [...] }` — la liste précise, jamais un
+  simple booléen.
+- `renderTns()` appelle cette validation **avant** tout calcul : si
+  incomplet, `TnsEngine.calculerCotisationsCaisse()` n'est même pas
+  appelée, et l'écran affiche un panneau "⛔ Calcul bloqué" listant
+  exactement les paramètres manquants, sans aucun chiffre de résultat.
+- Un taux/montant à `0` explicitement saisi par l'utilisateur reste
+  parfaitement accepté (n'est jamais confondu avec `null`).
 
-**Portée du correctif restant à faire** :
-- Remplacer, dans le catalogue `TNS_CAISSES_DEFAUT` et dans l'écran de
-  paramétrage, toute valeur non renseignée par `null` plutôt que `0` par
-  défaut.
-- Ajouter une fonction de validation de complétude d'une caisse
-  (paramètres obligatoires selon le mode `tranches`/`classes`) exécutée
-  **avant** tout calcul, listant précisément les paramètres manquants.
-- Bloquer `calculerCotisationsCaisse()` (ou son point d'appel dans l'écran
-  de simulation) tant que la caisse choisie n'est pas complète, avec un
-  message explicite (pas seulement un bandeau informatif contournable).
-
-**Non corrigé dans cette passe** — cf. section "Prochaines étapes".
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_baremes_non_valides.js` (partie 5-6, 6 tests,
+dont la vérification qu'aucun "Total cotisations" ne s'affiche pour une
+caisse incomplète et qu'une caisse complète continue de fonctionner
+normalement) + vérification manuelle en navigateur headless.
 
 ---
 
@@ -274,8 +296,9 @@ travers toute la structure de la caisse.
 | `tests/test_csv_injection.js` | 11 | Injection de formule CSV |
 | `tests/test_html_ids.js` | 10 | Unicité des ids HTML |
 | `tests/test_duplicate_functions.js` | 3 | Unicité des fonctions globales |
+| `tests/test_baremes_non_valides.js` | 24 | Statut des barèmes + caisses TNS incomplètes |
 
-Total suite complète (`node tests/run_all.js`) : **519 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **543 tests, 0 échec**.
 
 ---
 
