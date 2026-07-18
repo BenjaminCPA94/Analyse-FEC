@@ -4,6 +4,54 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Chantier de fiabilisation et sécurisation : Phase 1 (correctifs critiques)
+
+Audit complet demandé (sécurité, fiabilité, maintenabilité) mené en 9
+phases. Détail exhaustif dans `AUDIT_CORRECTIONS.md` (anomalie, criticité,
+correction, tests pour chaque point) et vue d'ensemble de l'architecture
+actuelle dans `ARCHITECTURE.md`. Sauvegarde intégrale du fichier avant
+intervention conservée dans `backups/` et dans l'historique git.
+
+5 correctifs critiques appliqués et testés dans cette première passe :
+
+1. **Suppression complète des données** : `deleteAllLocalData()` n'effaçait
+   que les dossiers, laissant intacts prévisionnels/TNS/rémunération/IRPP
+   malgré un message annonçant une suppression totale. Centralise les 8
+   clés de stockage dans `ALL_STORAGE_KEYS`, vérifie après coup qu'il ne
+   reste rien, prépare le nettoyage IndexedDB pour la future migration.
+2. **XSS stockée** via renommage d'un poste de mapping (12 points
+   d'injection non échappés dans le Compte de résultat, la SIG, le Bilan
+   et l'écran de Mapping) et via le menu déroulant de sélection de
+   dossier — tous corrigés avec `escHtml()`.
+3. **Injection de formule CSV** : `csvSafeValue()` neutralise toute
+   cellule commençant par `=`, `+`, `-`, `@` avant les 11 exports CSV de
+   l'application.
+4. **7 identifiants HTML dupliqués**, dont la conséquence concrète (pas
+   seulement une question de validité HTML) était que le changement
+   d'onglet Mapping/Paramètres et les boutons Enregistrer/Dupliquer/
+   Supprimer ne fonctionnaient plus du tout depuis l'onglet Paramètres
+   d'un dossier ouvert. Chaque écran a maintenant son propre jeu d'ids.
+5. **Fonction dupliquée** `showAffecPanel()` : la redéclaration incomplète
+   empêchait le rafraîchissement du panneau "Comptes non affectés" au
+   changement d'onglet — supprimée, la version complète est conservée.
+
+Trouvaille annexe corrigée au passage : 3 graphiques du module Trésorerie
+plantaient silencieusement hors ligne (même garde Chart.js indisponible
+que le reste de l'application, jusqu'ici oublié à ces 3 endroits).
+
+**Restent confirmés mais non corrigés dans cette passe** (dimensionnés
+dans `AUDIT_CORRECTIONS.md`) : gestion des barèmes fiscaux/sociaux non
+validés par année (repli silencieux actuel vers l'année disponible la
+plus proche, sans statut ni avertissement) et blocage des caisses TNS
+incomplètes (un paramètre non renseigné se comporte aujourd'hui comme un
+taux à 0 %, sans distinction). Les phases 2 à 9 de la demande (validation
+FEC structurée, comptes mixtes par signe, renommage du module Consolidé,
+IndexedDB, Web Worker, refactorisation modulaire, tests étendus,
+améliorations de modules, accessibilité) n'ont pas été commencées.
+
+47 nouveaux tests (519 au total, tous verts), vérifications manuelles en
+navigateur headless (Playwright) pour chaque correctif à surface UI.
+
 ## v6 — Consolidé : vue « Contributif en colonnes » (détail par société) sur Bilan/CR/SIG
 
 Sur un dossier Consolidé, le Compte de résultat (présentation légale), la
