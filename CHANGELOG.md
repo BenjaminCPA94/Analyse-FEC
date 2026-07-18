@@ -4,6 +4,34 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Phase 5 (1/2) : parsing FEC déporté dans un Web Worker
+
+Le parsing d'un FEC volumineux (~2 s de traitement synchrone pour
+500 000 lignes, cf. AUDIT.md §(k)) gelait entièrement l'interface pendant
+ce temps.
+
+- `getFecParserWorker()` construit à la volée un Web Worker dont le code
+  est le `.toString()` de `parseFECFile()`/`analyserQualiteImportFEC()` —
+  aucune duplication de code, le Worker exécute exactement le même corps
+  de fonction que le thread principal.
+- `parseFECEnArrierePlan()` : point d'entrée unique utilisé par
+  `npConfirm()`, avec repli automatique et transparent sur le parsing
+  synchrone historique si `Worker`/`Blob` sont indisponibles.
+- Toujours un fichier HTML unique : le Worker est construit via
+  `Blob`/`URL.createObjectURL`, aucun fichier `.js` externe.
+
+5 nouveaux tests (589 au total, tous verts), vérification manuelle en
+navigateur headless avec un FEC de 120 000 lignes : import réussi, thread
+principal resté réactif pendant tout le parsing (mesuré via un compteur
+`setInterval` qui continue de progresser).
+
+**Reste à traiter pour clore la Phase 5** : migration du stockage vers
+IndexedDB (lever le plafond localStorage ~5-10 Mo, permettre à terme la
+persistance du Grand Livre détaillé) — chantier distinct, `loadStore()`/
+`saveStore()` étant utilisées de façon synchrone dans 34 emplacements du
+code ; à traiter prudemment, pas en une seule réécriture (cf.
+AUDIT_CORRECTIONS.md §12).
+
 ## v6 — Phase 3 : comptes mixtes non réévalués entre exercices d'un même dossier
 
 Un compte "mixte" (clients/fournisseurs, TVA, comptes courants associés,

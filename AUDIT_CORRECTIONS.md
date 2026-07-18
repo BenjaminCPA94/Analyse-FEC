@@ -10,7 +10,7 @@ bac à sable Node avant correction, vérification en navigateur headless
 (Playwright) pour les correctifs à surface UI, exécution de la suite de
 tests complète (`node tests/run_all.js`) après chaque correctif.
 
-**État au moment de la rédaction** : 584 tests automatiques, tous verts.
+**État au moment de la rédaction** : 589 tests automatiques, tous verts.
 Sauvegarde intégrale du fichier avant toute intervention conservée dans
 `backups/FEC_Analyse_v6.backup-20260718-185631-before-audit.html` (et dans
 l'historique git, commit `9ab943e`).
@@ -454,6 +454,68 @@ en navigateur headless (Playwright) : import d'un exercice, ajout d'un
 
 ---
 
+## Phase 5 — Stockage et performance sur FEC volumineux
+
+### 12. 🟠 Parsing FEC bloquant le thread principal — ✅ Corrigé (Web Worker)
+
+**Anomalie initiale** (déjà quantifiée dans AUDIT.md §(k)) : le parsing
+d'un FEC volumineux (~2 s de traitement synchrone pour 500 000 lignes)
+gelait entièrement l'interface pendant ce temps — seul un délai de 30 ms
+avant de lancer le parsing garantissait l'affichage du message "Analyse
+en cours…", mais le parsing lui-même restait bloquant.
+
+**Correction appliquée** :
+- `getFecParserWorker()` construit à la volée un Web Worker dont le code
+  source est le `.toString()` de `parseFECFile()` et
+  `analyserQualiteImportFEC()` — ces deux fonctions sont pures (aucun
+  accès au DOM ni à `ACTIVE`/`localStorage`), donc le Worker exécute
+  **exactement** le même corps de fonction que le thread principal :
+  aucune duplication de code, donc aucun risque de divergence entre les
+  deux implémentations dans le temps.
+- `parseFECEnArrierePlan(text)` : point d'entrée unique utilisé par
+  `npConfirm()`, qui déporte le parsing dans ce Worker et repose sur une
+  `Promise`. Repli automatique et transparent sur le parsing synchrone
+  historique si `Worker`/`Blob` sont indisponibles (ancien navigateur,
+  contexte restreint, bac à sable de test) — même résultat dans les deux
+  cas, vérifié par test.
+- Le fichier reste un **fichier HTML unique** (aucun fichier `.js` externe
+  requis pour le Worker, construit via `Blob`/`URL.createObjectURL` à
+  partir du code déjà présent dans le script principal) — n'entre pas en
+  conflit avec la contrainte du harnais de tests (`tests/harness.js`, qui
+  exige exactement 1 `<script>` inline).
+
+**Fichiers modifiés** : `FEC_Analyse_v6.html`.
+**Tests** : `tests/test_fec_worker_parsing.js` (5 tests : repli propre
+quand `Worker` est indisponible, résultat identique au parsing direct,
+attachement du rapport d'import, FEC invalide résolu à `null` sans rejet,
+sérialisabilité des fonctions) + vérification manuelle en navigateur
+headless (Playwright) : import réel d'un FEC de 50 000 puis 120 000
+lignes via un `Worker` réellement instancié dans Chromium (confirmé,
+`typeof w.postMessage === 'function'`), import réussi (soldes exacts),
+et un compteur `setInterval` sur le thread principal démontrant que
+celui-ci **reste réactif pendant tout le parsing** (progression continue
+du compteur, alors qu'un test identique avant ce correctif l'aurait
+montré figé pendant la durée du parsing).
+
+**Limite assumée de cette passe** : le second volet de la Phase 5
+(migration du stockage vers IndexedDB, pour lever le plafond
+localStorage ~5-10 Mo et permettre à terme la persistance du Grand Livre
+détaillé, aujourd'hui explicitement jamais persisté) n'a **pas** été
+traité dans cette passe. `loadStore()`/`saveStore()` sont utilisées de
+façon strictement **synchrone** dans 34 emplacements du code (ouverture,
+sauvegarde, changement, suppression, duplication de dossier, écrans
+Paramètres…) ; IndexedDB est par nature asynchrone. Migrer sans casser
+ces 34 usages nécessite soit de les convertir un par un en async/await
+(chantier de l'ampleur de la Phase 6, à ne pas mélanger avec elle), soit
+un adaptateur mémoire-cache plus prudent — dans les deux cas, un chantier
+dédié distinct, conformément à la règle impérative n°6 de la demande
+("pas de réécriture totale immédiate"). Non traité pour l'instant :
+capacité actuelle du localStorage inchangée, comportement de blocage de
+sauvegarde déjà existant (message actionnable en cas de quota dépassé,
+cf. `saveStore()`) inchangé lui aussi.
+
+---
+
 ## Suites de tests
 
 | Fichier | Tests | Sujet |
@@ -467,8 +529,9 @@ en navigateur headless (Playwright) : import d'un exercice, ajout d'un
 | `tests/test_agregation_rename.js` | 8 | Renommage "Consolidé" → "Agrégation multi-sociétés" + bannière |
 | `tests/test_rapport_import_fec.js` | 21 | Rapport d'import FEC structuré (Phase 2) |
 | `tests/test_comptes_mixtes_multi_exercice.js` | 12 | Comptes mixtes multi-exercices (Phase 3) |
+| `tests/test_fec_worker_parsing.js` | 5 | Parsing FEC déporté (Web Worker, Phase 5) |
 
-Total suite complète (`node tests/run_all.js`) : **584 tests, 0 échec**.
+Total suite complète (`node tests/run_all.js`) : **589 tests, 0 échec**.
 
 ---
 
@@ -485,15 +548,20 @@ Total suite complète (`node tests/run_all.js`) : **584 tests, 0 échec**.
    l'incohérence + correction explicite (jamais automatique/silencieuse),
    sans inventer de nouvelle règle de convention de signe (cf. §11
    ci-dessus).
-5. **Chart.js local** : dépendance CDN actuelle déjà neutralisée par des
+5. ~~**Phase 5 — Web Worker de parsing**~~ — ✅ traité (cf. §12
+   ci-dessus). **Reste à traiter** : migration du stockage vers
+   IndexedDB (34 usages synchrones de `loadStore()`/`saveStore()` à
+   convertir prudemment, chantier distinct — cf. limite assumée en §12).
+6. **Chart.js local** : dépendance CDN actuelle déjà neutralisée par des
    gardes défensifs (§6 + correctif préexistant) — reste à héberger
    réellement le fichier en local pour un fonctionnement 100% hors ligne
    garanti (actuellement : dégradation gracieuse, pas d'hébergement local).
-6. **Phases 5-9** (IndexedDB, Web Worker, refactorisation modulaire,
-   TypeScript, améliorations de modules, accessibilité) : chantiers
-   d'ampleur, chacun comparable ou supérieur en taille à l'ensemble de la
-   Phase 1 — à traiter comme des chantiers dédiés séparés, jamais en une
-   seule réécriture totale (cf. règle impérative n°6 de la demande).
+7. **Phase 6, IndexedDB, Phases 7-9** (refactorisation modulaire,
+   TypeScript, tests étendus, améliorations de modules, accessibilité) :
+   chantiers d'ampleur, chacun comparable ou supérieur en taille à
+   l'ensemble de la Phase 1 — à traiter comme des chantiers dédiés
+   séparés, jamais en une seule réécriture totale (cf. règle impérative
+   n°6 de la demande).
 
 ## Limites de cette passe
 

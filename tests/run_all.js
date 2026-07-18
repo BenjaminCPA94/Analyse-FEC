@@ -151,6 +151,9 @@ async function main() {
   section('30. Comptes mixtes multi-exercices (Phase 3 de l\'audit)');
   await reportResults('Comptes mixtes multi-exercices', require('./test_comptes_mixtes_multi_exercice.js').run(htmlPath));
 
+  section('31. Parsing FEC déporté (Web Worker) — Phase 5 de l\'audit');
+  await reportResults('Parsing FEC déporté', require('./test_fec_worker_parsing.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);

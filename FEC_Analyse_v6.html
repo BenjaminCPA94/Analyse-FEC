@@ -9662,13 +9662,104 @@ function decodeFecBuffer(buffer) {
   }
 }
 /**
- * Délai (ms) avant de lancer le parsing lourd d'un FEC, après affichage
- * du message "Analyse en cours…". Sans ce délai, le navigateur peut
- * geler avant même d'avoir peint le retour visuel, donnant l'impression
- * que l'application ne répond plus (cf. AUDIT.md §(k) — un FEC de
- * 500 000 lignes prend ~2 s de traitement synchrone).
+ * Délai (ms) avant de lancer l'analyse d'un FEC, après affichage du
+ * message "Analyse en cours…". Sans ce délai, le navigateur peut geler
+ * avant même d'avoir peint le retour visuel, donnant l'impression que
+ * l'application ne répond plus (cf. AUDIT.md §(k)). Conservé même
+ * maintenant que le parsing tourne dans un Web Worker (cf.
+ * parseFECEnArrierePlan()) : filet de sécurité pour le repli synchrone
+ * (navigateur/contexte sans Worker disponible).
  */
 const PARSE_UI_YIELD_MS = 30;
+
+/**
+ * getFecParserWorker()
+ * ─────────────────────────────────────────────────────────────────────────
+ * Phase 5 de l'audit demandé ("performante sur FEC volumineux") : le
+ * parsing d'un FEC de plusieurs centaines de milliers de lignes est
+ * coûteux (~2 s de traitement synchrone d'après AUDIT.md §(k)) — sur le
+ * thread principal, cela gèle entièrement l'interface pendant ce temps.
+ * Cette fonction construit à la volée un Web Worker dont le code source
+ * est le `.toString()` de parseFECFile()/analyserQualiteImportFEC() —
+ * ces deux fonctions sont pures (aucun accès au DOM ni à l'état global
+ * ACTIVE/localStorage), donc trivialement exécutables hors du thread
+ * principal SANS DUPLIQUER LEUR CODE : le Worker exécute très exactement
+ * le même corps de fonction que le thread principal, aucun risque de
+ * divergence entre les deux implémentations.
+ * @returns {Worker|null} le Worker (mis en cache), ou null si Worker/Blob
+ *   indisponibles dans l'environnement (repli synchrone transparent, cf.
+ *   parseFECEnArrierePlan()).
+ */
+let _fecParserWorker = null;
+let _fecParserWorkerReqId = 0;
+const _fecParserWorkerCallbacks = new Map();
+function getFecParserWorker() {
+  if (_fecParserWorker) return _fecParserWorker;
+  if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;
+  try {
+    const src = `
+      const parseFECFile = ${parseFECFile.toString()};
+      const analyserQualiteImportFEC = ${analyserQualiteImportFEC.toString()};
+      self.onmessage = function(e) {
+        const { id, text } = e.data;
+        try {
+          const parsed = parseFECFile(text);
+          if (parsed) parsed.rapportImport = analyserQualiteImportFEC(text);
+          self.postMessage({ id, ok: true, parsed });
+        } catch (err) {
+          self.postMessage({ id, ok: false, error: (err && err.message) || String(err) });
+        }
+      };
+    `;
+    const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+    const worker = new Worker(url);
+    worker.onmessage = (e) => {
+      const { id, ok, parsed, error } = e.data || {};
+      const cb = _fecParserWorkerCallbacks.get(id);
+      if (!cb) return;
+      _fecParserWorkerCallbacks.delete(id);
+      ok ? cb.resolve(parsed) : cb.reject(new Error(error || 'Échec du parsing FEC dans le Web Worker'));
+    };
+    worker.onerror = (e) => {
+      // Erreur non capturée dans le worker (rare, ex. erreur de syntaxe au chargement) :
+      // rejeter toutes les requêtes en attente plutôt que de laisser l'UI bloquée indéfiniment.
+      _fecParserWorkerCallbacks.forEach(cb => cb.reject(new Error((e && e.message) || 'Erreur du Web Worker de parsing FEC')));
+      _fecParserWorkerCallbacks.clear();
+    };
+    _fecParserWorker = worker;
+    return worker;
+  } catch (err) {
+    console.warn('[FEC Analyse] Web Worker indisponible, repli sur le parsing synchrone :', err);
+    return null;
+  }
+}
+/**
+ * parseFECEnArrierePlan(text)
+ * Analyse un FEC (parseFECFile + analyserQualiteImportFEC) dans le Web
+ * Worker de getFecParserWorker() quand disponible, pour ne jamais geler
+ * l'interface sur un fichier volumineux. Repli automatique et
+ * transparent sur le parsing synchrone historique si Worker/Blob ne sont
+ * pas disponibles dans l'environnement d'exécution (ancien navigateur,
+ * contexte restreint, tests) — même résultat dans les deux cas.
+ * @returns {Promise<object|null>}
+ */
+function parseFECEnArrierePlan(text) {
+  const worker = getFecParserWorker();
+  if (!worker) {
+    return new Promise((resolve, reject) => {
+      try {
+        const parsed = parseFECFile(text);
+        if (parsed) parsed.rapportImport = analyserQualiteImportFEC(text);
+        resolve(parsed);
+      } catch (err) { reject(err); }
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const id = ++_fecParserWorkerReqId;
+    _fecParserWorkerCallbacks.set(id, { resolve, reject });
+    worker.postMessage({ id, text });
+  });
+}
 
 function npConfirm(){
   if(!_npFile)return;
@@ -9678,22 +9769,28 @@ function npConfirm(){
   reader.onload=e=>{
     const buffer = e.target.result;
     // Laisse le navigateur peindre le message "Analyse en cours…" avant de
-    // lancer le décodage/parsing synchrone (potentiellement long sur un
-    // gros FEC) — évite l'impression d'un gel instantané au clic.
+    // lancer le décodage puis le parsing (déporté dans un Web Worker quand
+    // disponible, cf. parseFECEnArrierePlan()) — évite l'impression d'un
+    // gel instantané au clic, et élimine le gel réel pendant le parsing
+    // lui-même sur un gros FEC.
     setTimeout(() => {
-      let parsed;
+      let text;
       try {
-        const text = decodeFecBuffer(buffer);
-        parsed = parseFECFile(text);
-        if (parsed) parsed.rapportImport = analyserQualiteImportFEC(text);
+        text = decodeFecBuffer(buffer);
       } catch(err) {
-        console.error('[FEC Analyse] Échec du parsing FEC :', err);
+        console.error('[FEC Analyse] Échec du décodage FEC :', err);
         toast('Erreur lors de l’analyse du fichier : ' + (err && err.message ? err.message : 'format non reconnu'), true);
         if(btn){btn.disabled=false;btn.textContent='Analyser';}
         return;
       }
-      if(!parsed){toast('FEC invalide — colonnes CompteNum/Débit/Crédit introuvables dans l’en-tête',true);if(btn){btn.disabled=false;btn.textContent='Analyser';}return;}
-      finishNpConfirm(parsed);
+      parseFECEnArrierePlan(text).then(parsed => {
+        if(!parsed){toast('FEC invalide — colonnes CompteNum/Débit/Crédit introuvables dans l’en-tête',true);if(btn){btn.disabled=false;btn.textContent='Analyser';}return;}
+        finishNpConfirm(parsed);
+      }).catch(err => {
+        console.error('[FEC Analyse] Échec du parsing FEC :', err);
+        toast('Erreur lors de l’analyse du fichier : ' + (err && err.message ? err.message : 'format non reconnu'), true);
+        if(btn){btn.disabled=false;btn.textContent='Analyser';}
+      });
     }, PARSE_UI_YIELD_MS);
   };
   reader.onerror=()=>{toast('Erreur de lecture du fichier',true); if(btn){btn.disabled=false;btn.textContent='Analyser';}};
