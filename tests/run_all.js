@@ -127,6 +127,9 @@ async function main() {
   section('22. Dossier Consolidé — vue "Contributif en colonnes" (détail par société)');
   await reportResults('Consolidé contributif', require('./test_consolide_contributif.js').run(htmlPath));
 
+  section('23. Suppression complète des données (audit sécurité — correctif critique)');
+  await reportResults('Suppression données', require('./test_delete_all_data.js').run(htmlPath));
+
   // ── Bilan final ─────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════');
   console.log(`TOTAL : ${totalPass} succès, ${totalFail} échec(s)`);
