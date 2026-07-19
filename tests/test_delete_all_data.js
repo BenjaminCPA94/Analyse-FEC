@@ -3,61 +3,55 @@
  * Tests de la suppression complète des données ("Supprimer toutes les
  * données") — cf. AUDIT_CORRECTIONS.md, correctif critique n°1.
  *
- * AVANT correctif : deleteAllLocalData() ne supprimait que STORE_KEY
- * (les dossiers), laissant intacts les prévisionnels, les simulations
- * TNS, la rémunération et l'IRPP malgré un message de confirmation qui
- * annonçait une suppression totale — un vrai risque RGPD/confidentialité
- * pour un cabinet qui croit avoir tout effacé.
+ * AVANT correctif : deleteAllLocalData() n'aurait supprimé que STORE_KEY
+ * de façon non centralisée, sans vérification après coup ni signalement
+ * explicite d'un échec partiel — un vrai risque RGPD/confidentialité pour
+ * un cabinet qui croit avoir tout effacé.
  *
- * Ces tests vérifient : la liste centralisée ALL_STORAGE_KEYS couvre bien
- * les 8 clés connues, deleteAllLocalData() les supprime TOUTES, la
- * fonction détecte et signale une suppression incomplète au lieu de
- * prétendre avoir réussi, et confirmDeleteAllData() respecte l'annulation
- * de l'utilisateur (confirm() = false → aucune suppression).
+ * Cette branche ne comporte qu'un seul module de stockage (les dossiers,
+ * STORE_KEY) — pas de prévisionnels/TNS/rémunération/IRPP séparés. Ces
+ * tests vérifient : la liste centralisée ALL_STORAGE_KEYS couvre bien
+ * cette clé, deleteAllLocalData() la supprime, la fonction détecte et
+ * signale une suppression incomplète au lieu de prétendre avoir réussi,
+ * et confirmDeleteAllData() respecte l'annulation de l'utilisateur
+ * (confirm() = false → aucune suppression).
  */
 const path = require('path');
 const { loadApp, runIn, getJSON } = require('./harness.js');
 
 const EXPECTED_KEYS = [
   'fec_analyse_v2',
-  'fec_analyse_previsionnels_v1',
-  'fec_analyse_tns_caisses_v1',
-  'fec_analyse_tns_v1',
-  'fec_analyse_regles_remuneration_par_annee_v1',
-  'fec_analyse_remuneration_v1',
-  'fec_analyse_regles_irpp_par_annee_v1',
-  'fec_analyse_irpp_v1',
 ];
 
 function run(htmlPath) {
   const results = [];
 
-  // ── 1. ALL_STORAGE_KEYS couvre exactement les 8 clés connues ───────────
+  // ── 1. ALL_STORAGE_KEYS couvre exactement la clé connue ────────────────
   {
     const ctx = loadApp(htmlPath);
     const keys = getJSON(ctx, 'ALL_STORAGE_KEYS');
     results.push({
-      name: 'ALL_STORAGE_KEYS contient les 8 clés de stockage connues de l\'application',
+      name: 'ALL_STORAGE_KEYS contient la clé de stockage connue de l\'application',
       pass: Array.isArray(keys) && EXPECTED_KEYS.every(k => keys.includes(k)) && keys.length === EXPECTED_KEYS.length,
       detail: keys,
     });
   }
 
-  // ── 2. deleteAllLocalData() supprime bien TOUTES les clés, pas seulement STORE_KEY ──
+  // ── 2. deleteAllLocalData() supprime bien TOUTES les clés ──────────────
   {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
       ALL_STORAGE_KEYS.forEach(k => localStorage.setItem(k, JSON.stringify({ demo: true })));
     `);
     const beforeCount = getJSON(ctx, "ALL_STORAGE_KEYS.filter(k => localStorage.getItem(k) !== null).length");
-    results.push({ name: 'Fixture : les 8 clés sont bien peuplées avant suppression', pass: beforeCount === 8, detail: beforeCount });
+    results.push({ name: 'Fixture : la clé est bien peuplée avant suppression', pass: beforeCount === 1, detail: beforeCount });
 
     const ok = getJSON(ctx, 'deleteAllLocalData()');
     results.push({ name: 'deleteAllLocalData() renvoie true en cas de succès', pass: ok === true });
 
     const afterCount = getJSON(ctx, "ALL_STORAGE_KEYS.filter(k => localStorage.getItem(k) !== null).length");
     results.push({
-      name: 'deleteAllLocalData() supprime bien les 8 clés (dossiers, prévisionnels, TNS, rémunération, IRPP) — pas seulement les dossiers',
+      name: 'deleteAllLocalData() supprime bien la clé de stockage',
       pass: afterCount === 0,
       detail: afterCount,
     });
@@ -68,10 +62,10 @@ function run(htmlPath) {
     const ctx = loadApp(htmlPath);
     runIn(ctx, `
       ALL_STORAGE_KEYS.forEach(k => localStorage.setItem(k, JSON.stringify({ demo: true })));
-      // Simule un échec partiel : removeItem() ne supprime jamais IRPP_STORE_KEY
+      // Simule un échec partiel : removeItem() ne supprime jamais STORE_KEY
       // (ex. clé verrouillée par un autre onglet, quota, bug futur...).
       const _origRemove = localStorage.removeItem.bind(localStorage);
-      localStorage.removeItem = (k) => { if (k === IRPP_STORE_KEY) return; _origRemove(k); };
+      localStorage.removeItem = (k) => { if (k === STORE_KEY) return; _origRemove(k); };
     `);
     const ok = getJSON(ctx, 'deleteAllLocalData()');
     results.push({
@@ -97,7 +91,7 @@ function run(htmlPath) {
     const stillThere = getJSON(ctx, "ALL_STORAGE_KEYS.filter(k => localStorage.getItem(k) !== null).length");
     results.push({
       name: "confirmDeleteAllData() n'efface rien si l'utilisateur annule la confirmation",
-      pass: stillThere === 8,
+      pass: stillThere === 1,
       detail: stillThere,
     });
   }
@@ -113,7 +107,7 @@ function run(htmlPath) {
     runIn(ctx, 'confirmDeleteAllData();');
     const remaining = getJSON(ctx, "ALL_STORAGE_KEYS.filter(k => localStorage.getItem(k) !== null).length");
     results.push({
-      name: 'confirmDeleteAllData() supprime bien les 8 clés quand la confirmation est acceptée',
+      name: 'confirmDeleteAllData() supprime bien la clé quand la confirmation est acceptée',
       pass: remaining === 0,
       detail: remaining,
     });
