@@ -848,6 +848,9 @@
     <button class="nav-item" onclick="nav('tresorerie',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg>Trésorerie
     </button>
+    <button class="nav-item" onclick="nav('previsionnel',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>Prévisionnel
+    </button>
   </div>
   <div style="margin-top:auto;padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:10px;color:rgba(255,255,255,.25);" id="sidebar-footer"></div>
 </aside>
@@ -1347,6 +1350,74 @@
 </div><!-- /padding -->
 </div><!-- /page-tresorerie -->
 
+<!-- ══ PAGE PRÉVISIONNEL ══════════════════════════════════════════════════ -->
+<div class="page" id="page-previsionnel">
+  <div style="padding:20px 32px;">
+    <div class="topbar" style="position:sticky;top:48px;z-index:40;">
+      <div>
+        <div class="topbar-title">Prévisionnel — Produits &amp; charges</div>
+        <div class="topbar-meta" id="pv-meta"></div>
+      </div>
+      <div id="pv-compare-wrap" style="display:flex;align-items:center;gap:6px;"></div>
+    </div>
+
+    <div class="tm-section" style="margin-bottom:14px;margin-top:16px;">
+      <div class="tm-section-title" style="color:#3B6D11;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="2">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+        </svg>
+        Produits — Détail par compte
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:11px;color:#a09d96;">Appliquer un % à toutes les lignes :</span>
+        <input type="number" id="pv-bulk-produits" placeholder="ex: 5" step="0.1"
+               style="width:70px;padding:4px 6px;border:1px solid rgba(0,0,0,.15);border-radius:5px;font-size:11px;">
+        <button onclick="pvApplyBulk('produits')"
+                style="padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;
+                       border:none;cursor:pointer;background:#185FA5;color:#fff;">
+          Appliquer
+        </button>
+      </div>
+      <div id="pv-produits-table" style="overflow-x:auto;max-height:360px;overflow-y:auto;"></div>
+    </div>
+
+    <div class="tm-section" style="margin-bottom:14px;">
+      <div class="tm-section-title" style="color:#A32D2D;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A32D2D" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Charges — Détail par compte
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:11px;color:#a09d96;">Appliquer un % à toutes les lignes :</span>
+        <input type="number" id="pv-bulk-charges" placeholder="ex: 3" step="0.1"
+               style="width:70px;padding:4px 6px;border:1px solid rgba(0,0,0,.15);border-radius:5px;font-size:11px;">
+        <button onclick="pvApplyBulk('charges')"
+                style="padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;
+                       border:none;cursor:pointer;background:#185FA5;color:#fff;">
+          Appliquer
+        </button>
+      </div>
+      <div id="pv-charges-table" style="overflow-x:auto;max-height:360px;overflow-y:auto;"></div>
+    </div>
+
+    <div class="tm-section" style="border-left:4px solid #185FA5;">
+      <div class="tm-section-title" style="color:#185FA5;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Synthèse du résultat prévisionnel
+      </div>
+      <div id="pv-summary"></div>
+      <div class="tm-section-note">
+        Montants « Exercice N » issus du FEC importé · Pourcentages d'évolution modifiables compte par compte
+        (pré-remplis depuis l'exercice N-1 si un exercice antérieur est disponible dans le dossier, sinon à saisir manuellement) ·
+        Montant prévisionnel N+1 = Montant N × (1 + % / 100)
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ JS ENGINE ══════════════════════════════════════════════════════════ -->
 
 
@@ -1514,7 +1585,8 @@ function migrateLocalStorage() {
 let ACTIVE = {
   id: null, name: '', bal: {}, libs: {}, months: {},
   nbLines: 0, periodStart: '', periodEnd: '', filename: '',
-  mps: null   // { cr: [...], bilan: [...] }
+  mps: null,   // { cr: [...], bilan: [...] }
+  previsionnel: null   // { pct: { <compte>: <% évolution N+1, saisi ou pré-rempli depuis N-1> } }
 };
 
 // Currency: 'eur' | 'keur' | 'meur'
@@ -1620,6 +1692,7 @@ function saveActiveDossier() {
     revenueTypes: ACTIVE.revenueTypes||{},
     exercices: exercicesToSave,
     activeExerciceId: ACTIVE.activeExerciceId || null,
+    previsionnel: ACTIVE.previsionnel || null,
     savedAt: Date.now()
   };
   saveStore(store);
@@ -2135,6 +2208,9 @@ function renderDashboard() {
 
   // KPI Tréso — rendered by renderTresorerie()
   if(document.getElementById('page-tresorerie')?.classList.contains('active')) renderTresorerie();
+
+  // Détail produits/charges prévisionnel — rendered by renderPrevisionnel()
+  if(document.getElementById('page-previsionnel')?.classList.contains('active')) renderPrevisionnel();
 
   // ── CHARTS ──
   if(!CH.cCA){
@@ -3283,7 +3359,7 @@ function openDossier(id){
   if(d){
     const {exercices, activeExerciceId} = ensureExercices(d);
     const activeEx = exercices[activeExerciceId];
-    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId,ledger:activeEx.ledger||null};
+    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},previsionnel:d.previsionnel||null,savedAt:d.savedAt,exercices,activeExerciceId,ledger:activeEx.ledger||null};
     // Force regenerate mapping if version is outdated or mapping has no subs defined
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
     if(!ACTIVE.mps || mpsOutdated){
@@ -5183,17 +5259,277 @@ function tmShowEmpty(msg) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// MODULE PRÉVISIONNEL — Détail produits/charges avec % d'évolution
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Ce module liste chaque compte de classe 7 (produits) et de classe 6
+// (charges) de l'exercice actif, et propose un pourcentage d'évolution
+// pour l'exercice suivant (N+1) :
+//   - si un exercice antérieur (N-1) est disponible dans le même dossier
+//     (via ACTIVE.exercices, cf. multi-exercices), le % est PRÉ-REMPLI
+//     automatiquement à partir de la variation réelle N/N-1 ;
+//   - sinon, ou pour l'ajuster, l'utilisateur le saisit/modifie manuellement.
+// Le montant prévisionnel N+1 = Montant N × (1 + % / 100).
+//
+// Les overrides manuels sont conservés dans ACTIVE.previsionnel.pct
+// (clé = numéro de compte) et persistés avec le dossier via saveActiveDossier().
+// Tant qu'un compte n'a pas été modifié à la main, sa valeur suggérée reste
+// recalculée en direct depuis l'exercice N-1 à chaque rendu (non figée).
+
+/**
+ * pvGetPrevExerciceId()
+ * Renvoie l'id de l'exercice le plus récent strictement antérieur à
+ * l'exercice actif dans le même dossier (ou null si aucun n'est disponible).
+ */
+function pvGetPrevExerciceId() {
+  if (!ACTIVE.exercices || !ACTIVE.activeExerciceId) return null;
+  const active = ACTIVE.exercices[ACTIVE.activeExerciceId];
+  if (!active) return null;
+
+  const candidates = Object.entries(ACTIVE.exercices)
+    .filter(([exId]) => exId !== ACTIVE.activeExerciceId)
+    .filter(([, ex]) => !active.periodStart || !ex.periodEnd || ex.periodEnd < active.periodStart)
+    .sort((a, b) => (b[1].periodEnd || '').localeCompare(a[1].periodEnd || ''));
+
+  return candidates.length ? candidates[0][0] : null;
+}
+
+/**
+ * pvGetLines(prefix)
+ * Comptes de classe 6 ou 7 de la balance active, triés par montant décroissant.
+ * Convention FEC (identique à tmCompute) : bal[n] > 0 = montant du poste.
+ */
+function pvGetLines(prefix) {
+  const bal = ACTIVE.bal || {};
+  return Object.keys(bal)
+    .filter(n => n[0] === prefix && Math.max(bal[n], 0) > 0)
+    .map(n => ({ compte: n, lib: libOf(n), montant: Math.max(bal[n], 0) }))
+    .sort((a, b) => b.montant - a.montant);
+}
+
+/**
+ * pvGetSuggestedPct(compte)
+ * % d'évolution réel N/N-1 calculé depuis l'exercice antérieur du dossier,
+ * ou null si aucun exercice antérieur n'est disponible / compte absent en N-1.
+ */
+function pvGetSuggestedPct(compte) {
+  const prevId = pvGetPrevExerciceId();
+  if (!prevId) return null;
+  const prevEx = ACTIVE.exercices[prevId];
+  const prevVal = Math.max((prevEx.bal || {})[compte] || 0, 0);
+  if (prevVal <= 0) return null;
+  const curVal = Math.max((ACTIVE.bal || {})[compte] || 0, 0);
+  return ((curVal - prevVal) / prevVal) * 100;
+}
+
+/**
+ * pvGetPct(compte)
+ * % effectif utilisé pour le calcul : override manuel s'il existe,
+ * sinon suggestion N/N-1, sinon 0.
+ */
+function pvGetPct(compte) {
+  const manual = ACTIVE.previsionnel?.pct?.[compte];
+  if (manual !== undefined) return manual;
+  const suggested = pvGetSuggestedPct(compte);
+  return suggested !== null ? suggested : 0;
+}
+
+function pvSetPct(compte, val) {
+  if (!ACTIVE.previsionnel) ACTIVE.previsionnel = { pct: {} };
+  if (!ACTIVE.previsionnel.pct) ACTIVE.previsionnel.pct = {};
+  const n = parseFloat(val);
+  if (val === '' || isNaN(n)) delete ACTIVE.previsionnel.pct[compte];
+  else ACTIVE.previsionnel.pct[compte] = n;
+  schedSave();
+}
+
+/**
+ * renderPrevisionnel()
+ * Point d'entrée du module — construit les deux tableaux (produits/charges)
+ * et la synthèse du résultat prévisionnel N+1.
+ */
+function renderPrevisionnel() {
+  if (!ACTIVE || !ACTIVE.bal) return;
+
+  const meta = document.getElementById('pv-meta');
+  if (meta) {
+    const year = ACTIVE.periodStart ? ACTIVE.periodStart.slice(0, 4) : '';
+    meta.textContent = `Exercice ${year} · ${ACTIVE.filename || ''}`;
+  }
+
+  const compareWrap = document.getElementById('pv-compare-wrap');
+  if (compareWrap) {
+    const prevId = pvGetPrevExerciceId();
+    compareWrap.innerHTML = (prevId && ACTIVE.exercices[prevId])
+      ? `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+                      background:#e6f1fb;color:#185FA5;white-space:nowrap;">
+           % suggérés depuis ${escHtml(ACTIVE.exercices[prevId].label || 'exercice antérieur')}
+         </span>`
+      : `<span style="font-size:11px;color:#a09d96;">Aucun exercice antérieur dans ce dossier — saisie manuelle</span>`;
+  }
+
+  pvRenderTable('produits', pvGetLines('7'), '#3B6D11');
+  pvRenderTable('charges',  pvGetLines('6'), '#A32D2D');
+  pvRenderSummary();
+}
+
+function pvRenderTable(section, lines, accent) {
+  const el = document.getElementById('pv-' + section + '-table');
+  if (!el) return;
+
+  if (!lines.length) {
+    el.innerHTML = `<div style="color:#a09d96;font-size:12px;padding:20px;text-align:center;">Aucun compte identifié</div>`;
+    return;
+  }
+
+  const totalN  = lines.reduce((s, l) => s + l.montant, 0);
+  const totalN1 = lines.reduce((s, l) => s + l.montant * (1 + pvGetPct(l.compte) / 100), 0);
+
+  el.innerHTML = `
+    <table class="tm-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Compte</th>
+          <th style="text-align:left;">Libellé</th>
+          <th>Montant N</th>
+          <th>% évolution</th>
+          <th>Montant prévisionnel N+1</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lines.map(l => {
+          const raw       = ACTIVE.previsionnel?.pct?.[l.compte];
+          const suggested = pvGetSuggestedPct(l.compte);
+          const p         = raw !== undefined ? raw : (suggested !== null ? suggested : 0);
+          const proj      = l.montant * (1 + p / 100);
+          const displayVal   = raw !== undefined ? raw : (suggested !== null ? suggested.toFixed(1) : '');
+          const isSuggested  = raw === undefined && suggested !== null;
+          const compteAttr   = escHtml(l.compte);
+          return `<tr>
+            <td style="text-align:left;font-family:monospace;font-weight:700;color:${accent};">${compteAttr}</td>
+            <td style="text-align:left;">${l.lib}</td>
+            <td>${fmtK(l.montant)}</td>
+            <td>
+              <input type="number" step="0.1" value="${displayVal}" placeholder="0"
+                     data-compte="${compteAttr}" data-section="${section}"
+                     oninput="pvOnPctInput(this)"
+                     title="${isSuggested ? 'Suggéré depuis l’exercice N-1 · modifiable' : ''}"
+                     style="width:64px;padding:3px 5px;border-radius:4px;font-size:11px;text-align:right;
+                            border:1px solid ${isSuggested ? 'rgba(24,95,165,.35)' : 'rgba(0,0,0,.15)'};
+                            color:${isSuggested ? '#185FA5' : '#1a1916'};"> %
+            </td>
+            <td id="pv-proj-${compteAttr}" style="font-weight:700;">${fmtK(proj)}</td>
+          </tr>`;
+        }).join('')}
+        <tr class="tm-total">
+          <td style="text-align:left;">Total</td>
+          <td></td>
+          <td>${fmtK(totalN)}</td>
+          <td></td>
+          <td id="pv-total-${section}">${fmtK(totalN1)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function pvOnPctInput(input) {
+  const compte  = input.dataset.compte;
+  const section = input.dataset.section;
+  pvSetPct(compte, input.value);
+
+  const lines = pvGetLines(section === 'produits' ? '7' : '6');
+  const line  = lines.find(l => l.compte === compte);
+  if (line) {
+    const proj = line.montant * (1 + pvGetPct(compte) / 100);
+    const cell = document.getElementById('pv-proj-' + compte);
+    if (cell) cell.textContent = fmtK(proj);
+  }
+
+  const totalCell = document.getElementById('pv-total-' + section);
+  if (totalCell) {
+    const total = lines.reduce((s, l) => s + l.montant * (1 + pvGetPct(l.compte) / 100), 0);
+    totalCell.textContent = fmtK(total);
+  }
+
+  pvRenderSummary();
+}
+
+function pvApplyBulk(section) {
+  const input = document.getElementById('pv-bulk-' + section);
+  if (!input) return;
+  const val = input.value;
+  if (val === '' || isNaN(parseFloat(val))) return;
+
+  const lines = pvGetLines(section === 'produits' ? '7' : '6');
+  lines.forEach(l => pvSetPct(l.compte, val));
+
+  pvRenderTable(section, lines, section === 'produits' ? '#3B6D11' : '#A32D2D');
+  pvRenderSummary();
+}
+
+function pvRenderSummary() {
+  const el = document.getElementById('pv-summary');
+  if (!el) return;
+
+  const produits = pvGetLines('7');
+  const charges  = pvGetLines('6');
+
+  const totalProduitsN  = produits.reduce((s, l) => s + l.montant, 0);
+  const totalChargesN   = charges.reduce((s, l) => s + l.montant, 0);
+  const totalProduitsN1 = produits.reduce((s, l) => s + l.montant * (1 + pvGetPct(l.compte) / 100), 0);
+  const totalChargesN1  = charges.reduce((s, l) => s + l.montant * (1 + pvGetPct(l.compte) / 100), 0);
+
+  const resultatN  = totalProduitsN  - totalChargesN;
+  const resultatN1 = totalProduitsN1 - totalChargesN1;
+
+  const rows = [
+    { l: 'Total produits', n: totalProduitsN, n1: totalProduitsN1 },
+    { l: 'Total charges',  n: totalChargesN,  n1: totalChargesN1  },
+    { l: 'Résultat',       n: resultatN,      n1: resultatN1      },
+  ];
+
+  el.innerHTML = `
+    <table class="tm-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Poste</th>
+          <th>Exercice N</th>
+          <th>Prévisionnel N+1</th>
+          <th>Évolution</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => {
+          const evolPct = r.n !== 0 ? ((r.n1 - r.n) / Math.abs(r.n)) * 100 : 0;
+          const good    = r.l === 'Total charges' ? evolPct <= 0 : evolPct >= 0;
+          const color   = good ? '#3B6D11' : '#A32D2D';
+          return `<tr>
+            <td style="text-align:left;font-weight:700;">${r.l}</td>
+            <td>${fmtK(r.n)}</td>
+            <td style="font-weight:700;">${fmtK(r.n1)}</td>
+            <td style="font-weight:700;color:${color};">${evolPct >= 0 ? '+' : ''}${evolPct.toFixed(1)} %</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
 // ── EXPOSITION GLOBALE ──────────────────────────────────────────────────
 // Fonctions appelées depuis le moteur principal et les boutons HTML
-window.renderTresorerie = renderTresorerie;
-window.tmSetProjection  = tmSetProjection;
+window.renderTresorerie   = renderTresorerie;
+window.tmSetProjection    = tmSetProjection;
+window.renderPrevisionnel = renderPrevisionnel;
+window.pvOnPctInput       = pvOnPctInput;
+window.pvApplyBulk        = pvApplyBulk;
 
 // Hook sur nav() du moteur principal
-// (Overwrite safe : nav est redéfini ici pour déclencher le rendu tréso)
+// (Overwrite safe : nav est redéfini ici pour déclencher le rendu tréso / prévisionnel)
 const _prevNav = typeof nav === 'function' ? nav : null;
 window.nav = function(id, el) {
   if (_prevNav) _prevNav(id, el);
-  if (id === 'tresorerie') setTimeout(renderTresorerie, 80);
+  if (id === 'tresorerie')   setTimeout(renderTresorerie, 80);
+  if (id === 'previsionnel') setTimeout(renderPrevisionnel, 80);
 };
 
 })(); // Fin IIFE
