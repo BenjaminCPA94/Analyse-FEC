@@ -8,3 +8,4 @@ scripts/pennylane-sync/FEC_*.txt
 
 # Données clients Pennylane (sensibles) — jamais committées
 scripts/pennylane-import/*.json
+.claude/settings.local.json
