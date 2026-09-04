@@ -5,3 +5,6 @@ scripts/pennylane-sync/.env
 
 # FEC téléchargés localement (données comptables, pas du code)
 scripts/pennylane-sync/FEC_*.txt
+
+# Données clients Pennylane (sensibles) — jamais committées
+scripts/pennylane-import/*.json
