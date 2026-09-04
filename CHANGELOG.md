@@ -4,6 +4,28 @@ Toutes les entrées se réfèrent à l'audit complet dans `AUDIT.md` (constats,
 correctifs, preuves). Version livrée : **v6** (`FEC_Analyse_v6.html`),
 partant de la base v5 (`FEC_Analyse_v5_code_complet.html`, import initial).
 
+## v6 — Liste de dossiers, refonte visuelle noir & blanc, synchro Pennylane
+
+- **Dossiers en liste** au lieu de grosses cartes carrées — bien plus
+  lisible avec des dizaines de dossiers (ex. import Pennylane groupé).
+  Nouvelle section/filtre dédiée « Pennylane » plutôt que de mélanger
+  ces dossiers dans « Non classés ».
+- **Refonte visuelle** : un seul accent (quasi-noir) remplace les deux
+  couleurs décoratives précédentes (bleu + orange) sur l'ensemble de
+  l'app ; fond sombre du sidebar/topbar unifié. Les couleurs rouge/vert
+  qui codent un sens comptable (positif/négatif) restent inchangées.
+- **Synchronisation Pennylane en un clic** (onglet Intégrations, page
+  paramètres d'un dossier) : clé API + identifiant du dossier
+  Pennylane enregistrés dans le navigateur, bouton « Synchroniser »
+  qui redemande un export FEC frais et le réintègre automatiquement.
+  ⚠️ Choix assumé par l'utilisateur : la clé API est stockée dans ce
+  navigateur (localStorage), lisible par quiconque a accès au poste —
+  voir AUDIT.md §(s) pour le compromis de sécurité et sa limite connue
+  (blocage possible par la politique CORS de Pennylane, non
+  vérifiable/réparable depuis ce poste de développement).
+- Suite complète : 120 tests, tous verts. Voir AUDIT.md §(s) pour le
+  détail complet.
+
 ## v6 — Comparaison N/N-1 : alignement, postes dépliables, grand livre
 
 - **Correctif d'alignement** : les colonnes (Poste/N/N-1/Variation) du

@@ -10,7 +10,7 @@
     --bg:#f7f6f3; --surface:#fff; --surface2:#f2f1ee;
     --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.14);
     --text:#1a1916; --text2:#6b6960; --text3:#a09d96;
-    --blue:#185FA5; --blue-l:#e6f1fb;
+    --blue:#18181b; --blue-l:#f4f4f5;
     --green:#3B6D11; --green-l:#eaf3de;
     --red:#A32D2D; --red-l:#fcebeb;
     --radius:10px; --radius-sm:6px;
@@ -20,14 +20,14 @@
   body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh;}
 
   /* SIDEBAR */
-  .sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#0f1923;display:flex;flex-direction:column;z-index:100;}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#141414;display:flex;flex-direction:column;z-index:100;}
   .sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.07);}
   .logo-mark{font-size:13px;font-weight:700;color:#fff;letter-spacing:.06em;text-transform:uppercase;}
   .logo-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;}
   .sidebar-section{padding:16px 12px 6px;font-size:10px;font-weight:600;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.08em;}
   .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;color:rgba(255,255,255,.5);cursor:pointer;transition:all .15s;border:none;background:none;width:calc(100% - 16px);text-align:left;}
   .nav-item:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.8);}
-  .nav-item.active{background:rgba(24,95,165,.3);color:#fff;}
+  .nav-item.active{background:rgba(255,255,255,.1);color:#fff;}
   .nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:.7;}
   .nav-item.active svg{opacity:1;}
   .sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:rgba(255,255,255,.25);}
@@ -117,7 +117,7 @@
   .amt-sm{text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--text2);flex-shrink:0;}
   .pct-lbl{text-align:right;font-size:11px;color:var(--text3);flex-shrink:0;}
   .pos{color:var(--green)!important;} .neg{color:var(--red)!important;} .neut{color:var(--text)!important;}
-  .dr-total .dc{background:#0f1923!important;border-top:2px solid #0f1923;}
+  .dr-total .dc{background:#141414!important;border-top:2px solid #141414;}
   .dr-total .lbl{color:#fff;font-weight:700;}
   .dr-total .amt{color:#fff;font-size:14px;}
   .dr-total .pct-lbl{color:rgba(255,255,255,.4);}
@@ -134,12 +134,12 @@
 
   /* Home topbar */
   .home-topbar {
-    background:#0f1923; padding:0 32px; height:56px;
+    background:#141414; padding:0 32px; height:56px;
     display:flex; align-items:center; justify-content:space-between;
     position:sticky; top:0; z-index:100;
   }
   .home-logo { font-size:14px; font-weight:700; color:#fff; letter-spacing:.06em; display:flex; align-items:center; gap:10px; }
-  .home-logo-icon { width:28px; height:28px; background:#185FA5; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  .home-logo-icon { width:28px; height:28px; background:#18181b; border-radius:6px; display:flex; align-items:center; justify-content:center; }
   .home-search {
     flex:1; max-width:340px; margin:0 32px;
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
@@ -163,7 +163,7 @@
   .hs-cabinet-name { font-size:12px; font-weight:700; color:#1a1916; }
   .hs-cabinet-arr { font-size:10px; color:#a09d96; }
   .hs-divider { height:1px; background:rgba(0,0,0,.06); margin:6px 0; }
-  .hs-new { display:flex; align-items:center; gap:6px; padding:7px 16px; font-size:12px; color:#185FA5; font-weight:600; cursor:pointer; }
+  .hs-new { display:flex; align-items:center; gap:6px; padding:7px 16px; font-size:12px; color:#18181b; font-weight:600; cursor:pointer; }
   .hs-new:hover { background:#f0f4fa; }
   .hs-group-item {
     display:flex; align-items:center; justify-content:space-between;
@@ -171,7 +171,7 @@
     border-left:3px solid transparent; transition:all .12s;
   }
   .hs-group-item:hover { background:#f7f6f3; color:#1a1916; }
-  .hs-group-item.active { background:#e6f1fb; color:#185FA5; border-left-color:#185FA5; font-weight:600; }
+  .hs-group-item.active { background:#f4f4f5; color:#18181b; border-left-color:#18181b; font-weight:600; }
   .hs-group-count { font-size:11px; color:#a09d96; background:#f2f1ee; padding:1px 6px; border-radius:10px; }
 
   /* Home content */
@@ -185,37 +185,38 @@
   .home-section-title { font-size:16px; font-weight:700; color:#1a1916; display:flex; align-items:center; gap:8px; }
   .home-section-title svg { color:#a09d96; }
   .home-section-meta { font-size:12px; color:#a09d96; }
-  .home-section-action { font-size:12px; color:#185FA5; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; }
+  .home-section-action { font-size:12px; color:#18181b; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; }
   .home-section-action:hover { text-decoration:underline; }
 
   /* Dossier cards grid */
-  .dossier-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; }
+  .dossier-grid { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:10px; overflow:hidden; }
+  .dossier-grid > div:last-child { border-bottom:none!important; }
   .dossier-card {
-    background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:10px;
-    padding:20px 16px; cursor:pointer; transition:all .15s;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-height:100px; text-align:center; position:relative;
+    background:#fff; border:none; border-bottom:1px solid rgba(0,0,0,.06); border-radius:0;
+    padding:12px 16px; cursor:pointer; transition:background .12s;
+    display:flex; align-items:center; gap:12px; text-align:left; position:relative;
   }
-  .dossier-card:hover { border-color:#185FA5; box-shadow:0 4px 16px rgba(24,95,165,.12); transform:translateY(-1px); }
-  .dossier-card.active-card { background:#0f1923; border-color:#0f1923; }
+  .dossier-card:hover { background:#fafafa; }
+  .dossier-card.active-card { background:#141414; }
+  .dossier-card.active-card:hover { background:#141414; }
   .dossier-card.active-card .dc-name { color:#fff; }
   .dossier-card.active-card .dc-sub { color:rgba(255,255,255,.4); }
-  .dc-avatar { width:36px; height:36px; border-radius:8px; background:#e6f1fb; display:flex; align-items:center; justify-content:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#185FA5; }
+  .dc-avatar { width:34px; height:34px; border-radius:50%; background:#f4f4f5; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#18181b; flex-shrink:0; }
   .active-card .dc-avatar { background:rgba(255,255,255,.1); color:#fff; }
-  .dc-name { font-size:12px; font-weight:600; color:#1a1916; line-height:1.3; }
-  .dc-sub { font-size:10px; color:#a09d96; margin-top:4px; }
-  .dc-badge { position:absolute; top:8px; right:8px; width:8px; height:8px; border-radius:50%; background:#185FA5; }
+  .dc-info { flex:1; min-width:0; }
+  .dc-name { font-size:13px; font-weight:600; color:#1a1916; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dc-sub { font-size:11px; color:#a09d96; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dc-badge { display:none; }
 
   /* Upload zone in home */
   .upload-card {
-    background:#fff; border:2px dashed rgba(0,0,0,.1); border-radius:10px;
-    padding:24px 16px; cursor:pointer; transition:all .15s;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-height:100px; text-align:center; color:#a09d96;
+    background:#fafafa; border:none; border-radius:0;
+    padding:14px 16px; cursor:pointer; transition:color .12s;
+    display:flex; flex-direction:row; align-items:center; gap:8px; text-align:left; color:#a09d96;
   }
-  .upload-card:hover { border-color:#185FA5; color:#185FA5; }
-  .upload-card svg { margin-bottom:8px; }
-  .upload-card span { font-size:11px; font-weight:600; }
+  .upload-card:hover { color:#18181b; }
+  .upload-card svg { margin-bottom:0; flex-shrink:0; }
+  .upload-card span { font-size:12px; font-weight:600; }
 
   /* Status badge */
   .status-ok { font-size:10px; padding:2px 7px; border-radius:10px; background:#eaf3de; color:#3B6D11; font-weight:600; }
@@ -224,7 +225,7 @@
 
   /* ── MODULE TOPBAR (Analyses / Affectation des comptes) ── */
   .module-topbar {
-    background: #0f1923;
+    background: #141414;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 24px; height: 48px;
     position: sticky; top: 0; z-index: 90;
@@ -249,7 +250,7 @@
     transition: all .15s; height: 48px;
   }
   .module-tab:hover { color: rgba(255,255,255,.8); }
-  .module-tab.active { color: #fff; border-bottom-color: #e8643c; }
+  .module-tab.active { color: #fff; border-bottom-color: #fff; }
   .module-tab-right {
     display: flex; align-items: center; gap: 16px;
   }
@@ -317,7 +318,7 @@
     border-radius: var(--radius); overflow: hidden;
   }
   .mapping-header {
-    background: #0f1923; padding: 10px 16px;
+    background: #141414; padding: 10px 16px;
     font-size: 13px; font-weight: 700; color: #fff;
     display: flex; align-items: center; justify-content: space-between;
   }
@@ -333,10 +334,10 @@
     color: var(--text); border-bottom: 1px solid var(--border-strong);
   }
   .mapping-row.total {
-    background: #0f1923; color: #fff; font-weight: 700; font-size: 13px;
+    background: #141414; color: #fff; font-weight: 700; font-size: 13px;
     border-bottom: none;
   }
-  .mapping-row.total:hover { background: #0f1923; }
+  .mapping-row.total:hover { background: #141414; }
   .mapping-row-actions { display: flex; align-items: center; gap: 8px; }
   .mapping-icon-btn {
     width: 24px; height: 24px; border-radius: 4px; border: none; background: none;
@@ -365,15 +366,15 @@
 
   /* ── MAPPING INTERACTIVE ── */
   .map-add-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;font-size:12px;font-weight:600;color:#6b6960;border:1.5px dashed rgba(0,0,0,0.18);border-radius:7px;background:#fff;cursor:pointer;transition:all .12s;}
-  .map-add-btn:hover{border-color:#185FA5;color:#185FA5;}
+  .map-add-btn:hover{border-color:#18181b;color:#18181b;}
   .map-card{background:#fff;border:1px solid rgba(0,0,0,0.1);border-radius:10px;overflow:hidden;margin-bottom:6px;}
-  .map-header-row{background:#0f1923;padding:10px 16px;font-size:13px;font-weight:700;color:#fff;}
+  .map-header-row{background:#141414;padding:10px 16px;font-size:13px;font-weight:700;color:#fff;}
   .map-group{border-bottom:1px solid rgba(0,0,0,0.07);}
   .map-group:last-child{border-bottom:none;}
   .map-group-row{display:flex;align-items:center;padding:0 12px;min-height:40px;gap:6px;cursor:pointer;transition:background .1s;}
   .map-group-row:hover{background:#f9f8f6;}
   .map-group-row.subtotal{background:#f2f1ee;font-weight:700;}
-  .map-group-row.total-row{background:#0f1923;color:#fff;}
+  .map-group-row.total-row{background:#141414;color:#fff;}
   .map-group-row.total-row:hover{background:#1a2836;}
   .map-chevron{width:14px;height:14px;display:flex;align-items:center;justify-content:center;color:#a09d96;font-size:11px;transition:transform .15s;flex-shrink:0;}
   .map-group-row.open .map-chevron{transform:rotate(90deg);}
@@ -391,10 +392,10 @@
   .map-sub-row:hover{background:#f2f1ee;}
   .map-sub-label{flex:1;font-size:12px;color:#1a1916;}
   .map-accounts-row{display:flex;flex-wrap:wrap;gap:4px;padding:5px 12px 8px 34px;background:#fafafa;border-bottom:1px solid rgba(0,0,0,0.05);}
-  .map-chip{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#e6f1fb;color:#185FA5;font-family:var(--mono);cursor:pointer;border:none;transition:all .1s;}
+  .map-chip{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#f4f4f5;color:#18181b;font-family:var(--mono);cursor:pointer;border:none;transition:all .1s;}
   .map-chip:hover{background:#b5d4f4;}
   .map-drop-hint{padding:6px 12px 8px 34px;font-size:11px;color:#a09d96;font-style:italic;background:#fafafa;border-bottom:1px solid rgba(0,0,0,0.05);}
-  .map-rename-input{background:none;border:none;border-bottom:1.5px solid #185FA5;outline:none;font-size:13px;font-weight:600;color:#1a1916;padding:1px 4px;min-width:120px;max-width:340px;}
+  .map-rename-input{background:none;border:none;border-bottom:1.5px solid #18181b;outline:none;font-size:13px;font-weight:600;color:#1a1916;padding:1px 4px;min-width:120px;max-width:340px;}
   /* Modal */
   .map-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9000;display:flex;align-items:center;justify-content:center;}
   .map-modal{background:#fff;border-radius:12px;width:500px;max-height:580px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
@@ -404,17 +405,17 @@
   .map-modal-hd button:hover{background:#f2f1ee;}
   .map-modal-srch{padding:12px 20px;border-bottom:1px solid rgba(0,0,0,0.06);}
   .map-modal-srch input{width:100%;padding:8px 12px;border:1px solid rgba(0,0,0,0.12);border-radius:7px;font-size:13px;outline:none;font-family:inherit;}
-  .map-modal-srch input:focus{border-color:#185FA5;}
+  .map-modal-srch input:focus{border-color:#18181b;}
   .map-modal-list{overflow-y:auto;flex:1;}
   .map-modal-item{display:flex;align-items:center;padding:9px 20px;cursor:pointer;gap:12px;transition:background .1s;border-bottom:1px solid rgba(0,0,0,0.04);}
   .map-modal-item:hover{background:#f7f6f3;}
-  .map-modal-item.sel{background:#e6f1fb;}
-  .map-modal-num{font-family:var(--mono);font-size:12px;font-weight:700;color:#185FA5;min-width:90px;}
+  .map-modal-item.sel{background:#f4f4f5;}
+  .map-modal-num{font-family:var(--mono);font-size:12px;font-weight:700;color:#18181b;min-width:90px;}
   .map-modal-lib{font-size:12px;color:#1a1916;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .map-modal-chk{width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;}
-  .map-modal-item.sel .map-modal-chk{background:#185FA5;border-color:#185FA5;color:#fff;}
+  .map-modal-item.sel .map-modal-chk{background:#18181b;border-color:#18181b;color:#fff;}
   .map-modal-ft{padding:12px 20px;border-top:1px solid rgba(0,0,0,0.08);display:flex;justify-content:flex-end;gap:8px;}
-  .btn-p{padding:8px 20px;border-radius:7px;border:none;background:#185FA5;color:#fff;font-size:13px;font-weight:600;cursor:pointer;}
+  .btn-p{padding:8px 20px;border-radius:7px;border:none;background:#18181b;color:#fff;font-size:13px;font-weight:600;cursor:pointer;}
   .btn-p:hover{background:#0e4a82;}
   .btn-s{padding:8px 20px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;}
   .btn-s:hover{background:#f2f1ee;}
@@ -423,10 +424,10 @@
   /* ── HOME IMPROVEMENTS ── */
   .dossier-card { position: relative; }
   .dossier-card .card-gear {
-    position:absolute; top:8px; right:8px;
+    flex-shrink:0; margin-left:auto;
     width:26px; height:26px; border-radius:6px;
     display:none; align-items:center; justify-content:center;
-    background:rgba(0,0,0,0.07); cursor:pointer; color:#6b6960;
+    background:rgba(0,0,0,0.06); cursor:pointer; color:#6b6960;
     border:none; transition:background .1s;
   }
   .dossier-card:hover .card-gear { display:flex; }
@@ -447,7 +448,7 @@
     font-size:13px; font-weight:700; color:#1a1916;
     border-bottom:1px solid rgba(0,0,0,0.07); margin-bottom:12px;
   }
-  .params-logo svg { color:#185FA5; }
+  .params-logo svg { color:#18181b; }
   .params-nav {
     display:flex; align-items:center; gap:8px; padding:8px 16px;
     font-size:13px; color:#6b6960; cursor:pointer; border-left:3px solid transparent;
@@ -458,7 +459,7 @@
   .params-nav.active { color:#1a1916; font-weight:600; border-left-color:#1a1916; background:#f7f6f3; }
   .params-main { flex:1; overflow-y:auto; }
   .params-topbar {
-    background:#0f1923; height:48px; display:flex; align-items:center;
+    background:#141414; height:48px; display:flex; align-items:center;
     padding:0 24px; gap:12px;
     position:sticky; top:0; z-index:10;
   }
@@ -476,7 +477,7 @@
     color:#a09d96; cursor:pointer; border-bottom:2px solid transparent;
     transition:all .15s;
   }
-  .params-tab.active { color:#1a1916; border-bottom-color:#e8643c; }
+  .params-tab.active { color:#1a1916; border-bottom-color:#18181b; }
   .params-content { padding:32px; max-width:600px; }
   .params-section {
     background:#fff; border:1px solid rgba(0,0,0,0.08);
@@ -487,13 +488,13 @@
     width:100%; padding:10px 14px; border:1px solid rgba(0,0,0,0.12);
     border-radius:8px; font-size:14px; font-family:inherit; outline:none; color:#1a1916;
   }
-  .params-field-input:focus { border-color:#185FA5; }
+  .params-field-input:focus { border-color:#18181b; }
   .params-btn-primary {
     width:100%; padding:12px; border:none; border-radius:30px;
-    background:#e8643c; color:#fff; font-size:14px; font-weight:700;
+    background:#18181b; color:#fff; font-size:14px; font-weight:700;
     cursor:pointer; margin-top:16px; transition:background .15s;
   }
-  .params-btn-primary:hover { background:#d4562f; }
+  .params-btn-primary:hover { background:#000; }
   .params-btn-secondary {
     width:100%; padding:12px; border:1.5px solid rgba(0,0,0,0.15);
     border-radius:30px; background:#fff; color:#1a1916; font-size:14px;
@@ -522,7 +523,7 @@
   }
   .np-back {
     display:flex; align-items:center; gap:5px;
-    font-size:12px; color:#e8643c; font-weight:600;
+    font-size:12px; color:#18181b; font-weight:600;
     cursor:pointer; border:none; background:none; padding:0; margin-bottom:16px;
   }
   .np-form { padding:0 24px 24px; }
@@ -532,21 +533,21 @@
     border-radius:8px; font-size:14px; outline:none; font-family:inherit;
     background:#fff; color:#1a1916;
   }
-  .np-input:focus { border-color:#185FA5; }
+  .np-input:focus { border-color:#18181b; }
   .np-select-box {
     background:#fff; border:1px solid rgba(0,0,0,0.12);
     border-radius:8px; padding:12px 14px; margin-bottom:16px;
     display:flex; align-items:flex-start; gap:10px; cursor:pointer;
   }
-  .np-select-box.selected { border-color:#185FA5; background:#e6f1fb; }
+  .np-select-box.selected { border-color:#18181b; background:#f4f4f5; }
   .np-select-title { font-size:13px; font-weight:700; color:#1a1916; }
   .np-select-desc { font-size:11px; color:#a09d96; margin-top:2px; }
   .np-btn {
     width:100%; padding:12px; border-radius:8px; border:none;
-    background:#e8643c; color:#fff; font-size:14px; font-weight:700;
+    background:#18181b; color:#fff; font-size:14px; font-weight:700;
     cursor:pointer; transition:background .15s;
   }
-  .np-btn:hover { background:#d4562f; }
+  .np-btn:hover { background:#000; }
   .np-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
   /* Import FEC step */
@@ -555,7 +556,7 @@
     padding:40px 24px; text-align:center; cursor:pointer;
     background:#fff; transition:all .15s; margin-bottom:16px;
   }
-  .np-upload-zone:hover, .np-upload-zone.drag { border-color:#185FA5; background:#e6f1fb; }
+  .np-upload-zone:hover, .np-upload-zone.drag { border-color:#18181b; background:#f4f4f5; }
   .np-upload-zone p { font-size:13px; color:#6b6960; margin-top:8px; }
   .np-upload-zone small { font-size:11px; color:#a09d96; }
   .np-file-ok {
@@ -601,7 +602,7 @@
         <button class="home-nav-btn" onclick="openPrivacyModal()" title="Vos données restent 100% locales — aucun envoi réseau">🔒 Confidentialité</button>
         <button class="home-nav-btn">Nouveautés</button>
         <button class="home-nav-btn">Ressources</button>
-        <div style="width:32px;height:32px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">EC</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:#18181b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">EC</div>
       </div>
     </div>
   </div>
@@ -631,6 +632,7 @@
     <div class="hs-group-item" onclick="filterGroup('non-classes',this)"><span>Non classés</span><span class="hs-group-count">0</span></div>
     <div class="hs-group-item" onclick="filterGroup('groupe-derkx',this)"><span>Groupe DERKX</span><span class="hs-group-count">1</span></div>
     <div class="hs-group-item" onclick="filterGroup('expand-cpa',this)"><span>Expand CPA</span><span class="hs-group-count">3</span></div>
+    <div class="hs-group-item" onclick="filterGroup('pennylane',this)"><span>Pennylane</span><span class="hs-group-count">0</span></div>
   </div>
 
   <!-- Home Content -->
@@ -671,40 +673,50 @@
         </div>
       </div>
       <div class="dossier-grid">
-        <div class="dossier-card active-card" onclick="openDossier('derkx-holdings')" data-name="groupe derkx holdings" data-id="derkx-holdings">
-          <div class="dc-badge"></div>
+        <div class="dossier-card" onclick="openDossier('derkx-holdings')" data-name="groupe derkx holdings" data-id="derkx-holdings">
           <div class="dc-avatar">GD</div>
-          <div class="dc-name">Groupe DERKX – Holdings</div>
-          <div class="dc-sub">FEC 2025 · analysé</div>
-          <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        </button>
+          <div class="dc-info"><div class="dc-name">Groupe DERKX – Holdings</div><div class="dc-sub">FEC 2025 · analysé</div></div>
+          <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
         </div>
         <div class="dossier-card" onclick="showComingSoon('DERKX Para hôtellerie')" data-name="derkx para hotellerie" data-id="derkx-para">
-          <div class="dc-avatar" style="background:#f2f1ee;color:#6b6960;">DP
+          <div class="dc-avatar">DP</div>
+          <div class="dc-info"><div class="dc-name">Groupe DERKX – Para hôtellerie France</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
-        </div>
-          <div class="dc-name">Groupe DERKX – Para hôtellerie France</div>
-          <div class="dc-sub">Aucun FEC importé</div>
         </div>
         <div class="dossier-card" onclick="showComingSoon('DERKX Bureaux')" data-name="derkx bureaux commerces" data-id="derkx-bureaux">
-          <div class="dc-avatar" style="background:#f2f1ee;color:#6b6960;">DB
+          <div class="dc-avatar">DB</div>
+          <div class="dc-info"><div class="dc-name">Groupe DERKX – Bureaux et Commerces</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
-        </div>
-          <div class="dc-name">Groupe DERKX – Bureaux et Commerces</div>
-          <div class="dc-sub">Aucun FEC importé</div>
         </div>
         <div class="dossier-card" onclick="showComingSoon('DERKX Résidentiel')" data-name="derkx residentiel" data-id="derkx-residentiel">
-          <div class="dc-avatar" style="background:#f2f1ee;color:#6b6960;">DR
+          <div class="dc-avatar">DR</div>
+          <div class="dc-info"><div class="dc-name">Groupe DERKX – Résidentiel France</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
         </div>
-          <div class="dc-name">Groupe DERKX – Résidentiel France</div>
-          <div class="dc-sub">Aucun FEC importé</div>
-        </div>
         <div class="upload-card" onclick="document.getElementById('fecUpload2').click()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Importer un FEC</span>
           <input type="file" id="fecUpload2" accept=".txt,.csv" style="display:none" onchange="handleHomeUpload(this)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Pennylane -->
+    <div class="home-section" id="sec-pennylane" data-group="pennylane">
+      <div class="home-section-header">
+        <div class="home-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          Pennylane
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="home-section-meta">0 dossier</span>
+          <span class="home-section-action" onclick="document.getElementById('hs-import-batch-input').click()">+ Importer plusieurs dossiers</span>
+        </div>
+      </div>
+      <div class="dossier-grid">
+        <div class="upload-card" onclick="document.getElementById('hs-import-batch-input').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Importer des dossiers Pennylane</span>
         </div>
       </div>
     </div>
@@ -723,28 +735,22 @@
       </div>
       <div class="dossier-grid">
         <div class="dossier-card" onclick="showComingSoon('3J Media')" data-id="3j-media" data-name="3j media">
-          <div class="dc-avatar" style="background:#faeeda;color:#854F0B;">3J
+          <div class="dc-avatar">3J</div>
+          <div class="dc-info"><div class="dc-name">3J MEDIA</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
-        </div>
-          <div class="dc-name">3J MEDIA</div>
-          <div class="dc-sub">Aucun FEC importé</div>
         </div>
         <div class="dossier-card" onclick="showComingSoon('Digidom')" data-id="digidom" data-name="digidom">
-          <div class="dc-avatar" style="background:#faeeda;color:#854F0B;">DG
+          <div class="dc-avatar">DG</div>
+          <div class="dc-info"><div class="dc-name">DIGIDOM</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
-        </div>
-          <div class="dc-name">DIGIDOM</div>
-          <div class="dc-sub">Aucun FEC importé</div>
         </div>
         <div class="dossier-card" onclick="showComingSoon('Kronos')" data-id="kronos" data-name="kronos investissement">
-          <div class="dc-avatar" style="background:#faeeda;color:#854F0B;">KR
+          <div class="dc-avatar">KR</div>
+          <div class="dc-info"><div class="dc-name">KRONOS INVESTISSEMENT</div><div class="dc-sub">Aucun FEC importé</div></div>
           <button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
         </div>
-          <div class="dc-name">KRONOS INVESTISSEMENT</div>
-          <div class="dc-sub">Aucun FEC importé</div>
-        </div>
         <div class="upload-card" onclick="document.getElementById('fecUpload3').click()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Importer un FEC</span>
           <input type="file" id="fecUpload3" accept=".txt,.csv" style="display:none" onchange="handleHomeUpload(this)">
         </div>
@@ -820,7 +826,31 @@
         <div id="ppanel-modele" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Modèle — à configurer</div></div>
         <div id="ppanel-theme" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Thème — à configurer</div></div>
         <div id="ppanel-logo" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Logo — à configurer</div></div>
-        <div id="ppanel-integrations" style="display:none;"><div style="font-size:14px;color:#6b6960;padding:40px 0;text-align:center;">Intégrations — à configurer</div></div>
+        <div id="ppanel-integrations" style="display:none;">
+          <div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:6px;">Intégration Pennylane</div>
+          <div style="font-size:12px;color:#a09d96;margin-bottom:20px;max-width:480px;line-height:1.5;">
+            Optionnel. Permet de resynchroniser ce dossier avec Pennylane en un clic. La clé API n'est enregistrée que dans ce navigateur (localStorage) et n'est envoyée qu'à Pennylane — mais elle reste visible par quiconque a accès à cet ordinateur/navigateur (outils développeur). Ne l'activez que si vous en avez accepté le compromis.
+          </div>
+          <div class="params-section">
+            <div class="params-field-label">Clé API Pennylane (cabinet)</div>
+            <input class="params-field-input" id="pennylane-api-key-input" type="password" placeholder="Collez votre clé API Pennylane">
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="params-btn-primary" style="width:auto;padding:8px 18px;" onclick="savePennylaneApiKeyFromInput()">Enregistrer la clé</button>
+              <button class="params-btn-secondary" style="width:auto;margin:0;padding:8px 18px;" onclick="clearPennylaneApiKey()">Effacer</button>
+            </div>
+            <div id="pennylane-key-status" style="font-size:11px;color:#a09d96;margin-top:8px;"></div>
+          </div>
+          <div class="params-section" style="margin-top:20px;">
+            <div class="params-field-label">Identifiant du dossier Pennylane (company_id)</div>
+            <input class="params-field-input" id="pennylane-company-id-input" type="text" placeholder="Ex : 21849549">
+            <div style="font-size:11px;color:#a09d96;margin-top:6px;">Visible dans l'URL du dossier sur Pennylane : app.pennylane.com/companies/<b>21849549</b>/…</div>
+            <button class="params-btn-primary" style="width:auto;padding:8px 18px;margin-top:10px;" onclick="savePennylaneCompanyIdFromInput()">Enregistrer l'identifiant</button>
+          </div>
+          <div class="params-section" style="margin-top:20px;">
+            <button class="params-btn-primary" id="pennylane-sync-btn" style="width:auto;padding:9px 20px;" onclick="syncDossierWithPennylane()">↻ Synchroniser maintenant avec Pennylane</button>
+            <div id="pennylane-sync-status" style="font-size:12px;color:#6b6960;margin-top:10px;"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -872,7 +902,7 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <!-- Currency toggle -->
       <div style="display:flex;background:rgba(255,255,255,.08);border-radius:6px;padding:2px;gap:1px;">
-        <button id="curr-eur"  onclick="setCurrency('eur')"  style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;background:#185FA5;color:#fff;transition:all .12s;">€</button>
+        <button id="curr-eur"  onclick="setCurrency('eur')"  style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;background:#fff;color:#18181b;transition:all .12s;">€</button>
         <button id="curr-keur" onclick="setCurrency('keur')" style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:rgba(255,255,255,.5);transition:all .12s;">K€</button>
         <button id="curr-meur" onclick="setCurrency('meur')" style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:rgba(255,255,255,.5);transition:all .12s;">M€</button>
       </div>
@@ -1257,7 +1287,7 @@
         <button onclick="tmSetProjection(3,this)"
                 style="padding:4px 12px;border-radius:5px;font-size:11px;
                        font-weight:700;border:none;cursor:pointer;
-                       background:#185FA5;color:#fff;">
+                       background:#18181b;color:#fff;">
           3 mois
         </button>
         <button onclick="tmSetProjection(6,this)"
@@ -1283,7 +1313,7 @@
         Optimiste — Accélération encaissements (DSO −15 j)
       </span>
       <span>
-        <span class="tm-proj-dot" style="background:#185FA5;"></span>
+        <span class="tm-proj-dot" style="background:#18181b;"></span>
         Réaliste — Tendance historique
       </span>
       <span>
@@ -1333,10 +1363,10 @@
   </div>
 
   <!-- ══ ANALYSE AUTOMATIQUE (Rapport de gestion) ══ -->
-  <div class="tm-section" style="border-left:4px solid #185FA5;">
-    <div class="tm-section-title" style="color:#185FA5;">
+  <div class="tm-section" style="border-left:4px solid #18181b;">
+    <div class="tm-section-title" style="color:#18181b;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-           stroke="#185FA5" stroke-width="2">
+           stroke="#18181b" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 16v-4M12 8h.01"/>
       </svg>
@@ -1374,7 +1404,7 @@
       <div style="flex:1;padding:24px 32px;overflow-y:auto;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <h1 style="font-size:20px;font-weight:700;color:#1a1916;">Affectation des comptes</h1>
-          <button style="padding:7px 16px;border-radius:6px;border:1.5px solid #e8643c;background:#fff;color:#e8643c;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetMappingToDefault()">Réinitialiser par défaut</button>
+          <button style="padding:7px 16px;border-radius:6px;border:1.5px solid #18181b;background:#fff;color:#18181b;font-size:12px;font-weight:600;cursor:pointer;" onclick="resetMappingToDefault()">Réinitialiser par défaut</button>
         </div>
         <div class="affec-sub-panel active" id="affec-cr">
           <!-- Bandeau orphelins CR -->
@@ -1403,7 +1433,7 @@
                 </div>
               </div>
               <button onclick="runBilanDiagnostic()"
-                style="padding:8px 18px;background:#185FA5;color:#fff;border:none;border-radius:7px;
+                style="padding:8px 18px;background:#18181b;color:#fff;border:none;border-radius:7px;
                        font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -1625,6 +1655,8 @@ function saveActiveDossier() {
     revenueTypes: ACTIVE.revenueTypes||{},
     exercices: exercicesToSave,
     activeExerciceId: ACTIVE.activeExerciceId || null,
+    pennylaneCompanyId: ACTIVE.pennylaneCompanyId || null,
+    lastPennylaneSyncAt: ACTIVE.lastPennylaneSyncAt || null,
     savedAt: Date.now()
   };
   saveStore(store);
@@ -2149,7 +2181,7 @@ function renderDashboard() {
     const chGrps=[{l:'Charges personnel',v:persoTotal},{l:'Achats & ext.',v:achatTotal},{l:'Dotations',v:dotTotal}].filter(g=>g.v>0);
     mkChart('cDo','doughnut',{labels:chGrps.map(g=>g.l),datasets:[{data:chGrps.map(g=>g.v),backgroundColor:['#F5C4B3','#B5D4F4','#FAC775','#D3D1C7'],borderWidth:2,borderColor:'#fff'}]},{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:true,position:'right',labels:{font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>fmtV(c.raw)}}}});
     mkChart('cPC','bar',{labels:pd.labels,datasets:[{label:'Produits',data:pd.ca,backgroundColor:'#9FE1CB',borderRadius:3},{label:'Charges',data:pd.ch,backgroundColor:'#F5C4B3',borderRadius:3}]},{plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>fmtV(c.raw)}}}});
-    mkChart('cTreso','line',{labels:pd.labels,datasets:[{data:pd.treso,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',fill:true,tension:.35,pointRadius:5,pointBackgroundColor:'#185FA5',pointBorderColor:'#fff',pointBorderWidth:2}]},{plugins:{tooltip:{callbacks:{label:c=>fmtV(c.raw)}}}});
+    mkChart('cTreso','line',{labels:pd.labels,datasets:[{data:pd.treso,borderColor:'#18181b',backgroundColor:'rgba(24,24,27,0.08)',fill:true,tension:.35,pointRadius:5,pointBackgroundColor:'#18181b',pointBorderColor:'#fff',pointBorderWidth:2}]},{plugins:{tooltip:{callbacks:{label:c=>fmtV(c.raw)}}}});
     mkChart('cFlux','bar',{labels:pd.labels,datasets:[{label:'Entrants',data:pd.fin,backgroundColor:'#9FE1CB',borderRadius:3},{label:'Sortants',data:pd.fout.map(v=>-v),backgroundColor:'#F5C4B3',borderRadius:3}]},{plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>fmtV(Math.abs(c.raw))}}}});
   } else {
     updateChart('cCA',pd.labels,[{data:pd.ca,backgroundColor:pd.ca.map(v=>v>=0?'#B5D4F4':'#F09595')}]);
@@ -2213,12 +2245,12 @@ function renderImportsTracking() {
       : '—';
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(0,0,0,.06);${isActive ? 'background:#f0f7ff;' : ''}">
       <div>
-        <div style="font-size:14px;font-weight:700;color:#1a1916;">${escHtml(ex.label)}${isActive ? ' <span style="color:#185FA5;font-size:11px;font-weight:700;">· Affiché</span>' : ''}</div>
+        <div style="font-size:14px;font-weight:700;color:#1a1916;">${escHtml(ex.label)}${isActive ? ' <span style="color:#18181b;font-size:11px;font-weight:700;">· Affiché</span>' : ''}</div>
         <div style="font-size:12px;color:#6b6960;margin-top:2px;">Période de ${fmtPeriodDate(ex.periodStart)} à ${fmtPeriodDate(ex.periodEnd)}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:12px;color:#1a1916;font-weight:600;">${escHtml(ex.filename || 'FEC importé')}</div>
-        <div style="font-size:11px;color:#a09d96;margin-top:2px;">Importé le ${dateStr}${!isActive ? ` · <span style="color:#185FA5;cursor:pointer;font-weight:600;" onclick="switchExercice('${ex.id}')">Afficher</span>` : ''}</div>
+        <div style="font-size:11px;color:#a09d96;margin-top:2px;">Importé le ${dateStr}${!isActive ? ` · <span style="color:#18181b;cursor:pointer;font-weight:600;" onclick="switchExercice('${ex.id}')">Afficher</span>` : ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -2865,7 +2897,7 @@ function buildBilanTablesCompare() {
           html += `<tr class="dr-sub" data-parent="${gk}">
             <td colspan="4" style="padding:0">
               <div class="dcs cmp3">
-                <span class="num-code" style="color:#185FA5;font-weight:700;">12x</span>
+                <span class="num-code" style="color:#18181b;font-weight:700;">12x</span>
                 <span class="lbl-muted">Résultat de l'exercice (calculé)</span>
                 <span class="amt-sm ${rnCur >= 0 ? 'pos' : 'neg'}">${fmtV(rnCur)}</span>
                 <span class="amt-sm" style="color:var(--text3);">${fmtV(rnCmp)}</span>
@@ -3043,7 +3075,7 @@ function buildBilanHalf(tbId, groups, side, resultatInjecte) {
         html += `<tr class="dr-sub" data-parent="${gk}">
           <td colspan="2" style="padding:0">
             <div class="dcs no-pct" style="padding-left:24px;">
-              <span class="num-code" style="color:#185FA5;font-weight:700;">12x</span>
+              <span class="num-code" style="color:#18181b;font-weight:700;">12x</span>
               <span class="lbl-muted">Résultat de l'exercice (calculé — compte 12x non affecté)</span>
               <span class="amt-sm ${rnC}">${fmtV(resultatInjecte)}</span>
             </div>
@@ -3081,8 +3113,8 @@ function setCurrency(c) {
   ['eur','keur','meur'].forEach(v => {
     const btn = document.getElementById('curr-'+v);
     if(!btn) return;
-    btn.style.background = v===c ? '#185FA5' : 'transparent';
-    btn.style.color = v===c ? '#fff' : 'rgba(255,255,255,.5)';
+    btn.style.background = v===c ? '#fff' : 'transparent';
+    btn.style.color = v===c ? '#18181b' : 'rgba(255,255,255,.5)';
   });
   renderDashboard();
   // Also re-render mapping chips if visible
@@ -3261,8 +3293,8 @@ function toggleDossierDropdown(){
     const gLabel={'groupe-derkx':'Groupe DERKX','expand-cpa':'Expand CPA','non-classes':'Non classés'}[g]||g;
     html+=`<div style="padding:5px 14px 3px;font-size:10px;font-weight:700;color:#a09d96;text-transform:uppercase;letter-spacing:.06em;">${gLabel}</div>`;
     items.forEach(item=>{
-      html+=`<div onclick="closeDossierDropdown();openDossier('${item.id}')" style="padding:9px 14px;font-size:13px;font-weight:${item.active?'700':'400'};color:${item.active?'#185FA5':'#1a1916'};cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f7f6f3'" onmouseout="this.style.background=''">
-        <span style="width:8px;height:8px;border-radius:50%;background:${item.active?'#185FA5':'transparent'};border:1.5px solid ${item.active?'#185FA5':'#d0cec8'};flex-shrink:0;"></span>${item.name}
+      html+=`<div onclick="closeDossierDropdown();openDossier('${item.id}')" style="padding:9px 14px;font-size:13px;font-weight:${item.active?'700':'400'};color:${item.active?'#18181b':'#1a1916'};cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f7f6f3'" onmouseout="this.style.background=''">
+        <span style="width:8px;height:8px;border-radius:50%;background:${item.active?'#18181b':'transparent'};border:1.5px solid ${item.active?'#18181b':'#d0cec8'};flex-shrink:0;"></span>${item.name}
       </div>`;
     });
   });
@@ -3288,7 +3320,7 @@ function openDossier(id){
   if(d){
     const {exercices, activeExerciceId} = ensureExercices(d);
     const activeEx = exercices[activeExerciceId];
-    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId,ledger:activeEx.ledger||null};
+    ACTIVE={id:d.id,name:d.name,group:d.group,bal:activeEx.bal||{},libs:activeEx.libs||{},months:activeEx.months||{},nbLines:activeEx.nbLines||0,periodStart:activeEx.periodStart||'',periodEnd:activeEx.periodEnd||'',filename:activeEx.filename||'',mps:d.mps||null,isRDCompany:d.isRDCompany||false,revenueTypes:d.revenueTypes||{},savedAt:d.savedAt,exercices,activeExerciceId,ledger:activeEx.ledger||null,pennylaneCompanyId:d.pennylaneCompanyId||null,lastPennylaneSyncAt:d.lastPennylaneSyncAt||null};
     // Force regenerate mapping if version is outdated or mapping has no subs defined
     const mpsOutdated = !d.mps_version || d.mps_version < MPS_VERSION || !hasSubs(d.mps);
     if(!ACTIVE.mps || mpsOutdated){
@@ -3349,7 +3381,7 @@ function goHome(){
 // ── TOAST ──
 function toast(msg,isErr){
   const t=document.createElement('div');
-  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${isErr?'#A32D2D':'#0f1923'};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;font-weight:500;`;
+  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${isErr?'#A32D2D':'#141414'};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;font-weight:500;`;
   t.textContent=msg;document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2500);
 }
@@ -3531,7 +3563,7 @@ function openAjouterExercice(){
 function showNpStep(step){
   closeNpModal();
   const ov=document.createElement('div');ov.className='np-overlay';ov.id='np-overlay';ov.addEventListener('click',closeNpModal);
-  if(step===1){ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="closeNpModal()">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:20px;">Nouveau projet</div></div><div class="np-form"><label class="np-label" for="np-name">Nom du projet</label><input class="np-input" id="np-name" type="text" placeholder="Ex: Société Dupont" style="margin-bottom:20px;"><label class="np-label" style="margin-bottom:8px;display:block;">Format</label><div class="np-select-box selected"><div><div class="np-select-title">Diagnostic financier <span style="color:#a09d96;font-weight:400;">(par défaut)</span></div><div class="np-select-desc">Format de présentation adapté pour un diagnostic complet des données financières</div></div></div><div style="font-size:12px;color:#185FA5;cursor:pointer;margin-bottom:20px;">Paramètres avancés</div><button class="np-btn" onclick="npGoStep2()">Créer</button></div></div>`;
+  if(step===1){ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="closeNpModal()">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:20px;">Nouveau projet</div></div><div class="np-form"><label class="np-label" for="np-name">Nom du projet</label><input class="np-input" id="np-name" type="text" placeholder="Ex: Société Dupont" style="margin-bottom:20px;"><label class="np-label" style="margin-bottom:8px;display:block;">Format</label><div class="np-select-box selected"><div><div class="np-select-title">Diagnostic financier <span style="color:#a09d96;font-weight:400;">(par défaut)</span></div><div class="np-select-desc">Format de présentation adapté pour un diagnostic complet des données financières</div></div></div><div style="font-size:12px;color:#18181b;cursor:pointer;margin-bottom:20px;">Paramètres avancés</div><button class="np-btn" onclick="npGoStep2()">Créer</button></div></div>`;
   } else {
     const name=_npNewName||'Nouveau dossier';
     ov.innerHTML=`<div class="np-modal" onclick="event.stopPropagation()"><div class="np-modal-hd"><button class="np-back" onclick="showNpStep(1)">← Retour</button><div style="font-size:18px;font-weight:700;color:#1a1916;margin-bottom:4px;">${escHtml(name)}</div><div style="font-size:12px;color:#a09d96;margin-bottom:20px;">Import de FEC (recommandé) ou Grand Livre</div></div><div class="np-form"><div class="np-upload-zone" id="np-drop-zone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="npHandleDrop(event)" onclick="document.getElementById('np-file-input').click()"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a09d96" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg><p>Glissez votre FEC ici ou cliquez</p><small>Format .txt, .csv (séparateur tabulation)</small><input type="file" id="np-file-input" accept=".txt,.csv,.TXT,.CSV" style="display:none" onchange="npHandleFile(this)"></div><div id="np-file-status"></div><button class="np-btn" id="np-confirm-btn" onclick="npConfirm()" disabled>Analyser</button></div></div>`;
@@ -3671,15 +3703,15 @@ function handleHomeUpload(input){if(input.files[0]){_npFile=input.files[0];_npNe
 const GEAR_BTN=`<button class="card-gear" onclick="event.stopPropagation();openDossierParams(this.closest('[data-id]'))" title="Paramètres"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>`;
 function addDossierCard(name,group,id,subtitle){
   const initials=name.split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
-  const secId=group==='groupe-derkx'?'sec-groupe-derkx':group==='expand-cpa'?'sec-expand-cpa':'sec-non-classes';
+  const secId=group==='groupe-derkx'?'sec-groupe-derkx':group==='expand-cpa'?'sec-expand-cpa':group==='pennylane'?'sec-pennylane':'sec-non-classes';
   const sec=document.getElementById(secId);if(!sec)return;const grid=sec.querySelector('.dossier-grid');if(!grid)return;
   if(!id)id='dossier-'+Date.now();
-  const card=document.createElement('div');card.className='dossier-card active-card';card.dataset.name=name.toLowerCase();card.dataset.id=id;
-  card.style.cssText='opacity:0;transform:scale(0.9);';
-  card.innerHTML=`<div class="dc-badge"></div><div class="dc-avatar" style="background:rgba(255,255,255,.12);color:#fff;">${escHtml(initials)}</div><div class="dc-name">${escHtml(name)}</div><div class="dc-sub">${escHtml(subtitle||'FEC importé')}</div>${GEAR_BTN}`;
+  const card=document.createElement('div');card.className='dossier-card';card.dataset.name=name.toLowerCase();card.dataset.id=id;
+  card.style.cssText='opacity:0;';
+  card.innerHTML=`<div class="dc-avatar">${escHtml(initials)}</div><div class="dc-info"><div class="dc-name">${escHtml(name)}</div><div class="dc-sub">${escHtml(subtitle||'FEC importé')}</div></div>${GEAR_BTN}`;
   card.onclick=()=>openDossier(id);
   const uc=grid.querySelector('.upload-card');grid.insertBefore(card,uc);
-  setTimeout(()=>{card.style.cssText='transition:opacity .3s,transform .3s;';},50);toast(`Dossier "${name}" créé`);
+  setTimeout(()=>{card.style.cssText='transition:opacity .3s;';},50);toast(`Dossier "${name}" créé`);
 }
 
 // ── PARAMS PAGE ──
@@ -3713,6 +3745,148 @@ function deleteFromParams(){
   setTimeout(()=>{_currentParamsCard.remove();closeParamsPage();toast(`"${name}" supprimé`);_currentParamsCard=null;},300);
 }
 
+// ── INTÉGRATION PENNYLANE (synchronisation en un clic) ──────────────────
+// La clé API est stockée en clair dans localStorage de ce navigateur —
+// choix explicite de l'utilisateur, en connaissance du compromis de
+// sécurité (cf. AUDIT.md §(r)) : elle n'est jamais envoyée qu'à
+// app.pennylane.com, mais reste lisible par quiconque a accès à ce
+// poste/navigateur (outils développeur).
+const PENNYLANE_KEY_STORAGE = 'fec_analyse_pennylane_key';
+function getPennylaneApiKey() { try { return localStorage.getItem(PENNYLANE_KEY_STORAGE) || ''; } catch (e) { return ''; } }
+function savePennylaneApiKeyFromInput() {
+  const val = (document.getElementById('pennylane-api-key-input')?.value || '').trim();
+  const status = document.getElementById('pennylane-key-status');
+  if (!val) { if (status) status.textContent = 'Aucune clé saisie.'; return; }
+  try { localStorage.setItem(PENNYLANE_KEY_STORAGE, val); }
+  catch (e) { toast('Impossible d’enregistrer la clé (stockage local indisponible)', true); return; }
+  if (status) status.textContent = '✓ Clé enregistrée dans ce navigateur.';
+  toast('Clé API Pennylane enregistrée');
+}
+function clearPennylaneApiKey() {
+  try { localStorage.removeItem(PENNYLANE_KEY_STORAGE); } catch (e) {}
+  const input = document.getElementById('pennylane-api-key-input'); if (input) input.value = '';
+  const status = document.getElementById('pennylane-key-status'); if (status) status.textContent = 'Clé supprimée.';
+  toast('Clé API Pennylane supprimée');
+}
+function savePennylaneCompanyIdFromInput() {
+  if (!_currentParamsCard) return;
+  const id = _currentParamsCard.dataset.id;
+  const val = (document.getElementById('pennylane-company-id-input')?.value || '').trim();
+  const store = loadStore();
+  if (store[id]) { store[id].pennylaneCompanyId = val || null; saveStore(store); }
+  if (ACTIVE.id === id) ACTIVE.pennylaneCompanyId = val || null;
+  toast(val ? `Dossier relié à Pennylane (company_id ${val})` : 'Identifiant Pennylane retiré');
+}
+
+/**
+ * syncDossierWithPennylane()
+ * Redemande un export FEC frais à Pennylane pour ce dossier (même
+ * endpoint que le script d'automatisation initial, cf. scripts/
+ * pennylane-sync/), l'attend, le télécharge et le reparse avec
+ * parseFECFile() — comme un import manuel, mais en un clic.
+ *
+ * LIMITE CONNUE, NON VÉRIFIABLE DEPUIS CE POSTE DE DÉVELOPPEMENT :
+ * l'API Pennylane est documentée comme une API externe pensée pour des
+ * intégrations serveur à serveur. Si elle applique une politique CORS
+ * stricte, cet appel échouera systématiquement depuis un navigateur, quel
+ * que soit le code — ce n'est pas un bug de cette fonction. Le message
+ * d'erreur ci-dessous tente de distinguer ce cas.
+ */
+async function syncDossierWithPennylane() {
+  if (!_currentParamsCard) return;
+  const id = _currentParamsCard.dataset.id;
+  const store = loadStore();
+  const d = store[id];
+  if (!d) { toast('Dossier introuvable', true); return; }
+  const apiKey = getPennylaneApiKey();
+  const companyId = d.pennylaneCompanyId;
+  const statusEl = document.getElementById('pennylane-sync-status');
+  const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+  if (!apiKey) { toast('Renseignez d’abord votre clé API Pennylane', true); return; }
+  if (!companyId) { toast('Renseignez d’abord l’identifiant Pennylane (company_id) de ce dossier', true); return; }
+
+  const btn = document.getElementById('pennylane-sync-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Synchronisation en cours…'; }
+
+  const periodStart = d.periodStart && d.periodStart.length === 6
+    ? `${d.periodStart.slice(0, 4)}-${d.periodStart.slice(4, 6)}-01`
+    : `${new Date().getFullYear()}-01-01`;
+  const periodEnd = new Date().toISOString().slice(0, 10);
+  const READY = ['ready', 'done', 'completed', 'succeeded'];
+  const FAILED = ['failed', 'error', 'cancelled'];
+
+  try {
+    setStatus('Demande d’export FEC à Pennylane…');
+    const createRes = await fetch('https://app.pennylane.com/api/external/v2/exports/fecs', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_id: Number(companyId), export_type: 'fec', period_start: periodStart, period_end: periodEnd }),
+    });
+    if (!createRes.ok) throw new Error(`Pennylane a refusé la demande (HTTP ${createRes.status})`);
+    const created = await createRes.json();
+    const exportId = created.id;
+    if (!exportId) throw new Error('Réponse Pennylane inattendue (pas d’identifiant d’export)');
+
+    setStatus('Export en cours de génération chez Pennylane…');
+    const deadline = Date.now() + 3 * 60 * 1000;
+    let statusResp;
+    for (;;) {
+      if (Date.now() > deadline) throw new Error('Délai dépassé (export non prêt après 3 min)');
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://app.pennylane.com/api/external/v2/exports/fecs/${exportId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!pollRes.ok) throw new Error(`Erreur lors du suivi de l’export (HTTP ${pollRes.status})`);
+      statusResp = await pollRes.json();
+      if (READY.includes(statusResp.status)) break;
+      if (FAILED.includes(statusResp.status)) throw new Error('L’export a échoué côté Pennylane');
+      setStatus(`Génération en cours… (statut : ${statusResp.status || 'inconnu'})`);
+    }
+
+    const downloadUrl = statusResp.download_url || statusResp.file_url || statusResp.url
+      || (statusResp.file && statusResp.file.url) || (statusResp.export && statusResp.export.url)
+      || (statusResp.data && (statusResp.data.download_url || statusResp.data.url));
+    if (!downloadUrl) throw new Error('Impossible de trouver le fichier généré dans la réponse Pennylane');
+
+    setStatus('Téléchargement du fichier FEC…');
+    const isPennylaneUrl = downloadUrl.includes('pennylane.com');
+    const fileRes = await fetch(downloadUrl, isPennylaneUrl ? { headers: { 'Authorization': `Bearer ${apiKey}` } } : {});
+    if (!fileRes.ok) throw new Error(`Téléchargement du FEC échoué (HTTP ${fileRes.status})`);
+    const buffer = await fileRes.arrayBuffer();
+
+    setStatus('Analyse du FEC…');
+    const text = decodeFecBuffer(buffer);
+    const parsed = parseFECFile(text);
+    if (!parsed) throw new Error('Le fichier reçu ne ressemble pas à un FEC valide');
+
+    d.bal = parsed.bal; d.libs = parsed.libs; d.months = parsed.months;
+    d.nbLines = parsed.nbLines; d.periodStart = parsed.periodStart; d.periodEnd = parsed.periodEnd;
+    d.filename = `Pennylane_sync_${parsed.periodStart}_${parsed.periodEnd}`;
+    d.lastPennylaneSyncAt = Date.now();
+    saveStore(store);
+
+    if (ACTIVE.id === id) {
+      ACTIVE.bal = d.bal; ACTIVE.libs = d.libs; ACTIVE.months = d.months; ACTIVE.nbLines = d.nbLines;
+      ACTIVE.periodStart = d.periodStart; ACTIVE.periodEnd = d.periodEnd; ACTIVE.filename = d.filename;
+      ACTIVE.ledger = parsed.ledger;
+      autoAffectOrphans();
+      renderDashboard();
+    }
+
+    setStatus(`✓ Synchronisé — ${parsed.nbLines} écritures, période ${parsed.periodStart} → ${parsed.periodEnd}`);
+    toast('Dossier resynchronisé avec Pennylane');
+  } catch (err) {
+    console.error('[FEC Analyse] Échec de la synchronisation Pennylane :', err);
+    const corsHint = (err instanceof TypeError)
+      ? ' — Pennylane bloque peut-être les appels directs depuis un navigateur (CORS) ; ce n’est pas réparable côté code.'
+      : '';
+    setStatus('✗ Échec : ' + (err && err.message ? err.message : 'erreur inconnue') + corsHint);
+    toast('Échec de la synchronisation Pennylane', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Synchroniser maintenant avec Pennylane'; }
+  }
+}
+
 // ── MAPPING ENGINE (simplified, relies on ACTIVE.mps) ──
 function showAffecPanel(p,el){document.querySelectorAll('.affec-sub-panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.affec-nav').forEach(x=>x.classList.remove('active'));document.getElementById('affec-'+p)?.classList.add('active');if(el)el.classList.add('active');}
 
@@ -3725,7 +3899,7 @@ function renderMapping(key){
   if(!ACTIVE.mps)ACTIVE.mps={cr:defaultMPS_CR(ACTIVE.bal),bilan:defaultMPS_Bilan(ACTIVE.bal)};
   const groups=ACTIVE.mps[key]||[];
   let h=`<div style="background:#fff;border:1px solid rgba(0,0,0,0.1);border-radius:10px;overflow:hidden;">`;
-  h+=`<div style="background:#0f1923;padding:11px 16px;font-size:13px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:space-between;">
+  h+=`<div style="background:#141414;padding:11px 16px;font-size:13px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:space-between;">
     <span>${key==='cr'?'Mapping du compte de résultat':'Mapping du bilan'}</span>
     <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,.45);display:flex;align-items:center;gap:5px;">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3736,7 +3910,7 @@ function renderMapping(key){
   </div>`;
   groups.forEach(g=>{
     const isSub=g.type==='subtotal',isTotal=g.type==='total';
-    const bg=isTotal?'#0f1923':isSub?'#edecea':'#fff',clr=isTotal?'#fff':'#1a1916',fw=(isSub||isTotal)?'700':'500';
+    const bg=isTotal?'#141414':isSub?'#edecea':'#fff',clr=isTotal?'#fff':'#1a1916',fw=(isSub||isTotal)?'700':'500';
     const hasSubs=g.subs&&g.subs.length>0,unassigned=g.accounts||[];
     h+=`<div id="mpg-${key}-${g.id}" style="border-bottom:1px solid rgba(0,0,0,0.07);">`;
     h+=`<div style="display:flex;align-items:center;padding:9px 12px;background:${bg};gap:6px;cursor:pointer;" onclick="mpToggle('${key}','${g.id}',event)">`;
@@ -3784,10 +3958,10 @@ function renderMapping(key){
   if(key==='cr'){renderDashboard();}
   if(key==='bilan'){buildBilanTables();}
 }
-function chipHtml(num,key,gid,subId){const sid=subId||'';return `<span draggable="true" ondragstart="mpChipDragStart(event,'${num}','${key}','${gid}','${sid}')" ondragend="mpChipDragEnd(event)" title="${libOf(num)} · ${fmtV(balOf(num))}" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#e6f1fb;color:#185FA5;font-family:monospace;cursor:grab;user-select:none;border:1.5px solid transparent;">${num}<span onclick="event.stopPropagation();mpRemoveAccount('${key}','${gid}','${sid}','${num}')" style="font-size:12px;color:#a09d96;cursor:pointer;font-weight:400;line-height:1;">×</span></span>`;}
+function chipHtml(num,key,gid,subId){const sid=subId||'';return `<span draggable="true" ondragstart="mpChipDragStart(event,'${num}','${key}','${gid}','${sid}')" ondragend="mpChipDragEnd(event)" title="${libOf(num)} · ${fmtV(balOf(num))}" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#f4f4f5;color:#18181b;font-family:monospace;cursor:grab;user-select:none;border:1.5px solid transparent;">${num}<span onclick="event.stopPropagation();mpRemoveAccount('${key}','${gid}','${sid}','${num}')" style="font-size:12px;color:#a09d96;cursor:pointer;font-weight:400;line-height:1;">×</span></span>`;}
 function mpToggle(key,gid,e){if(e&&e.target.closest('button,span[onclick]'))return;const b=document.getElementById(`mpb-${key}-${gid}`);const c=document.getElementById(`chev-${key}-${gid}`);if(!b)return;const isOpen=b.style.display!=='none';b.style.display=isOpen?'none':'block';if(c)c.style.transform=isOpen?'':'rotate(90deg)';const k2=`mpb-${key}-${gid}`;isOpen?_openGroups.delete(k2):_openGroups.add(k2);}
 function mpOpenGroup(key,gid){const b=document.getElementById(`mpb-${key}-${gid}`);const c=document.getElementById(`chev-${key}-${gid}`);if(b){b.style.display='block';_openGroups.add(`mpb-${key}-${gid}`);}if(c)c.style.transform='rotate(90deg)';}
-function mpRename(e,key,gid,subId){e.stopPropagation();const span=e.target;const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const orig=subId?g.subs.find(s=>s.id===subId)?.label:g.label;const inp=document.createElement('input');inp.value=orig||'';inp.style.cssText='border:none;border-bottom:2px solid #185FA5;outline:none;font-size:inherit;font-weight:inherit;color:#1a1916;background:transparent;width:200px;font-family:inherit;';span.replaceWith(inp);inp.focus();inp.select();const save=()=>{const v=inp.value.trim()||orig;if(subId){const s=g.subs.find(x=>x.id===subId);if(s)s.label=v;}else g.label=v;renderMapping(key);schedSave();};inp.addEventListener('blur',save);inp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();inp.blur();}if(ev.key==='Escape'){renderMapping(key);}});}
+function mpRename(e,key,gid,subId){e.stopPropagation();const span=e.target;const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const orig=subId?g.subs.find(s=>s.id===subId)?.label:g.label;const inp=document.createElement('input');inp.value=orig||'';inp.style.cssText='border:none;border-bottom:2px solid #18181b;outline:none;font-size:inherit;font-weight:inherit;color:#1a1916;background:transparent;width:200px;font-family:inherit;';span.replaceWith(inp);inp.focus();inp.select();const save=()=>{const v=inp.value.trim()||orig;if(subId){const s=g.subs.find(x=>x.id===subId);if(s)s.label=v;}else g.label=v;renderMapping(key);schedSave();};inp.addEventListener('blur',save);inp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();inp.blur();}if(ev.key==='Escape'){renderMapping(key);}});}
 function mpAddSub(key,gid){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;if(!g.subs)g.subs=[];g.subs.push({id:'s'+Date.now(),label:'Nouvelle sous-catégorie',accounts:[]});mpOpenGroup(key,gid);renderMapping(key);}
 function mpDeleteGroup(key,gid){if(!confirm('Supprimer ce poste ?'))return;ACTIVE.mps[key]=ACTIVE.mps[key].filter(g=>g.id!==gid);renderMapping(key);}
 function mpDeleteSub(key,gid,subId){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(g)g.subs=g.subs.filter(s=>s.id!==subId);renderMapping(key);}
@@ -3806,7 +3980,7 @@ function resetMappingToDefault(){
 }
 function mpChipDragStart(e,num,key,gid,subId){const r=(subId&&subId!=='__staging__'&&subId!=='null'&&subId!=='')?subId:null;_drag={num,key,gid,subId:r};e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',num);setTimeout(()=>{if(e.target)e.target.style.opacity='0.35';},0);}
 function mpChipDragEnd(e){if(e.target)e.target.style.opacity='';_drag=null;document.querySelectorAll('.mp-drophl').forEach(el=>{el.style.outline='';el.style.background='';el.classList.remove('mp-drophl');});}
-function mpChipZoneDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.style.outline='2px dashed #185FA5';e.currentTarget.style.background='#e6f1fb';e.currentTarget.classList.add('mp-drophl');}
+function mpChipZoneDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.style.outline='2px dashed #18181b';e.currentTarget.style.background='#f4f4f5';e.currentTarget.classList.add('mp-drophl');}
 function mpChipZoneDragLeave(e){e.currentTarget.style.outline='';e.currentTarget.style.background='';e.currentTarget.classList.remove('mp-drophl');}
 function mpChipZoneDrop(e,key,gid,subId){e.preventDefault();e.stopPropagation();mpChipZoneDragLeave(e);if(!_drag)return;_moveAcc(key,gid,(subId&&subId!=='__staging__'&&subId!=='null')?subId:null);}
 function mpRowDragOver(e){e.preventDefault();e.currentTarget.style.background='#dbeeff';}
@@ -3885,7 +4059,7 @@ function orphanChipHtml(num) {
   </span>`;
 }
 let _pCtx2=null,_pSel2=new Set();
-function mpAddAccountsPicker(key,gid,subId){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const target=(subId&&subId!=='null')?g.subs.find(x=>x.id===subId):g;if(!target)return;_pCtx2={key,gid,subId:(subId&&subId!=='null')?subId:null};_pSel2=new Set(target.accounts||[]);const elsewhere=usedElsewhere(key,gid,_pCtx2.subId);const ov=document.createElement('div');ov.id='mp-picker';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;';ov.addEventListener('click',mpClosePicker);ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:12px;width:540px;max-height:600px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.22);"><div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><div><div style="font-size:14px;font-weight:700;color:#1a1916;">Affecter des comptes</div><div style="font-size:11px;color:#a09d96;margin-top:2px;">${target.label}</div></div><button onclick="mpClosePicker()" style="width:28px;height:28px;border-radius:6px;border:none;background:none;cursor:pointer;font-size:20px;color:#6b6960;">×</button></div><div style="padding:10px 20px;border-bottom:1px solid rgba(0,0,0,0.06);"><input id="mp-psearch" type="text" placeholder="Numéro ou libellé…" oninput="mpFilterPicker(this.value)" style="width:100%;padding:8px 12px;border:1px solid rgba(0,0,0,0.14);border-radius:8px;font-size:13px;outline:none;font-family:inherit;"></div><div id="mp-plist" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px;border-top:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><span id="mp-pcount" style="font-size:12px;color:#a09d96;"></span><div style="display:flex;gap:8px;"><button onclick="mpClosePicker()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Annuler</button><button onclick="mpSavePicker()" style="padding:8px 18px;border-radius:7px;border:none;background:#185FA5;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Valider</button></div></div></div>`;
+function mpAddAccountsPicker(key,gid,subId){const g=ACTIVE.mps[key].find(x=>x.id===gid);if(!g)return;const target=(subId&&subId!=='null')?g.subs.find(x=>x.id===subId):g;if(!target)return;_pCtx2={key,gid,subId:(subId&&subId!=='null')?subId:null};_pSel2=new Set(target.accounts||[]);const elsewhere=usedElsewhere(key,gid,_pCtx2.subId);const ov=document.createElement('div');ov.id='mp-picker';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;';ov.addEventListener('click',mpClosePicker);ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:12px;width:540px;max-height:600px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.22);"><div style="padding:16px 20px;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><div><div style="font-size:14px;font-weight:700;color:#1a1916;">Affecter des comptes</div><div style="font-size:11px;color:#a09d96;margin-top:2px;">${target.label}</div></div><button onclick="mpClosePicker()" style="width:28px;height:28px;border-radius:6px;border:none;background:none;cursor:pointer;font-size:20px;color:#6b6960;">×</button></div><div style="padding:10px 20px;border-bottom:1px solid rgba(0,0,0,0.06);"><input id="mp-psearch" type="text" placeholder="Numéro ou libellé…" oninput="mpFilterPicker(this.value)" style="width:100%;padding:8px 12px;border:1px solid rgba(0,0,0,0.14);border-radius:8px;font-size:13px;outline:none;font-family:inherit;"></div><div id="mp-plist" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px;border-top:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;"><span id="mp-pcount" style="font-size:12px;color:#a09d96;"></span><div style="display:flex;gap:8px;"><button onclick="mpClosePicker()" style="padding:8px 18px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#6b6960;font-size:13px;font-weight:600;cursor:pointer;">Annuler</button><button onclick="mpSavePicker()" style="padding:8px 18px;border-radius:7px;border:none;background:#18181b;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Valider</button></div></div></div>`;
   document.body.appendChild(ov);mpFilterPicker('');setTimeout(()=>document.getElementById('mp-psearch')?.focus(),40);}
 function usedElsewhere(key,excGid,excSubId){const used=new Set();(ACTIVE.mps[key]||[]).forEach(g=>{(g.accounts||[]).forEach(n=>{if(g.id!==excGid)used.add(n);});(g.subs||[]).forEach(s=>{if(!(g.id===excGid&&s.id===excSubId))(s.accounts||[]).forEach(n=>used.add(n));});});return used;}
 function mpFilterPicker(q){
@@ -3903,10 +4077,10 @@ function mpFilterPicker(q){
       'cursor:'+(used?'not-allowed':'pointer'),
       'border-bottom:1px solid rgba(0,0,0,0.04)',
       used?'opacity:.4':'',
-      'background:'+(sel?'#e6f1fb':'')
+      'background:'+(sel?'#f4f4f5':'')
     ].filter(Boolean).join(';');
-    const chkBg=sel?'#185FA5':'transparent';
-    const chkBorder=sel?'#185FA5':'rgba(0,0,0,0.2)';
+    const chkBg=sel?'#18181b':'transparent';
+    const chkBorder=sel?'#18181b':'rgba(0,0,0,0.2)';
     const valColor=v>=0?'#3B6D11':'#A32D2D';
     const valHtml=used
       ? '<span style="font-size:10px;color:#a09d96;">Dejà affecté</span>'
@@ -3915,7 +4089,7 @@ function mpFilterPicker(q){
     const clickAttr=used?'':'onclick="mpTogglePick2('+JSON.stringify(n)+')"';
     const bgH=sel?'#d0e8f7':'#f7f6f3';
     const hoverAttr='';
-      +'<span style="font-family:monospace;font-size:12px;font-weight:700;color:#185FA5;min-width:90px;">'+n+'</span>'
+      +'<span style="font-family:monospace;font-size:12px;font-weight:700;color:#18181b;min-width:90px;">'+n+'</span>'
       +'<span style="font-size:12px;color:#1a1916;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+lib+'</span>'
       +valHtml+checkHtml+'</div>';
   }).join('');
@@ -4197,7 +4371,7 @@ function tmCompute(mos) {
    * Ne conserver que les charges ayant un impact réel sur la trésorerie.
    */
   const CHARGES_CATEGORIES = [
-    { id:'sal',  label:'Salaires et rémunérations',        prefixes:['6411','6412','6413','6414'], color:'#185FA5' },
+    { id:'sal',  label:'Salaires et rémunérations',        prefixes:['6411','6412','6413','6414'], color:'#18181b' },
     { id:'cs',   label:'Charges sociales patronales',      prefixes:['645','646','647','648'],      color:'#7B6CF4' },
     { id:'loc',  label:'Loyers et charges locatives',      prefixes:['612','613','6132','6135'],    color:'#FAC775' },
     { id:'hon',  label:'Honoraires et sous-traitance',     prefixes:['622','6226','611'],           color:'#F5C4B3' },
@@ -4352,7 +4526,7 @@ function tmRenderPeriodLabel() {
   const fmt   = mo => `${mo.slice(4).padStart(2,'0')}/${mo.slice(0,4)}`;
 
   const profileBadge = d.isRD
-    ? ' · <span style="background:#e6f1fb;color:#185FA5;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">Société R&D</span>'
+    ? ' · <span style="background:#f4f4f5;color:#18181b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">Société R&D</span>'
     : d.isHolding
     ? ' · <span style="background:#f3f0ff;color:#7B6CF4;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">Holding</span>'
     : '';
@@ -4563,17 +4737,17 @@ function tmRenderTresoChart() {
       labels: d.labels,
       datasets: [{
         data: d.treso_arr,
-        borderColor: '#185FA5',
+        borderColor: '#18181b',
         backgroundColor: ctx => {
           const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 200);
-          g.addColorStop(0, 'rgba(24,95,165,0.12)');
-          g.addColorStop(1, 'rgba(24,95,165,0)');
+          g.addColorStop(0, 'rgba(24,24,27,0.12)');
+          g.addColorStop(1, 'rgba(24,24,27,0)');
           return g;
         },
         fill: true,
         tension: .35,
         pointRadius: 4,
-        pointBackgroundColor: d.treso_arr.map(v => v >= 0 ? '#185FA5' : '#A32D2D'),
+        pointBackgroundColor: d.treso_arr.map(v => v >= 0 ? '#18181b' : '#A32D2D'),
         pointBorderColor: '#fff',
         pointBorderWidth: 2,
         borderWidth: 2.5,
@@ -4678,7 +4852,7 @@ function tmRenderFluxChart() {
           label: 'Flux net',
           data: d.net_arr,
           type: 'line',
-          borderColor: '#185FA5',
+          borderColor: '#18181b',
           backgroundColor: 'transparent',
           borderWidth: 2,
           pointRadius: 3,
@@ -4855,10 +5029,10 @@ function tmBuildProjectionChart(d, nMois) {
         {
           label: 'Réaliste',
           data: dataRea,
-          borderColor: '#185FA5',
-          backgroundColor: 'rgba(24,95,165,0.07)',
+          borderColor: '#18181b',
+          backgroundColor: 'rgba(24,24,27,0.07)',
           fill: true, tension: .4, borderWidth: 2.5,
-          pointRadius: 5, pointBackgroundColor: '#185FA5',
+          pointRadius: 5, pointBackgroundColor: '#18181b',
         },
         {
           label: `Pessimiste (DSO +${DSO_SCENARIO_DAYS} j)`,
@@ -4901,7 +5075,7 @@ function tmSetProjection(n, btn) {
     b.style.color = '#6b6960';
     b.style.border = '1px solid rgba(0,0,0,.12)';
   });
-  btn.style.background = '#185FA5';
+  btn.style.background = '#18181b';
   btn.style.color = '#fff';
   btn.style.border = 'none';
   tmBuildProjectionChart(TM.data, n);
@@ -4961,7 +5135,7 @@ function tmRenderBudgetTable() {
           <th style="text-align:left;">Mois</th>
           <th style="color:#3B6D11;">Encaissements</th>
           <th style="color:#A32D2D;">Décaissements</th>
-          <th style="color:#185FA5;">Flux net</th>
+          <th style="color:#18181b;">Flux net</th>
           <th>Solde prévisionnel</th>
           <th style="text-align:center;">Statut</th>
         </tr>
@@ -4985,7 +5159,7 @@ function tmRenderBudgetTable() {
           <td>Total exercice</td>
           <td style="color:#3B6D11;">${fmtK(rows.reduce((s,r)=>s+r.pEnc,0))}</td>
           <td style="color:#A32D2D;">(${fmtK(rows.reduce((s,r)=>s+r.pDec,0))})</td>
-          <td style="color:#185FA5;">${fmtK(rows.reduce((s,r)=>s+r.pNet,0))}</td>
+          <td style="color:#18181b;">${fmtK(rows.reduce((s,r)=>s+r.pNet,0))}</td>
           <td>${fmtK(rows[rows.length-1].solde)}</td>
           <td></td>
         </tr>
@@ -5014,7 +5188,7 @@ function tmRenderTopProduits() {
           <div style="display:flex;align-items:center;padding:7px 0;gap:8px;
                       border-bottom:1px solid rgba(0,0,0,.05);">
             <div style="font-size:10px;font-family:monospace;font-weight:700;
-                        color:#185FA5;min-width:80px;">${p.compte}</div>
+                        color:#18181b;min-width:80px;">${p.compte}</div>
             <div style="font-size:11px;color:#1a1916;flex:1;overflow:hidden;
                         text-overflow:ellipsis;white-space:nowrap;">${p.lib}</div>
             <div style="width:40px;height:4px;background:#f0efed;
@@ -5042,7 +5216,7 @@ function tmRenderInsights() {
   const el = document.getElementById('tm-insights');
   if (!el) return;
 
-  const C = { ok:'#3B6D11', warn:'#B07A00', danger:'#A32D2D', info:'#185FA5' };
+  const C = { ok:'#3B6D11', warn:'#B07A00', danger:'#A32D2D', info:'#18181b' };
   const notes = [];
 
   // ── NOTE 1 : Situation de trésorerie globale ──
@@ -5760,7 +5934,7 @@ function _renderOrphanBlock(elId, orphans, dupes, key, bal) {
       const vc = v >= 0 ? '#3B6D11' : '#A32D2D';
       return `<tr>
         <td style="padding:4px 10px 4px 0;font-family:monospace;font-weight:700;
-                   color:#185FA5;white-space:nowrap;">${n}</td>
+                   color:#18181b;white-space:nowrap;">${n}</td>
         <td style="padding:4px 8px;color:#1a1916;max-width:260px;
                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lib(n)}</td>
         <td style="padding:4px 0 4px 8px;text-align:right;font-weight:600;
@@ -5792,7 +5966,7 @@ function _renderOrphanBlock(elId, orphans, dupes, key, bal) {
           </div>
         </div>
         <button onclick="autoAffectOrphans()"
-          style="padding:8px 18px;background:#185FA5;color:#fff;border:none;
+          style="padding:8px 18px;background:#18181b;color:#fff;border:none;
                  border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
                  white-space:nowrap;flex-shrink:0;">
           Affecter automatiquement
@@ -6743,7 +6917,7 @@ function runBilanDiagnostic() {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
       ${[
-        { label:'Actif mappé',   val:actifMasse,   c:'#185FA5' },
+        { label:'Actif mappé',   val:actifMasse,   c:'#18181b' },
         { label:'Passif mappé',  val:passifMasse,  c:'#7B6CF4' },
         { label:'Résultat CR',   val:resultatMasse,c:resultatMasse>=0?'#3B6D11':'#A32D2D' },
         { label:'Écart A−P',     val:ecartMasses,  c:bilanOk?'#3B6D11':'#A32D2D' },
@@ -6779,7 +6953,7 @@ function runBilanDiagnostic() {
       </tr></thead><tbody>`;
     wrongSide.slice(0,10).forEach(w => {
       html += `<tr style="border-bottom:1px solid rgba(176,122,0,.1);">
-        <td style="padding:4px 8px;font-family:monospace;font-weight:700;color:#185FA5;">${w.n}</td>
+        <td style="padding:4px 8px;font-family:monospace;font-weight:700;color:#18181b;">${w.n}</td>
         <td style="padding:4px 8px;color:#1a1916;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lib(w.n)}</td>
         <td style="padding:4px 8px;color:#B07A00;">${w.reason}</td>
       </tr>`;
@@ -6810,7 +6984,7 @@ function runBilanDiagnostic() {
     orphanImpact.forEach(({ n, v }) => {
       const vc = v >= 0 ? '#3B6D11' : '#A32D2D';
       html += `<tr style="border-bottom:1px solid rgba(176,122,0,.1);">
-        <td style="padding:4px 8px;font-family:monospace;font-weight:700;color:#185FA5;">${n}</td>
+        <td style="padding:4px 8px;font-family:monospace;font-weight:700;color:#18181b;">${n}</td>
         <td style="padding:4px 8px;color:#1a1916;">${lib(n)}</td>
         <td style="padding:4px 8px;text-align:right;font-weight:700;color:${vc};">${money(v, true)}</td>
         <td style="padding:4px 8px;color:#6b6960;font-size:10px;">Classe ${n[0]}</td>
@@ -6845,6 +7019,11 @@ function showParamsTabH(tab,el){
 function openDossierParams(card){
   if(!card)return;_currentParamsCard=card;
   const name=card.querySelector('.dc-name')?.textContent||'';
+  const store=loadStore();const d=store[card.dataset.id];
+  const keyInput=document.getElementById('pennylane-api-key-input');if(keyInput)keyInput.value=getPennylaneApiKey();
+  const cidInput=document.getElementById('pennylane-company-id-input');if(cidInput)cidInput.value=(d&&d.pennylaneCompanyId)||'';
+  const syncStatus=document.getElementById('pennylane-sync-status');
+  if(syncStatus)syncStatus.textContent=(d&&d.lastPennylaneSyncAt)?`Dernière synchronisation : ${new Date(d.lastPennylaneSyncAt).toLocaleString('fr-FR')}`:'';
   ['params-name-input','params-name-input2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=name;});
   ['params-dossier-title','params-dossier-title2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=name;});
   const tag2=document.getElementById('params-dossier-tag2');if(tag2)tag2.textContent=name;

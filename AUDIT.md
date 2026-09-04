@@ -593,3 +593,104 @@ jusqu'au compte en mode comparaison, clic sur un compte → ouverture de
 la modale grand livre avec le détail correct (date formatée JJ/MM/AAAA,
 montants, solde cumulé), 0 erreur console. Suite complète : 117 tests,
 tous verts.
+
+## (s) Refonte visuelle, liste des dossiers, et synchronisation Pennylane en un clic
+
+Trois demandes distinctes de l'utilisateur, traitées ensemble car elles
+touchent toutes à l'écran d'accueil et à la page paramètres.
+
+**(1) Liste de dossiers au lieu de grosses cartes.** Avec l'arrivée de
+lots de dizaines de dossiers Pennylane (cf. §(p)/(q) et le travail de
+récupération en arrière-plan), la grille de cartes carrées (`.dossier-
+grid` en `display:grid`, `.dossier-card` en colonne centrée ~100px de
+haut) devenait ingérable au-delà d'une poignée de dossiers. Remplacée
+par une liste compacte : `.dossier-grid` passe en conteneur bordé
+(`display:flex;flex-direction:column`) et chaque `.dossier-card` en
+ligne horizontale (avatar rond + nom/sous-titre + bouton réglages),
+séparées par un simple filet. `addDossierCard()` et les entrées HTML
+statiques (Groupe DERKX, Expand CPA) ont été alignées sur ce nouveau
+gabarit. Au passage, corrigé un bug latent : `addDossierCard()`
+appliquait par défaut la classe `active-card` (fond plein noir) à
+CHAQUE dossier nouvellement importé — sans conséquence visible en
+grille de cartes isolées, mais qui aurait rendu la totalité d'une
+liste de 35+ lignes noire. Ajouté aussi une 4ᵉ section/filtre dédiée
+« Pennylane » (`sec-pennylane`, groupe `pennylane`) pour séparer ces
+dossiers du reste plutôt que de les entasser dans « Non classés ».
+
+**(2) Refonte visuelle « noir & blanc épuré, une seule touche de
+couleur ».** L'app utilisait deux accents décoratifs (bleu `#185FA5`
+pour la quasi-totalité des boutons/liens/états actifs, orange `#e8643c`
+pour les boutons primaires des modales et de la page paramètres) sur un
+fond ivoire. Remplacés par un accent unique quasi-noir `#18181b`
+(`--blue`/`--blue-l` redéfinies à `#18181b`/`#f4f4f5` — noms de
+variable inchangés pour éviter de toucher aux ~150 usages de
+`var(--blue)`, seule leur valeur change), et les boutons primaires
+(`.params-btn-primary`, `.np-btn`) alignés dessus. Le fond sombre du
+sidebar/topbar/lignes de total (`#0f1923`, une teinte bleu-nuit) est
+lui aussi unifié en gris quasi-noir neutre `#141414`. Les codes
+sémantiques rouge/vert (positif/négatif, alertes) sont volontairement
+conservés — ils codent un sens comptable, pas une décoration, et les
+retirer aurait nui à la lisibilité d'un outil financier.
+
+**Piège découvert en vérification navigateur réel** : un remplacement
+mécanique de toutes les occurrences de l'ancien bleu par le nouvel
+accent quasi-noir cassait le contraste partout où cet accent servait
+de surbrillance sur un fond DÉJÀ sombre (barre latérale de navigation,
+soulignement d'onglet actif, bouton de devise € actif dans la barre du
+haut) — noir sur noir devient illisible. Corrigé au cas par cas en
+utilisant du blanc/clair comme état « sélectionné » sur les fonds
+sombres (`.nav-item.active` en surbrillance blanche translucide,
+`.module-tab.active` soulignée en blanc, bouton `€` actif en pastille
+blanche) : une règle simple de contraste maximal, cohérente avec
+l'esprit « noir & blanc », plutôt qu'une seule couleur d'accent qui
+casse sur fond sombre. Repéré uniquement grâce aux captures d'écran
+Chromium réelles — invisible dans les tests Node en sandbox, qui
+n'exécutent aucune mise en page CSS. Quelques usages de l'ancien orange
+qui codent un SENS (légende de scénario de trésorerie, seuil de score,
+badge d'alerte, couleur de catégorie dans un graphique) ont été
+délibérément laissés inchangés — ce ne sont pas des couleurs de marque.
+
+**(3) Synchronisation Pennylane en un clic — avec compromis de sécurité
+assumé.** Nouvel onglet « Intégrations » (déjà présent comme espace
+réservé vide dans la page paramètres de chaque dossier, maintenant
+implémenté) permettant de : saisir une clé API Pennylane (stockée dans
+localStorage de CE navigateur uniquement, jamais envoyée ailleurs qu'à
+`app.pennylane.com`) ; associer un dossier à son `company_id`
+Pennylane (pré-rempli automatiquement pour les 35 dossiers déjà
+importés via le lot, cf. `pennylane_dossiers_v1.json` mis à jour avec
+un champ `pennylaneCompanyId` par dossier) ; et déclencher une
+resynchronisation (`syncDossierWithPennylane()`) qui redemande un
+export FEC frais à Pennylane (même endpoint que le script
+`scripts/pennylane-sync/fetch-fec.js` initial : `POST /exports/fecs`,
+puis poll `GET /exports/fecs/{id}`, puis téléchargement), et le reparse
+avec `parseFECFile()` — exactement comme un import manuel, en un clic.
+
+Ce choix RÉINTRODUIT délibérément le risque de sécurité que l'app avait
+justement écarté en début de projet (clé API lisible par quiconque a
+accès au poste/navigateur, via les outils développeur) : l'utilisateur
+en a été informé explicitement et a choisi cette option en connaissance
+de cause plutôt que l'alternative sans risque (resynchronisation
+demandée à l'assistant, sans clé dans le navigateur). `pennylaneCompanyId`
+et `lastPennylaneSyncAt` sont exclus de rien de spécial côté stockage
+(ce sont de simples identifiants, pas des secrets) et suivent le cycle
+de vie normal du dossier dans `saveActiveDossier()`/`openDossier()`.
+
+**LIMITE NON VÉRIFIABLE DEPUIS CE POSTE DE DÉVELOPPEMENT** : l'API
+Pennylane est documentée comme une API externe pensée pour des
+intégrations serveur à serveur ; si elle applique une politique CORS
+stricte (fréquent pour ce type d'API, précisément pour empêcher ce
+genre d'usage navigateur), le bouton échouera systématiquement avec une
+erreur réseau générique, quel que soit le code — ce n'est pas un bug
+réparable ici. Le message d'erreur affiché tente de distinguer ce cas
+(`err instanceof TypeError`) pour orienter le diagnostic. À tester avec
+une vraie clé API sur le poste réel du cabinet.
+
+**Preuves** : suite complète 120 tests, tous verts (aucune régression
+fonctionnelle, ces changements sont visuels/CSS + une nouvelle fonction
+réseau non couverte par les tests Node puisqu'elle nécessite un vrai
+appel HTTP). Vérification en navigateur réel (Chromium + Playwright) :
+import du lot de 35 dossiers Pennylane affiché en liste compacte et
+lisible, filtre « Pennylane » fonctionnel, panneau Intégrations avec
+company_id pré-rempli pour un dossier importé, clic sur « Synchroniser »
+sans clé API renvoie bien un message d'erreur clair sans planter,
+0 erreur console sur l'ensemble du parcours.
