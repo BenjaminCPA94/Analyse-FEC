@@ -621,6 +621,11 @@
       Importer (JSON)
     </div>
     <input type="file" id="hs-import-input" accept=".json" style="display:none" onchange="handleImportDossierInput(this)">
+    <div class="hs-new" onclick="document.getElementById('hs-import-batch-input').click()" title="Importer plusieurs dossiers en une fois depuis un fichier de lot JSON">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Importer plusieurs dossiers
+    </div>
+    <input type="file" id="hs-import-batch-input" accept=".json" style="display:none" onchange="handleImportDossiersBatchInput(this)">
     <div class="hs-divider"></div>
     <div class="hs-group-item active" onclick="filterGroup('all',this)"><span>Tous les dossiers</span><span class="hs-group-count">4</span></div>
     <div class="hs-group-item" onclick="filterGroup('non-classes',this)"><span>Non classés</span><span class="hs-group-count">0</span></div>
@@ -5352,6 +5357,47 @@ function handleImportDossierInput(input) {
       const d = loadStore()[id];
       addDossierCard(d.name || id, d.group || 'non-classes', id, 'Importé (JSON)');
     }
+    input.value = '';
+  };
+  reader.onerror = () => { toast('Erreur de lecture du fichier', true); input.value = ''; };
+  reader.readAsText(file);
+}
+
+/**
+ * importDossiersJSONBatch(jsonText)
+ * Restaure plusieurs dossiers en une fois depuis un fichier de lot
+ * ({ fecAnalyseExportBatch: 1, dossiers: [d1, d2, …] }) — ex. un export
+ * groupé depuis Pennylane. Chaque dossier reçoit un nouvel id (jamais
+ * d'écrasement d'un dossier existant) et force la régénération de son
+ * mapping (mps_version=0). Retourne la liste des dossiers créés
+ * ({id, name, group}), ou [] si le fichier est invalide.
+ */
+function importDossiersJSONBatch(jsonText) {
+  let payload;
+  try { payload = JSON.parse(jsonText); }
+  catch (e) { toast('Fichier de lot invalide (JSON illisible)', true); return []; }
+  const list = payload && Array.isArray(payload.dossiers) ? payload.dossiers : null;
+  if (!list || !list.length) { toast('Fichier de lot invalide (aucun dossier trouvé)', true); return []; }
+  const store = loadStore();
+  const created = [];
+  list.forEach((d, i) => {
+    if (!d || !d.bal) return; // ignore silencieusement une entrée mal formée plutôt que d'interrompre tout le lot
+    const id = 'dossier-' + Date.now() + '-' + i;
+    store[id] = { ...d, id, mps_version: 0, savedAt: Date.now() };
+    created.push({ id, name: d.name || id, group: d.group || 'non-classes' });
+  });
+  saveStore(store);
+  toast(`${created.length} dossier(s) importé(s)`);
+  return created;
+}
+/** Gestionnaire de l'input file "Importer plusieurs dossiers" du menu latéral. */
+function handleImportDossiersBatchInput(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const created = importDossiersJSONBatch(e.target.result);
+    created.forEach(d => addDossierCard(d.name, d.group, d.id, 'Importé (lot Pennylane)'));
     input.value = '';
   };
   reader.onerror = () => { toast('Erreur de lecture du fichier', true); input.value = ''; };

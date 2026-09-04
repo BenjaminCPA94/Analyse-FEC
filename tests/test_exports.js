@@ -87,6 +87,39 @@ function run(htmlPath) {
     detail: badResult,
   });
 
+  // Import groupé (lot) — ex. export Pennylane de plusieurs dossiers d'un coup
+  {
+    const batch = {
+      fecAnalyseExportBatch: 1, exportedAt: 'test',
+      dossiers: [
+        { name: 'Client A', group: 'non-classes', bal: { '411': 1000, '707': -1000 }, libs: {}, months: {}, nbLines: 2, periodStart: '202601', periodEnd: '202609', filename: 'a.txt' },
+        { name: 'Client B', group: 'non-classes', bal: { '401': -500, '607': 500 }, libs: {}, months: {}, nbLines: 2, periodStart: '202601', periodEnd: '202609', filename: 'b.txt' },
+        { name: 'Client invalide (pas de bal)', group: 'non-classes' },
+      ],
+    };
+    ctx.__batchPayload = JSON.stringify(batch);
+    const created = getJSON(ctx, 'importDossiersJSONBatch(__batchPayload)');
+    results.push({
+      name: 'importDossiersJSONBatch() importe chaque dossier valide du lot et ignore les entrées invalides',
+      pass: created.length === 2 && created[0].name === 'Client A' && created[1].name === 'Client B',
+      detail: created,
+    });
+    const storeAfterBatch = getJSON(ctx, 'loadStore()');
+    const idA = created[0] && created[0].id;
+    results.push({
+      name: 'Chaque dossier du lot reçoit un id distinct et force la régénération du mapping',
+      pass: !!idA && !!storeAfterBatch[idA] && storeAfterBatch[idA].mps_version === 0
+        && storeAfterBatch[idA].bal['411'] === 1000,
+      detail: idA && storeAfterBatch[idA],
+    });
+    const emptyBatchResult = runIn(ctx, `importDossiersJSONBatch('{"fecAnalyseExportBatch":1,"dossiers":[]}')`);
+    results.push({
+      name: 'importDossiersJSONBatch() sur un lot vide ne plante pas et ne crée rien',
+      pass: Array.isArray(emptyBatchResult) && emptyBatchResult.length === 0,
+      detail: emptyBatchResult,
+    });
+  }
+
   return results;
 }
 
