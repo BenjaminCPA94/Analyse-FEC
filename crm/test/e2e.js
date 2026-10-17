@@ -7,6 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const mock = require('./mock-pennylane');
+const upstash = require('./mock-upstash');
+const REDIS = process.env.STORE === 'redis';
 
 let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(path.join(require('node:child_process').execSync('npm root -g').toString().trim(), 'playwright'))); }
@@ -36,7 +38,16 @@ function waitFor(proc, text) {
     PENNYLANE_API_BASE: `http://127.0.0.1:${m.port}/v2`, PENNYLANE_FIRM_API_BASE: `http://127.0.0.1:${m.port}/firm`,
     PENNYLANE_CABINET_TOKEN: mock.CABINET, PENNYLANE_FIRM_TOKEN: mock.FIRM,
   };
-  await new Promise((res, rej) => run(['add-user', 'benjamin', '--admin'], env).on('exit', c => c ? rej(new Error('add-user')) : res()));
+  let kv = null;
+  if (REDIS) {
+    // Mode Vercel : base Upstash, premier administrateur créé depuis les variables d'environnement.
+    kv = await upstash.start();
+    Object.assign(env, { KV_REST_API_URL: kv.url, KV_REST_API_TOKEN: kv.token, ADMIN_USERNAME: 'benjamin', ADMIN_PASSWORD: PASSWORD });
+    console.log('Stockage : Upstash Redis (simulé), compte initial via ADMIN_USERNAME / ADMIN_PASSWORD');
+  } else {
+    await new Promise((res, rej) => run(['add-user', 'benjamin', '--admin'], env).on('exit', c => c ? rej(new Error('add-user')) : res()));
+    console.log('Stockage : fichiers');
+  }
   let srv = run([], env);
   await waitFor(srv, 'RB Partners CRM V27');
   const base = `http://127.0.0.1:${port}`;
@@ -49,6 +60,23 @@ function waitFor(proc, text) {
   r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://evil.example' }, body: '{}' });
   assert.equal(r.status, 403, 'origine étrangère refusée');
   console.log('✓ API : authentification et protections');
+
+  // Comptes gérés depuis le CRM
+  const json = (c, method, body) => ({ method, headers: { 'Content-Type': 'application/json', ...(c ? { Cookie: c } : {}) }, body: body && JSON.stringify(body) });
+  const login = async (u, p) => { const x = await fetch(base + '/api/login', json(null, 'POST', { username: u, password: p })); return x.ok ? x.headers.get('set-cookie').split(';')[0] : x.status; };
+  const adminC = await login('benjamin', PASSWORD);
+  assert.equal(typeof adminC, 'string', 'connexion administrateur');
+  assert.equal((await fetch(base + '/api/users', json(adminC, 'POST', { username: 'collab', password: 'court', role: 'user' }))).status, 400, 'mot de passe trop court refusé');
+  assert.equal((await fetch(base + '/api/users', json(adminC, 'POST', { username: 'collab', password: 'collab-password-1', role: 'user' }))).status, 200);
+  const collabC = await login('collab', 'collab-password-1');
+  assert.equal((await fetch(base + '/api/users', { headers: { Cookie: collabC } })).status, 403, 'utilisateur sans droits admin');
+  assert.equal((await fetch(base + '/api/password', json(collabC, 'POST', { current: 'collab-password-1', password: 'nouveau-mot-de-passe' }))).status, 200);
+  assert.equal((await fetch(base + '/api/session', { headers: { Cookie: collabC } })).status, 401, 'ancienne session invalidée après changement de mot de passe');
+  assert.equal(typeof await login('collab', 'nouveau-mot-de-passe'), 'string');
+  await fetch(base + '/api/users/delete', json(adminC, 'POST', { username: 'collab' }));
+  assert.equal(await login('collab', 'nouveau-mot-de-passe'), 401, 'compte supprimé');
+  assert.equal((await fetch(base + '/api/session', { headers: { Cookie: 'rb_sid=faux.jeton' } })).status, 401, 'cookie falsifié refusé');
+  console.log('✓ Comptes : création, droits, changement de mot de passe, suppression, cookie signé');
 
   // --- Navigateur ---
   const browser = await chromium.launch();
@@ -151,7 +179,7 @@ function waitFor(proc, text) {
 
   // Conflit de version
   const cookie = (await page.context().cookies())[0];
-  r = await fetch(base + '/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: `rb_sid=${cookie.value}` }, body: JSON.stringify({ revision: 0, state: {} }) });
+  r = await fetch(base + '/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: `rb_sid=${cookie.value}` }, body: JSON.stringify({ revision: 0, state: { clients: [], prospects: [], invoices: [], time: [], onboarding: [], fiscal: [], closing: [], legal: [] } }) });
   assert.equal(r.status, 409, 'conflit détecté');
   assert.deepEqual(errors, [], 'erreurs navigateur');
   console.log('✓ Écrans sans erreur JavaScript, conflit de version détecté');
@@ -164,9 +192,9 @@ function waitFor(proc, text) {
   const sid = r.headers.get('set-cookie').split(';')[0];
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: sid } })).json();
   assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 7); assert.equal(st.state.suivi27['C2|2025'].bilan, 'Liasse déposée');
-  assert.ok(fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
+  assert.ok(REDIS ? kv.run(['LLEN', 'rb:history']) >= 1 : fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
   console.log(`✓ Données conservées après redémarrage (révision ${rev}, historique présent)`);
 
-  srv.kill(); m.server.close(); fs.rmSync(dataDir, { recursive: true, force: true });
+  srv.kill(); m.server.close(); kv?.server.close(); fs.rmSync(dataDir, { recursive: true, force: true });
   console.log('\nTous les tests sont passés.');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

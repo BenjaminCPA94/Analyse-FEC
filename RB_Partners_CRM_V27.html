@@ -4545,6 +4545,33 @@ function pennylanePanel27(){
  <div class="panel"><div class="panelHead"><h2>Rattachement des dossiers</h2><span class="sub">Rapprochement automatique par SIREN puis par raison sociale ; modifiable à la main.</span></div><table><thead><tr><th>Client CRM</th><th>Client facturé (Pennylane cabinet)</th><th>Dossier comptable Pennylane</th><th>Lien</th></tr></thead><tbody>${rows||'<tr><td colspan="4">Aucun client dans le portefeuille.</td></tr>'}</tbody></table></div>`;
 }
 
+/* ---------- Comptes (gérés depuis le CRM, utile sur Vercel où il n'y a pas de terminal) ---------- */
+const users27={list:null};
+async function loadUsers27(){try{users27.list=(await api27('/api/users')).items;}catch(e){users27.list=[];toast(e.message);}render();}
+async function addUser27(){
+ const username=prompt('Identifiant du nouveau compte (lettres, chiffres, . _ -) :');if(!username)return;
+ const password=prompt('Mot de passe provisoire (12 caractères minimum) — à transmettre à la personne :');if(!password)return;
+ const isAdmin=confirm('Donner les droits administrateur à '+username+' ?\n(OK = administrateur, Annuler = utilisateur)');
+ try{await api27('/api/users',{method:'POST',body:JSON.stringify({username:username.trim(),password,role:isAdmin?'admin':'user'})});log25('Compte créé','',username);toast('Compte '+username+' créé');await loadUsers27();}catch(e){alert(e.message);}
+}
+async function removeUser27(username){
+ if(!confirm('Supprimer le compte '+username+' ? La personne sera déconnectée immédiatement.'))return;
+ try{await api27('/api/users/delete',{method:'POST',body:JSON.stringify({username})});log25('Compte supprimé','',username);toast('Compte supprimé');await loadUsers27();}catch(e){alert(e.message);}
+}
+async function changePassword27(){
+ const current=prompt('Mot de passe actuel :');if(!current)return;
+ const password=prompt('Nouveau mot de passe (12 caractères minimum) :');if(!password)return;
+ if(prompt('Confirme le nouveau mot de passe :')!==password)return alert('Les deux saisies ne correspondent pas.');
+ try{await api27('/api/password',{method:'POST',body:JSON.stringify({current,password})});toast('Mot de passe modifié');}catch(e){alert(e.message);}
+}
+function accountsPanel27(){
+ if(!shared25.active)return '';
+ const isAdmin=shared25.user?.role==='admin';
+ if(isAdmin&&!users27.list)setTimeout(loadUsers27,0);
+ return `<div class="panel"><div class="panelHead"><h2>Comptes d’accès</h2><div class="v25actions"><button class="btn small secondary" onclick="changePassword27()">Changer mon mot de passe</button>${isAdmin?'<button class="btn small" onclick="addUser27()">+ Ajouter un compte</button>':''}</div></div>
+ ${isAdmin?`<table><thead><tr><th>Compte</th><th>Rôle</th><th>Créé le</th><th></th></tr></thead><tbody>${(users27.list||[]).map(u=>`<tr><td><b>${esc(u.username)}</b></td><td>${u.role==='admin'?'Administrateur':'Utilisateur'}</td><td>${u.createdAt?new Date(u.createdAt).toLocaleDateString('fr-FR'):'—'}</td><td>${u.username===shared25.user?.username?'<span class="sub">toi</span>':`<button class="btn small secondary" onclick="removeUser27('${esc(u.username)}')">Supprimer</button>`}</td></tr>`).join('')||'<tr><td colspan="4">Chargement…</td></tr>'}</tbody></table>`:'<div class="panelBody sub">Seul un administrateur peut créer ou supprimer des comptes.</div>'}</div>`;
+}
+
 /* ---------- Branchement sur la maquette ---------- */
 // Factures : synchro réelle. Juridique : les chiffres se saisissent (ou viendront de l'outil de production).
 syncPennylaneDemo=function(cid){return cid?toast('Les chiffres des comptes se saisissent dans le formulaire ; ils viendront de l’outil de production.'):syncInvoices27();};
@@ -4556,7 +4583,7 @@ settings25=function(){
  h=h.replace('<span>Non connecté — aucune synchronisation réelle</span>',`<span>${shared25.active?(s.cabinet||s.firm?'Connecté en lecture seule'+(state.pennylaneSync?.lastSync?' · dernière synchro '+new Date(state.pennylaneSync.lastSync).toLocaleString('fr-FR'):''):'Serveur prêt — clés API à renseigner (voir ci-dessous)'):'Disponible uniquement via le serveur'}</span>`);
  if(shared25.active)h=h.replace('<span>Non connecté — saisie manuelle du SIREN</span>','<span>Annuaire des entreprises (API publique) actif via le serveur · Pappers non utilisé</span>');
  const i=h.indexOf('<div class="panel panelBody"><h2>Sauvegardes');
- return i<0?h+pennylanePanel27():h.slice(0,i)+pennylanePanel27()+h.slice(i);
+ return i<0?h+accountsPanel27()+pennylanePanel27():h.slice(0,i)+accountsPanel27()+pennylanePanel27()+h.slice(i);
 };
 function fixTexts27(){
  const root=document.getElementById('root');if(!root)return;

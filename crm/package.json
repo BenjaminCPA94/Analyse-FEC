@@ -8,6 +8,6 @@
   "scripts": {
     "start": "node server.js",
     "add-user": "node server.js add-user",
-    "test": "node test/e2e.js"
+    "test": "node test/e2e.js && STORE=redis node test/e2e.js && node test/vercel-smoke.js"
   }
 }

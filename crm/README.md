@@ -38,7 +38,41 @@ Au premier lancement, la base est vide. Pour reprendre les données du CRM V26, 
 
 Ouvre l'exercice passé (par exemple 2024) et clique sur **Reprise d'historique** : les dossiers déjà traités avant le CRM sont marqués terminés. Les alertes portent ensuite sur les exercices N-1 et N.
 
-## Mise en production
+## Mettre le CRM en ligne avec Vercel
+
+Le CRM tourne sur Vercel avec une base **Upstash Redis**, que Vercel installe en quelques clics. Il n'y a rien à installer sur ton ordinateur.
+
+> Le plan gratuit de Vercel (Hobby) est réservé à un usage personnel et non commercial. Pour le cabinet, il faut le plan **Pro** (environ 20 $ par mois et par membre). Upstash est gratuit à ce volume.
+
+1. **Mets le code sur la branche principale.** Fusionne la branche du CRM dans `main` sur GitHub. Vercel publie `main`.
+2. **Crée le projet.** Sur [vercel.com](https://vercel.com), choisis **Continue with GitHub**, puis **Add New… › Project**. Importe le dépôt `Analyse-FEC` (autorise Vercel à y accéder si on te le demande).
+3. **Règle l'import.** Ne clique pas encore sur Deploy :
+   - **Root Directory** : clique sur *Edit* et choisis `crm` ;
+   - **Framework Preset** : `Other` ;
+   - **Environment Variables** : ajoute
+     - `ADMIN_USERNAME` : ton identifiant, par exemple `benjamin` ;
+     - `ADMIN_PASSWORD` : un mot de passe d'au moins 12 caractères ;
+     - `PENNYLANE_CABINET_TOKEN` : le jeton Pennylane de la société qui facture tes honoraires ;
+     - `PENNYLANE_FIRM_TOKEN` (optionnel) : le jeton de l'API cabinet.
+4. Clique sur **Deploy**. La page affichera « configuration incomplète » : c'est normal, la base n'existe pas encore.
+5. **Crée la base.** Dans le projet, onglet **Storage › Create Database**, choisis **Upstash for Redis**, plan gratuit, région **Frankfurt (eu-central-1)** pour garder les données en Europe. Valide **Connect to project**. Vercel ajoute lui-même `KV_REST_API_URL` et `KV_REST_API_TOKEN`.
+6. Onglet **Deployments** : sur le dernier déploiement, ouvre le menu **⋯ › Redeploy**.
+7. **Ouvre l'adresse** `https://<projet>.vercel.app` et connecte-toi avec `ADMIN_USERNAME` et `ADMIN_PASSWORD`. Le compte administrateur est créé à cette première connexion.
+8. **Sécurise le compte :**
+   - supprime la variable `ADMIN_PASSWORD` dans **Settings › Environment Variables** (elle ne sert plus) ;
+   - dans le CRM, va dans **Automatisations cabinet › Comptes d'accès** pour changer ton mot de passe et créer les comptes des collaborateurs ;
+   - toujours dans Automatisations cabinet, clique sur **Tester la connexion** Pennylane.
+9. **Pour reprendre tes données V26** : ouvre l'ancien fichier, exporte-les avec **Sauvegarder**, puis dans le CRM en ligne, va dans **Automatisations cabinet** et clique sur **Restaurer un export**.
+10. (Optionnel) Pour une adresse à ton nom, comme `crm.rbpartners.fr`, ajoute ton domaine dans **Settings › Domains**.
+
+Chaque modification poussée sur `main` est publiée automatiquement par Vercel.
+
+Bon à savoir :
+- Les fonctions s'exécutent à Paris (`cdg1`, réglé dans `vercel.json`).
+- Vercel limite une requête à 4,5 Mo. La base entière est enregistrée en une fois, ce qui laisse de la marge pour plusieurs centaines de dossiers. Au-delà, il faudra passer à une vraie base de données.
+- Upstash conserve les 30 dernières versions des données (`rb:history`).
+
+## Autre hébergement (serveur classique)
 
 - Héberge le serveur derrière HTTPS (Caddy, Nginx, ou un PaaS avec disque persistant) et règle `COOKIE_SECURE=true`.
 - Toutes les données sont dans `crm/data/` : `state.json`, les 30 dernières versions dans `history/` et `users.json`. **Sauvegarde ce dossier**, et ne le commite jamais (il est dans `.gitignore`).
@@ -48,7 +82,7 @@ Ouvre l'exercice passé (par exemple 2024) et clique sur **Reprise d'historique*
 
 ```bash
 npm i -g playwright   # une seule fois
-node test/e2e.js
+npm test   # fichiers, puis Upstash simulé, puis point d'entrée Vercel
 ```
 
 Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, le suivi Clôture & Bilan (échéances, retards, facturation, reprise d'historique), les conflits de version et la persistance après redémarrage.
@@ -57,7 +91,9 @@ Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et
 
 ```
 crm/
-  server.js               serveur HTTP (comptes, base partagée, SIREN, pont Pennylane)
+  lib/app.js              cœur du serveur (comptes, base partagée, SIREN, pont Pennylane)
+  server.js               serveur local + commandes add-user / list-users
+  api/index.js, vercel.json   déploiement Vercel
   src/crm_v26.html        CRM V26 d'origine, non modifié
   src/v27_pennylane.js    module Pennylane (factures, dossiers, synchro automatique)
   src/v27_suivi.js        suivi Clôture & Bilan par exercice
