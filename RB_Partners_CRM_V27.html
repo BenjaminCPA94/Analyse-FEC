@@ -4622,7 +4622,7 @@ function color27(v){
  v=String(v??'');
  if(!v||v==='-')return C27.empty;
  if(/^(NA|N\.A|Non concerné)$/i.test(v))return C27.grey;
- if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui$|^Actif$/.test(v))return C27.green;
+ if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui|^Actif$|^Validé|^Envoy|^Déclar|^Declar|^Payée|^Fait/.test(v))return C27.green;
  if(/A revoir|vérifier|Bloqué|ompromis/.test(v))return C27.red;
  if(/^1\.|^A faire$/i.test(v))return C27.blue;
  if(/attente|envoyer|Déposé|^[2-8]\.|onboarding/.test(v))return C27.orange;
@@ -4770,6 +4770,7 @@ function setBoardFilter27(k,v){boards27()[k]=k==='year'?Number(v):v;save();rende
 /* ---------- Rendu ---------- */
 function cell27(kind,x,col){
  if(col.render)return `<td style="min-width:${col.w||110}px">${col.render(x)}</td>`;
+ if(col.na&&col.na(x))return `<td class="na27" style="min-width:${col.w||110}px"></td>`;
  const v=col.get(x),id=`'${kind}','${x.c.id}',${x.y},'${col.k}'`;
  if(col.t==='status')return `<td style="min-width:${col.w||120}px"><select class="pill27" style="background:${color27(v)}" onchange="setCell27(this,${id})">${(col.opts.includes(v)||!v?col.opts:[v,...col.opts]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}${v?'':'<option selected value="">—</option>'}</select></td>`;
  if(col.t==='auto'){
@@ -4789,7 +4790,7 @@ function groupsHtml27(kind,ctxs,y,opt={}){
  const nameExtra=opt.nameExtra||(x=>kind==='ago'?`<button class="btn small light" onclick="openAgo27('${x.c.id}',${y})">Ouvrir</button>`:'');
  const head=`<tr><th class="n27">Name</th>${cols.map(c=>`<th title="${esc(c.full||c.label.replace('{Y}',y))}">${esc(c.label.replace('{Y}',y))}</th>`).join('')}</tr>`;
  return order.filter(g=>groups[g]).map(g=>{const list=groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))),collapsed=b.collapsed[kind+'|'+g],col=colors[g]||C27.blue;
-  const sums=cols.map(c=>c.t==='num'||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
+  const sums=cols.map(c=>(c.t==='num'&&!c.nosum)||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
   return `<div class="grp27" style="color:${col}" onclick="toggleGroup27('${kind}','${esc(g)}')">${collapsed?'▸':'▾'} ${esc(g)} <span class="sub">${list.length} dossier(s)</span></div>
   ${collapsed?'':`<div class="board27" data-k="${esc(kind+'|'+g)}" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${nameExtra(x)}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
   ${sums.some(v=>v!=null)?`<tfoot><tr><td class="n27"><b>Total</b></td>${sums.map(s=>`<td>${s==null?'':`<b>${euro(s)}</b>`}</td>`).join('')}</tr></tfoot>`:''}</table></div>`}`;}).join('')||`<div class="panel panelBody">${opt.empty||'Aucun client. Importe ton fichier Excel ou crée des clients dans le portefeuille.'}</div>`;
@@ -4865,6 +4866,7 @@ async function importBoard27(file){
  let rows;try{rows=await readXlsx27(file);}catch(e){return alert('Import impossible : '+e.message);}
  const hi=rows.findIndex(r=>normHead27(r[0])==='name');
  if(hi<0)return alert('Ligne d’en-tête « Name » introuvable : utilise l’export Excel du tableau Portefeuille, Bilan ou AGO.');
+ if(rows[hi].some(h=>['deadline tva','tva 01','acomptes is'].includes(normHead27(h))))return importFiscal27(rows,hi,file);
  if(rows[hi].some(h=>['date entree','onboarding statut','actif/inactif'].includes(normHead27(h))))return importPortfolio27(rows,hi);
  const seen={},keys=rows[hi].map(h=>{let n=normHead27(h);if(/^bilan \d{4} a faire$/.test(n))return 'afaire';if(/^juridique \d{4}$/.test(n))return 'juridique';seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+='#'+seen[n];return HEAD27[n]||null;});
  const kind=keys.includes('statut')?'ago':keys.includes('etat')?'bilan':null;
@@ -4877,7 +4879,7 @@ async function importBoard27(file){
   const v={};keys.forEach((k,i)=>{if(k&&r[i]!=null&&r[i]!=='')v[k]=r[i];});
   const name=String(v.name).trim(),siren=String(v.siren||'').replace(/\D/g,'');
   let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';state.clients.push(c);created++;}else updated++;
+  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
   const x=ctx27(kind,c,year),row=x.row(true);
   for(const col of COLS27[kind]){
    if(col.t==='auto'||v[col.k]==null)continue;
@@ -5014,7 +5016,7 @@ const STATUT_COL27=AGO_COLS27.find(c=>c.k==='statutClient');
 const autoPill27=(v,color)=>v?`<span class="pill27 static27" style="background:${color||color27(v)}">${esc(v)}</span>`:'<span class="sub">—</span>';
 const PF_COLS27=[
  {k:'entry',label:'Date entrée',t:'date',get:x=>x.c.entry||'',set:(x,v)=>{x.c.entry=v;}},
- {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
+ {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return x.c.onbValidated27?autoPill27('Validé',C27.green):isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
  ...PEOPLE27,
  clientCol27('siren','SIREN','text',c=>c.siren||'',(c,v)=>{c.siren=String(v).replace(/\s/g,'').slice(0,9);},null,100),
  clientCol27('forme','Forme juridique','text',c=>c.legalForm||'',(c,v)=>{c.legalForm=v;},null,90),
@@ -5051,16 +5053,16 @@ KINDS27.portfolio={label:'Portefeuille',
  afterSet:(x,k)=>{if(FISCAL_KEYS27.includes(k))regenerateAll(state,x.c.id,true);},
  rerender:['statutClient','entry',...MISSIONS27.map(([k])=>'m_'+k),'honoCourants','honoBilan','honoAgo','honoAutres','ldm','groupe']};
 KINDS27.onb={label:'Onboarding',
- group:x=>{const p=onbProgress27(x.c);return p.blocked?'Bloqués':p.done===p.total?'Prêts à passer en actif':'En cours';},
+ group:x=>{const p=onbProgress27(x.c);return p.blocked?'Bloqués':p.done===p.total?'Prêts à valider':'En cours';},
  due:x=>{const d=val27(x,'deadline');return d?{due:d,label:'Deadline onboarding'}:null;},
  afterSet:(x,k,v)=>{
   if(k==='ldm'&&v==='Oui')onb27(x.c).s[0]=onb27(x.c).s[0]||'Fait';
   const p=onbProgress27(x.c);
-  if(p.done===p.total&&isOnboarding27(x.c)){x.c.status='Actif';toast(x.c.name+' : onboarding terminé, le client passe en portefeuille actif');log25('Onboarding terminé',x.c.id,'Client actif');}
+  if(p.done===p.total&&isOnboarding27(x.c))toast(x.c.name+' : toutes les étapes sont faites, tu peux valider l’onboarding');
  },
  rerender:['entry','deadline','ldm',...ONB_STEPS27.map((_,i)=>'s'+i)]};
 const PF_GROUPS27={order:["En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
-const ONB_GROUPS27={order:['Bloqués','En cours','Prêts à passer en actif'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à passer en actif':C27.green},
+const ONB_GROUPS27={order:['Prêts à valider','Bloqués','En cours'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à valider':C27.green},
  nameExtra:x=>`<button class="btn small light" onclick="letterDialog26('${x.c.id}')" title="Préparer la lettre de mission">LDM</button>`,
  empty:'Aucun client en onboarding. Un prospect validé arrive ici automatiquement, avec ses missions et ses honoraires.'};
 
@@ -5079,12 +5081,21 @@ function portfolioPage27(){
 /* Onboarding : liste des dossiers ; un clic déroule les 14 étapes (présentation d'origine du CRM). */
 const ONB_ACTIONS27={
  0:c=>`<button class="btn small light" onclick="letterDialog26('${c.id}')">Préparer la LDM</button>`,
+ 1:c=>`<button class="btn small light" onclick="repriseDialog27('${c.id}')">Lettre de reprise</button>`,
  2:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
  4:c=>`<button class="btn small light" onclick="routePage('clients')">Saisir les honoraires</button>`,
  5:c=>`<button class="btn small light" onclick="identityDialog26('client','${c.id}')">Compléter la fiche</button>`,
  7:()=>`<a class="btn small light" href="https://www.impots.gouv.fr/professionnel" target="_blank" rel="noopener">impots.gouv</a>`,
  11:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
 };
+/* Validation manuelle de l'onboarding : le dossier passe dans « Onboarding validé » et le client devient actif. */
+function validateOnb27(cid){
+ const c=cfind(cid);if(!c)return;const p=onbProgress27(c);
+ if(p.done<p.total&&!confirm(`${p.total-p.done} étape(s) ne sont pas terminées pour ${c.name}. Valider l’onboarding quand même ?`))return;
+ c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||state.currentUser||''};
+ log25('Onboarding validé',cid,p.label);persist25();toast(c.name+' : onboarding validé, le client est actif');
+}
+function reopenOnb27(cid){const c=cfind(cid);if(!c||!confirm('Rouvrir l’onboarding de '+c.name+' ?'))return;c.status='Onboarding';delete c.onbValidated27;log25('Onboarding rouvert',cid,'');persist25();}
 function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[cid]=!b.onbOpen[cid];save();render();}
 function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
 function onbRow27(x){
@@ -5102,31 +5113,35 @@ function onbRow27(x){
    <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
    <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
    <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
+   ${c.onbValidated27?`<div class="onbAct27"><span class="badge green">Validé le ${new Date(c.onbValidated27.date).toLocaleDateString('fr-FR')}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
   </div>
   ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
    <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
 }
 function onboardingPage27(){
  const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
+ const done=filterCtx27(state.clients.filter(c=>c.onbValidated27&&!isOnboarding27(c)).map(c=>ctx27('onb',c,0))).sort((a,b)=>b.c.onbValidated27.date.localeCompare(a.c.onbValidated27.date));
+ const showDone=boards27().collapsed['onb|validated']!==true;
  const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
  const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
- return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; le client passe en portefeuille actif dès que tout est fait.</div></div>
+ return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; c’est toi qui valides l’onboarding, le dossier passe alors dans « Onboarding validé ».</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}
- ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}`;
+ <h2 class="sec27">Onboarding en cours <span class="sub">${list.length} dossier(s)</span></h2>
+ ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}
+ <h2 class="sec27" style="cursor:pointer" onclick="toggleGroup27('onb','validated')">${showDone?'▾':'▸'} Onboarding validé — dossiers actifs <span class="sub">${done.length} dossier(s)</span></h2>
+ ${showDone?done.map(onbRow27).join('')||'<div class="panel panelBody sub">Aucun onboarding validé pour l’instant.</div>':''}`;
 }
 clientsV11=portfolioPage27;
 onboardingV15=onboardingPage27;
 
-/* ---------- Fiscalité : échéances recalculées depuis la fiche, pour l'exercice en cours ---------- */
-// Les tâches de bilan, de juridique et d'onboarding sont désormais portées par les tableaux ;
-// seules les échéances fiscales restent générées, pour l'année en cours, afin de garder la base légère.
+/* ---------- Tâches générées par l'ancienne maquette : remplacées par les tableaux ---------- */
+// Les échéances fiscales sont désormais calculées à la volée par l'onglet Fiscalité (régimes du tableau principal) :
+// plus aucune tâche n'est stockée, ce qui garde la base légère.
 regenerateAll=function(s,cid,first=false){
  const c=s.clients.find(x=>x.id===cid);if(!c)return;
  if(!c.missions)c.missions={};
- const y=new Date().getFullYear();
- s.fiscal=s.fiscal.filter(x=>!(x.client===cid&&x.year===y)).concat(preserve(s.fiscal.filter(x=>x.client===cid&&x.year===y),genFiscal(c,y)));
  if(!first)save();
 };
 
@@ -5260,8 +5275,317 @@ const previousRenderPortfolio27=render;
 render=function(){
  if(REMOVED_PAGES27.includes(state.page))state.page='cabinetdash';
  previousRenderPortfolio27();
- if(['clients','onboarding'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
+ if(['clients','onboarding','fiscal'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
 };
+
+</script>
+<script>
+/* RB Partners V27 — Fiscalité Fr : « Tableau principal » des régimes par client, puis une vue par mois et une vue annuelle.
+ * Les échéances de chaque mois sont déduites automatiquement des régimes (TVA, DEB/DES, taxe sur les salaires,
+ * acomptes d'IS, CFE, CVAE, TVS, IFU, taxe foncière, CRL) : rien n'est à recréer d'une année sur l'autre. */
+const FISC_ST27=['À faire','En cours','En attente client','Validation client','Validé','Envoyée','Déclarée','Bloqué','N.A'];
+const FISC_DONE27=/^(Validé|Envoyée|Déclarée|Declarée|Télédéclaré|Payée|Fait|N\.A|NA|N\/A|Pas obligatoire|Pas de CFE|Neant|Néant|Fait en interne)$/;
+const MONTHS27=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+function fisc27(c){if(!c.fisc27)c.fisc27={};return c.fisc27;}
+const pad27=n=>String(n).padStart(2,'0');
+function dueDay27(y,m,d){return `${y}-${pad27(m)}-${pad27(Math.min(Number(d)||15,new Date(y,m,0).getDate()))}`;}
+const isYes27=v=>/^Oui/.test(String(v||''));
+
+/* Obligations fiscales d'un client pour une année, déduites de ses régimes. */
+function obligations27(c,y){
+ const f=fisc27(c),out=[],add=(key,label,m,day,type,def)=>out.push({key,label,m,due:dueDay27(y,m,day),type,def:def||'À faire'});
+ const tvaDay=f.tvaDay??c.vatDeadline??24;
+ if(c.vatRegime==='Mensuelle')for(let m=1;m<=12;m++)add('TVA-'+pad27(m),'TVA '+pad27(m),m,tvaDay,'TVA');
+ if(c.vatRegime==='Trimestrielle')[1,4,7,10].forEach(m=>add('TVA-'+pad27(m),'TVA '+pad27(m),m,tvaDay,'TVA'));
+ if(c.vatRegime==='Annuelle'){add('CA12','Solde CA12',5,5,'TVA');add('TVA-S1','Acompte TVA S1',7,15,'TVA');add('TVA-S2','Acompte TVA S2',12,15,'TVA');}
+ if(f.debdes==='Mensuelle')for(let m=1;m<=12;m++)add('DEB-'+pad27(m),'DES/DEB '+pad27(m),m,f.debDay??10,'DEB');
+ const tsDay=f.tsDay??15;
+ if(f.ts==='Mensuelle')for(let m=1;m<=12;m++)add('TS-'+pad27(m),'Taxe/Salaire '+pad27(m),m,tsDay,'TS');
+ if(f.ts==='Trimestriel')[1,4,7,10].forEach(m=>add('TS-'+pad27(m),'Taxe/Salaire '+pad27(m),m,tsDay,'TS'));
+ if(f.ts==='Annuelle')add('TS-01','Taxe/Salaire 01',1,tsDay,'TS');
+ if(f.acIS==='Oui')[[3,1],[6,2],[9,3],[12,4]].forEach(([m,t])=>add('IS-T'+t,'IS T'+t,m,f.isDay??15,'IS'));
+ if(f.cfe==='Oui avec acompte')add('CFE-AC','Acompte CFE',6,f.cfeDay??15,'CFE');
+ if(isYes27(f.cfe))add('CFE','CFE annuelle',12,f.cfeDay??15,'CFE');
+ if(f.cvae==='Oui'){add('CVAE-AC1','Acompte CVAE 1',6,15,'CVAE');add('CVAE-AC2','Acompte CVAE 2',9,15,'CVAE');}
+ if(f.tvs==='Oui')add('TVS','TVS annuelle',1,f.tvsDay??tvaDay,'TVS');
+ if(f.ifu==='Oui')add('IFU','IFU annuelle',2,15,'IFU');
+ if(f.tf&&!['Non','A définir'].includes(f.tf))add('TF','Taxe foncière',10,15,'TF',['Payée','Validé','En interne'].includes(f.tf)?(f.tf==='En interne'?'Fait en interne':f.tf):'À faire');
+ if(f.crl==='Oui')add('CRL','CRL',5,15,'CRL');
+ return out;
+}
+function fiscClients27(){return state.clients.filter(c=>c.missions?.tax||c.fisc27);}
+function fiscView27(){const b=boards27();if(b.fiscView==null)b.fiscView='main';if(!b.fiscYear)b.fiscYear=new Date().getFullYear();return b;}
+function inView27(o,view){return view==='year'?!['TVA','DEB','TS'].includes(o.type)||o.key==='CA12'||o.key.startsWith('TVA-S'):o.m===Number(view);}
+
+/* ---------- Tableau principal : les régimes ---------- */
+const fiscCol27=(k,label,opts,w)=>({k:'f_'+k,label,t:opts?'status':'num',nosum:!opts&&k!=='cfeN1',opts,w,get:x=>fisc27(x.c)[k]??(opts?'A définir':''),set:(x,v)=>{fisc27(x.c)[k]=v===''?undefined:v;if(k==='cvae')x.c.cvae=v==='Oui';}});
+const FISC_MAIN_COLS27=[
+ ...PEOPLE27,
+ clientCol27('siren','SIREN','text',c=>c.siren||'',(c,v)=>{c.siren=String(v).replace(/\s/g,'').slice(0,9);},null,100),
+ {...STATUT_COL27,label:'Actif/Inactif'},
+ GROUPE27,
+ clientCol27('regimeFiscal','Régime fiscal','status',c=>['IS','IR'].includes(c.taxRegime)?c.taxRegime:'A définir',(c,v)=>{c.taxRegime=v==='A définir'?'À confirmer':v;},['IS','IR','A définir']),
+ clientCol27('tva','TVA','status',c=>TVA27.includes(c.vatRegime)?c.vatRegime:'',(c,v)=>{c.vatRegime=v;},TVA27),
+ {k:'f_tvaDay',label:'Deadline TVA',t:'num',nosum:true,w:85,get:x=>fisc27(x.c).tvaDay??x.c.vatDeadline??'',set:(x,v)=>{fisc27(x.c).tvaDay=v===''?undefined:Number(v);if(v!=='')x.c.vatDeadline=Number(v);}},
+ fiscCol27('debdes','DEB/DES',['A définir','Non','Mensuelle']),
+ fiscCol27('debDay','Deadline DEB/DES',null,85),
+ fiscCol27('ts','Taxe/Salaires',['A définir','Non','Mensuelle','Trimestriel','Annuelle']),
+ fiscCol27('tsDay','Deadline Taxe/Salaire',null,85),
+ fiscCol27('acIS','Acomptes IS',['A définir','Oui','Non','NA']),
+ fiscCol27('isDay','Deadline IS',null,85),
+ fiscCol27('tvs','TVS',['A définir','Oui','Non']),
+ fiscCol27('tvsDay','Deadline TVS',null,85),
+ fiscCol27('ifu','IFU',['A définir','Oui','Non']),
+ fiscCol27('cfe','CFE',['A définir','Oui sans acompte','Oui avec acompte','Non'],140),
+ fiscCol27('cfeDay','Deadline CFE',null,85),
+ fiscCol27('cfeN1','CFE N-1 (€)',null,95),
+ fiscCol27('cvae','CVAE',['A définir','Oui','Non']),
+ fiscCol27('crl','CRL',['A définir','Oui','Non']),
+ fiscCol27('tf','Taxe foncière',['A définir','Non','Oui','Payée','En interne','Validé','En attente client'],130),
+ {k:'oblig',label:'Échéances / an',t:'auto',w:105,get:x=>obligations27(x.c,fiscView27().fiscYear).length},
+];
+COLS27.fisc=FISC_MAIN_COLS27;
+KINDS27.fisc={label:'Fiscalité',group:x=>x.c.status==='Inactif'?'Inactifs':x.c.status==='Compromis'?'Compromis':isOnboarding27(x.c)?"En cours d'onboarding":'Actifs',
+ afterSet:(x,k)=>{if(k==='tva'||k==='regimeFiscal')regenerateAll(state,x.c.id,true);},
+ rerender:['tva','f_tvaDay','f_debdes','f_ts','f_acIS','f_tvs','f_ifu','f_cfe','f_cvae','f_crl','f_tf','statutClient','regimeFiscal']};
+
+/* ---------- Vues mensuelles et annuelle : les échéances ---------- */
+function fiscMonthCols27(view,clients,y){
+ const keys=new Map();
+ for(const c of clients)for(const o of obligations27(c,y))if(inView27(o,view)&&!keys.has(o.key))keys.set(o.key,o);
+ const order=['TVA','TS','DEB','IS','CFE','CVAE','TVS','IFU','TF','CRL'];
+ const obls=[...keys.values()].sort((a,b)=>order.indexOf(a.type)-order.indexOf(b.type)||a.m-b.m||a.key.localeCompare(b.key));
+ return [
+  ...PEOPLE27.slice(1),
+  {k:'regTVA',label:'Régime TVA',t:'auto',w:110,render:x=>x.c.vatRegime&&x.c.vatRegime!=='À confirmer'?autoPill27(x.c.vatRegime,C27.blue):'<span class="sub">—</span>'},
+  ...obls.map(o=>({k:o.key,label:o.label,full:`${o.label} — échéance le ${String(o.due).slice(8)}/${String(o.due).slice(5,7)} (selon le client)`,t:'status',opts:FISC_ST27,w:125,
+   na:x=>!obligations27(x.c,y).some(z=>z.key===o.key),get:x=>x.r[o.key]||obligations27(x.c,y).find(z=>z.key===o.key)?.def||'À faire',set:(x,v)=>{x.row(true)[o.key]=v;}})),
+ ];
+}
+KINDS27.fiscm={label:'Fiscalité',
+ group:x=>{const v=fiscView27().fiscView,todo=obligations27(x.c,x.y).filter(o=>inView27(o,v)&&!FISC_DONE27.test(x.r[o.key]||o.def));return todo.length?'À traiter':'Terminé';},
+ due:x=>{const v=fiscView27().fiscView,todo=obligations27(x.c,x.y).filter(o=>inView27(o,v)&&!FISC_DONE27.test(x.r[o.key]||o.def)).sort((a,b)=>a.due.localeCompare(b.due));return todo[0]?{due:todo[0].due,label:todo[0].label}:null;},
+ rerender:[]};
+function setFiscView27(v){const b=fiscView27();b.fiscView=v;save();render();}
+function fiscalPage27(){
+ const b=fiscView27(),view=b.fiscView,y=b.fiscYear,clients=fiscClients27(),now=new Date();
+ const tabs=[['main','Tableau principal'],...MONTHS27.map((m,i)=>[String(i+1),m]),['year','Annuelle']];
+ const head=`<div class="titleRow"><div><h1>Fiscalité Fr ${y}</h1><div class="sub">Le tableau principal indique les régimes de chaque client ; les échéances de chaque mois en sont déduites automatiquement.</div></div>
+  <div class="v25actions">${[y-1,y,y+1].map(v=>`<button class="btn small ${v===y?'':'secondary'}" onclick="fiscView27().fiscYear=${v};save();render()">${v}</button>`).join('')}
+  <label class="btn small light">Importer un Excel<input hidden type="file" accept=".xlsx" onchange="importBoard27(this.files[0]);this.value=''"></label>
+  <button class="btn small secondary" onclick="exportBoard27('${view==='main'?'fisc':'fiscm'}')">Exporter (Excel)</button></div></div>
+  <div class="tabs27">${tabs.map(([k,l])=>`<button class="${String(view)===k?'on':''} ${k===String(now.getMonth()+1)&&y===now.getFullYear()?'now':''}" onclick="setFiscView27('${k}')">${l}</button>`).join('')}</div>`;
+ if(view==='main'){
+  const ctxs=clients.map(c=>ctx27('fisc',c,0));
+  return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients suivis</small><span class="big">${clients.length}</span></div><div class="card"><small>TVA mensuelle</small><span class="big">${clients.filter(c=>c.vatRegime==='Mensuelle').length}</span></div><div class="card"><small>Acomptes d’IS</small><span class="big">${clients.filter(c=>fisc27(c).acIS==='Oui').length}</span></div><div class="card"><small>Régimes à définir</small><span class="big warn">${clients.filter(c=>!TVA27.includes(c.vatRegime)).length}</span></div></div>
+  ${filtersHtml27('<span class="sub">Un client apparaît ici dès que la mission « Fiscalité FR » est cochée dans le portefeuille.</span>')}
+  ${groupsHtml27('fisc',filterCtx27(ctxs),0,{order:['Actifs',"En cours d'onboarding",'Compromis','Inactifs'],colors:{'Actifs':C27.green,"En cours d'onboarding":C27.orange,'Compromis':C27.red,'Inactifs':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>'',empty:'Aucun client avec la mission « Fiscalité FR ». Coche-la dans le portefeuille ou importe ton fichier Fiscalité.'})}`;
+ }
+ const concerned=clients.filter(c=>c.status!=='Inactif'&&obligations27(c,y).some(o=>inView27(o,view)));
+ COLS27.fiscm=fiscMonthCols27(view,concerned,y);
+ const ctxs=concerned.map(c=>ctx27('fiscm',c,y));
+ let total=0,done=0,late=0;
+ for(const x of ctxs)for(const o of obligations27(x.c,y).filter(o=>inView27(o,view))){total++;const st=x.r[o.key]||o.def;if(FISC_DONE27.test(st))done++;else if(o.due<today27())late++;}
+ return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients concernés</small><span class="big">${concerned.length}</span></div><div class="card"><small>Déclarations</small><span class="big">${total}</span></div><div class="card"><small>Faites</small><span class="big good">${done} / ${total}</span></div><div class="card"><small>En retard</small><span class="big ${late?'bad':'good'}">${late}</span></div></div>
+ ${filtersHtml27('<span class="sub">Les colonnes du mois sont calculées à partir des régimes du tableau principal.</span>')}
+ ${groupsHtml27('fiscm',filterCtx27(ctxs),y,{order:['À traiter','Terminé'],colors:{'À traiter':C27.blue,'Terminé':C27.green},nameExtra:()=>'',empty:'Aucune échéance ce mois-ci pour les clients suivis.'})}`;
+}
+fiscalV15=fiscalPage27;
+
+/* ---------- Import du fichier Fiscalité Excel ---------- */
+const FISC_HEAD27={'associe':'associe','manager':'manager','collaborateurs':'collab','siren':'siren','actif/inactif':'statut','groupe':'groupe','tva':'tva','deadline tva':'tvaDay','deb/des':'debdes','deadline deb/des':'debDay','taxe fonciere':'tf','acomptes is':'acIS','deadline is':'isDay','tvs':'tvs','deadline tvs':'tvsDay','ifu':'ifu','cfe':'cfe','deadline cfe':'cfeDay','taxe/salaires':'ts','deadline taxe/salaire':'tsDay','crl':'crl'};
+function fiscStatusKey27(n){
+ let m;
+ if((m=n.match(/^tva (\d\d)$/)))return 'TVA-'+m[1];
+ if((m=n.match(/^taxe\/salaire (\d\d)$/)))return 'TS-'+m[1];
+ if((m=n.match(/^des\/deb (\d\d)$/)))return 'DEB-'+m[1];
+ if((m=n.match(/^is t([1-4])$/)))return 'IS-T'+m[1];
+ return {'tvs annuelle':'TVS','ifu annuelle':'IFU','acompte cfe':'CFE-AC','cfe annuelle':'CFE','acompte cvae':'CVAE-AC2','acompte tva s1':'TVA-S1','acompte tva s2':'TVA-S2','solde ca12':'CA12'}[n]||null;
+}
+function normStatus27(v){return /^a faire$/i.test(v)?'À faire':/^(NA|N\/A)$/.test(v)?'N.A':/^Declarée$/.test(v)?'Déclarée':v;}
+function importFiscal27(rows,hi,file){
+ const heads=rows[hi].map(normHead27),year=Number((String(rows[0]?.[0]||'')+' '+(file?.name||'')).match(/\b(20\d\d)\b/)?.[1])||fiscView27().fiscYear;
+ const data=rows.slice(hi+1).filter(r=>r[0]&&!['name','subitems'].includes(normHead27(r[0]))&&r.slice(1).some(v=>v!=null&&v!==''));
+ if(!confirm(`Importer la fiscalité ${year} de ${data.length} client(s) ?\nLes régimes alimentent le tableau principal et les statuts mensuels sont repris. Les clients sont rapprochés par SIREN puis par nom ; les absents sont créés.`))return;
+ let created=0,updated=0;
+ for(const r of data){
+  const v={},st={};
+  heads.forEach((h,i)=>{const val=r[i];if(val==null||val==='')return;if(/^cfe \d{4}$/.test(h))v.cfeN1=val;else if(h==='deadline taxe fonciere')v.tfDay=val;else if(FISC_HEAD27[h]&&v[FISC_HEAD27[h]]==null)v[FISC_HEAD27[h]]=val;const k=fiscStatusKey27(h);if(k&&val!=='-')st[k]=normStatus27(String(val));});
+  const name=String(r[0]).trim(),siren=String(v.siren||'').replace(/\D/g,'').slice(0,9);
+  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
+  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
+  if(!c.missions)c.missions={};c.missions.tax=true;
+  if(siren.length===9&&!c.siren)c.siren=siren;
+  ['associe','manager','collab'].forEach(k=>{if(v[k])(c.people27=c.people27||{})[k]=uniqNames27(v[k]);});
+  if(v.groupe)c.group27=String(v.groupe);
+  if(v.statut){const s=uniqNames27(v.statut);c.status=s==='Compromis'?'Compromis':s==='Inactif'?'Inactif':s.startsWith('Dossiers internes')?'Autres':c.status==='Onboarding'&&!c.onbValidated27&&c.onb27?'Onboarding':'Actif';}
+  if(v.tva&&TVA27.includes(String(v.tva)))c.vatRegime=String(v.tva);
+  const f=fisc27(c);
+  if(Number(v.tvaDay)>0){f.tvaDay=Number(v.tvaDay);c.vatDeadline=Number(v.tvaDay);}
+  ['debdes','tf','acIS','tvs','ifu','cfe','ts','crl'].forEach(k=>{if(v[k]!=null)f[k]=String(v[k]);});
+  ['debDay','isDay','tvsDay','cfeDay','tsDay'].forEach(k=>{if(Number(v[k])>0)f[k]=Number(v[k]);});
+  if(v.cfeN1!=null)f.cfeN1=Number(v.cfeN1)||0;
+  const row=row27('fiscm',c.id,year,true);Object.assign(row,st);
+
+ }
+ const b=fiscView27();b.fiscYear=year;b.fiscView='main';
+ init25();log25('Import Excel Fiscalité '+year,'',`${created} client(s) créé(s), ${updated} mis à jour`);
+ state.page='fiscal';persist25();toast(`${data.length} client(s) importé(s) : ${created} créé(s), ${updated} mis à jour`);
+}
+(function(){const s=document.createElement('style');s.textContent=`
+.tabs27{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin:-4px 0 14px}
+.tabs27 button{border:0;background:none;padding:7px 11px;font-size:12px;color:#5b6577;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+.tabs27 button.on{color:#1768c6;border-bottom-color:#1768c6;font-weight:600}.tabs27 button.now:not(.on){color:#1d2939;font-weight:600}
+.board27 td.na27{background:repeating-linear-gradient(135deg,#fafbfc,#fafbfc 6px,#f3f4f7 6px,#f3f4f7 12px)}`;document.head.append(s);})();
+
+// Les anciennes tâches fiscales stockées (une par échéance) ne servent plus : on les retire une fois.
+if(Array.isArray(state.fiscal)&&state.fiscal.length&&!state.fiscalPurged27){state.fiscal=[];state.fiscalPurged27=true;}
+
+</script>
+<script>
+/* RB Partners V27 — lettre de reprise de dossier adressée au confrère précédent (article 163 du décret
+ * n° 2012-432 du 30 mars 2012). Pré-remplie depuis la fiche client et les coordonnées du cabinet, avec aperçu,
+ * téléchargement Word (.docx) et impression / PDF. L'étape d'onboarding correspondante se met à jour seule. */
+const REPRISE_DOCS27=[
+ 'Balance générale et grand livre du dernier exercice clos',
+ 'Fichier des écritures comptables (FEC) des exercices concernés',
+ 'Comptes annuels et liasses fiscales des trois derniers exercices',
+ 'Tableau des immobilisations et des amortissements',
+ 'Tableaux d’emprunts et échéanciers',
+ 'Déclarations de TVA, d’IS, de CFE et de CVAE des douze derniers mois, avec accusés de réception',
+ 'Dossier permanent : statuts, procès-verbaux d’assemblées, Kbis, baux et contrats importants',
+ 'Dossier de travail de la dernière clôture et justificatifs des soldes',
+ 'Situation des comptes fiscaux et sociaux (espace impots.gouv, URSSAF)',
+ 'Export ou accès au logiciel comptable, le cas échéant',
+];
+function reprise27(c){
+ const i=clientIdentity26(c),b=cabinet26(),d=i.directors?.[0];
+ if(!c.reprise27)c.reprise27={};
+ const r=c.reprise27;
+ return {firm:'',civ:'Cher Confrère',confrere:'',firmAddress:'',firmEmail:'',
+  clientAddress:i.address||'',signer:d?.name||c.contact?.name||'',signerRole:d?.role||'dirigeant',
+  start:c.lm26?.start||iso(new Date(new Date().getFullYear(),new Date().getMonth()+1,1)),
+  exercises:`${new Date().getFullYear()-1} et ${new Date().getFullYear()}`,answerBy:iso(addDays(new Date(),15)),
+  docs:REPRISE_DOCS27.map((_,k)=>k),extra:'',sendMode:'Par courriel et lettre recommandée avec accusé de réception',
+  city:b.city||'Paris',date:today27(),cabinetEmail:b.email27||'',...r};
+}
+function repriseDialog27(cid){
+ const c=cfind(cid);if(!c)return;const r=reprise27(c),b=cabinet26();
+ const f=(k,l,type='text',full)=>`<div class="field" ${full?'style="grid-column:1/-1"':''}><label for="rp_${k}">${l}</label><input id="rp_${k}" type="${type}" value="${esc(r[k]||'')}"></div>`;
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(1060px,96vw)"><div class="modalHead"><div><h3>Lettre de reprise · ${esc(c.name)}</h3><div class="sub">Information du confrère précédent avant l’acceptation de la mission (art. 163 du décret n° 2012-432) et demande de transmission du dossier.</div></div><button class="btn secondary" onclick="closeModal()">Fermer</button></div>
+ <div class="modalBody">${!b.name||!b.expert?`<div class="note" style="margin-bottom:12px">Coordonnées du cabinet incomplètes : <a href="#" onclick="event.preventDefault();cabinetDialog26()">les compléter</a> (nom, adresse, expert-comptable signataire).</div>`:''}
+  <h3 style="margin:4px 0 8px">Confrère précédent</h3>
+  <div class="formGrid">${f('firm','Cabinet précédent')}${f('confrere','Expert-comptable (nom)')}<div class="field"><label for="rp_civ">Formule d’appel</label><select id="rp_civ">${['Cher Confrère','Chère Consœur','Chers Confrères'].map(o=>`<option ${o===r.civ?'selected':''}>${o}</option>`).join('')}</select></div>${f('firmAddress','Adresse du cabinet précédent','text',true)}${f('firmEmail','Email du confrère','email')}</div>
+  <h3 style="margin:16px 0 8px">Dossier repris</h3>
+  <div class="formGrid">${f('clientAddress','Siège du client','text',true)}${f('signer','Représentant du client')}${f('signerRole','Qualité')}${f('start','Reprise à compter du','date')}${f('exercises','Exercices concernés')}${f('answerBy','Réponse souhaitée avant le','date')}</div>
+  <h3 style="margin:16px 0 8px">Envoi</h3>
+  <div class="formGrid">${f('city','Fait à')}${f('date','Date de la lettre','date')}${f('cabinetEmail','Email de réponse du cabinet','email')}${f('sendMode','Mode d’envoi','text',true)}</div>
+  <h3 style="margin:16px 0 8px">Éléments demandés</h3>
+  <div class="checks">${REPRISE_DOCS27.map((d,k)=>`<label class="check"><input type="checkbox" id="rp_doc_${k}" ${r.docs.includes(k)?'checked':''}> ${esc(d)}</label>`).join('')}</div>
+  <div class="field" style="margin-top:10px"><label for="rp_extra">Précisions (facultatif)</label><textarea id="rp_extra" rows="2">${esc(r.extra||'')}</textarea></div>
+ </div>
+ <div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" onclick="previewReprise27('${cid}')">Aperçu</button><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Marquer comme envoyée</button></div></div></div>`;
+}
+function readReprise27(cid){
+ const c=cfind(cid),g=k=>document.getElementById('rp_'+k);
+ if(!c||!g('firm'))return c&&reprise27(c);
+ const r=c.reprise27;
+ ['firm','civ','confrere','firmAddress','firmEmail','clientAddress','signer','signerRole','start','exercises','answerBy','city','date','cabinetEmail','sendMode','extra'].forEach(k=>{r[k]=g(k).value.trim();});
+ r.docs=REPRISE_DOCS27.map((_,k)=>k).filter(k=>g('doc_'+k).checked);
+ if(r.cabinetEmail)cabinet26().email27=r.cabinetEmail;
+ save();return reprise27(c);
+}
+/* Contenu de la lettre, partagé par l'aperçu, l'impression et le Word. */
+function repriseBlocks27(c,r){
+ const b=cabinet26(),i=clientIdentity26(c),long=d=>d?new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'[date]';
+ const desc=[c.legalForm&&c.legalForm!=='À confirmer'?c.legalForm:'',c.siren?'SIREN '+c.siren:''].filter(Boolean).join(', ');
+ return {
+  sender:[b.name||'[Nom du cabinet]',b.address||'[Adresse du cabinet]',b.siren?'SIREN '+b.siren:'','Société d’expertise comptable inscrite au Tableau de l’Ordre',r.cabinetEmail||''].filter(Boolean),
+  recipient:[r.firm||'[Cabinet précédent]',r.confrere?'À l’attention de '+r.confrere:'',...String(r.firmAddress||'[Adresse]').split(/\n|, (?=\d{5})/)].filter(Boolean),
+  place:`${r.city||'[Ville]'}, le ${long(r.date)}`,
+  mode:r.sendMode,
+  object:`Objet : reprise du dossier ${c.name}${c.siren?' — SIREN '+c.siren:''}`,
+  civ:r.civ+',',
+  paras:[
+   `La société ${c.name}${desc?' ('+desc+')':''}${r.clientAddress?', dont le siège est situé '+r.clientAddress:''}, représentée par ${r.signer||'son dirigeant'}${r.signerRole?' en sa qualité de '+r.signerRole.toLowerCase():''}, nous a fait part de son souhait de nous confier sa mission d’expertise comptable à compter du ${long(r.start)}.`,
+   `Conformément à l’article 163 du décret n° 2012-432 du 30 mars 2012 relatif à l’exercice de l’activité d’expertise comptable et aux règles de confraternité de notre profession, nous tenions à vous en informer avant d’accepter cette mission.`,
+   `Nous vous serions reconnaissants de bien vouloir nous indiquer si des honoraires vous restent dus par ce client, ainsi que tout élément dont vous estimeriez utile de nous faire part.`,
+   `Afin d’assurer la continuité du dossier, et avec l’accord de notre client commun, nous vous remercions de bien vouloir nous transmettre les éléments suivants relatifs aux exercices ${r.exercises||'concernés'} :`,
+  ],
+  list:r.docs.map(k=>REPRISE_DOCS27[k]),
+  after:[
+   r.extra||'',
+   `Nous vous remercions de nous faire parvenir ces éléments si possible avant le ${long(r.answerBy)}${r.cabinetEmail?', à l’adresse '+r.cabinetEmail:''}, ou par tout autre moyen à votre convenance.`,
+   `Nous restons naturellement à votre disposition pour organiser cette transition dans les meilleures conditions et vous prions d’agréer, ${r.civ}, l’expression de nos sentiments confraternels les meilleurs.`,
+  ].filter(Boolean),
+  sign:[b.expert||'[Expert-comptable signataire]','Expert-comptable',b.name||''].filter(Boolean),
+  cc:`Copie : ${c.name}`,
+ };
+}
+function repriseHTML27(c,r){
+ const L=repriseBlocks27(c,r);
+ return `<div class="letter27"><div class="lt27Top"><div class="lt27From">${L.sender.map((s,i)=>i?`<div>${esc(s)}</div>`:`<div class="lt27Firm">${esc(s)}</div>`).join('')}</div><div class="lt27To">${L.recipient.map(s=>`<div>${esc(s)}</div>`).join('')}</div></div>
+ <div class="lt27Place">${esc(L.place)}</div><div class="lt27Mode">${esc(L.mode)}</div><div class="lt27Obj">${esc(L.object)}</div>
+ <p>${esc(L.civ)}</p>${L.paras.map(p=>`<p>${esc(p)}</p>`).join('')}<ul>${L.list.map(d=>`<li>${esc(d)}</li>`).join('')}</ul>${L.after.map(p=>`<p>${esc(p)}</p>`).join('')}
+ <div class="lt27Sign">${L.sign.map((s,i)=>`<div ${i?'':'class="lt27SignName"'}>${esc(s)}</div>`).join('')}</div><div class="lt27Cc">${esc(L.cc)}</div></div>`;
+}
+function previewReprise27(cid){
+ const c=cfind(cid),r=readReprise27(cid);
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(900px,96vw)"><div class="modalHead"><h3>Aperçu · lettre de reprise</h3><button class="btn secondary" onclick="repriseDialog27('${cid}')">← Modifier</button></div><div class="modalBody" style="background:#f2f4f7">${repriseHTML27(c,r)}</div><div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end"><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Marquer comme envoyée</button></div></div></div>`;
+ markReprise27(c,'En cours');
+}
+function markReprise27(c,status){
+ const o=onb27(c);
+ if(status==='Fait'||!o.s[1]||o.s[1]==='A faire'){o.s[1]=status;save();}
+}
+function printReprise27(cid){
+ const c=cfind(cid),r=readReprise27(cid);
+ document.getElementById('print26')?.remove();
+ const el=document.createElement('div');el.id='print26';el.innerHTML=repriseHTML27(c,r);document.body.append(el);
+ document.body.classList.add('printing26');window.print();document.body.classList.remove('printing26');el.remove();
+ markReprise27(c,'En cours');
+}
+function downloadReprise27(cid){
+ const c=cfind(cid),r=readReprise27(cid),L=repriseBlocks27(c,r),x=s=>xmlEscapeWord(String(s));
+ const run=(t,o={})=>`<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>${o.b?'<w:b/>':''}${o.i?'<w:i/>':''}<w:sz w:val="${o.sz||21}"/><w:color w:val="${o.color||'222222'}"/></w:rPr><w:t xml:space="preserve">${x(t)}</w:t></w:r>`;
+ const para=(content,o={})=>`<w:p><w:pPr>${o.jc?`<w:jc w:val="${o.jc}"/>`:''}${o.ind?`<w:ind w:left="${o.ind}"/>`:''}<w:spacing w:before="${o.before||0}" w:after="${o.after??120}" w:line="276" w:lineRule="auto"/></w:pPr>${content}</w:p>`;
+ const lines=(arr,o)=>arr.map((s,i)=>para(run(s,{...o,b:o.firstBold&&!i,sz:o.firstBold&&!i?26:o.sz,color:o.firstBold&&!i?'1F3864':o.color}),{after:0,ind:o.ind})).join('');
+ const body=[
+  lines(L.sender,{firstBold:true,sz:19,color:'555555'}),
+  para('',{after:240}),
+  lines(L.recipient,{ind:5200,sz:21}),
+  para('',{after:200}),
+  para(run(L.place),{jc:'right'}),
+  para(run(L.mode,{i:true,sz:19,color:'555555'})),
+  para(run(L.object,{b:true}),{before:120,after:240}),
+  para(run(L.civ)),
+  ...L.paras.map(p=>para(run(p),{jc:'both'})),
+  ...L.list.map(d=>para(run('•  '+d),{ind:420,after:60})),
+  para('',{after:60}),
+  ...L.after.map(p=>para(run(p),{jc:'both'})),
+  para('',{after:240}),
+  L.sign.map((s,i)=>para(run(s,{b:!i}),{ind:5200,after:0})).join(''),
+  para('',{after:360}),
+  para(run(L.cc,{i:true,sz:18,color:'777777'})),
+ ].join('');
+ const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+ const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+ const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+ const blob=zipStored([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc}],'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Lettre_de_reprise_${c.name.replace(/[^\wÀ-ÿ-]+/g,'_')}.docx`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+ markReprise27(c,'En cours');log25('Lettre de reprise générée',cid,r.firm||'');toast('Lettre de reprise téléchargée (Word)');
+}
+function sentReprise27(cid){
+ const c=cfind(cid);readReprise27(cid);c.reprise27.sentAt=new Date().toISOString();
+ markReprise27(c,'Fait');log25('Lettre de reprise envoyée',cid,c.reprise27.firm||'');closeModal();persist25();toast('Lettre de reprise marquée comme envoyée : étape 2 de l’onboarding cochée');
+}
+(function(){const s=document.createElement('style');s.textContent=`
+.letter27{background:#fff;max-width:760px;margin:0 auto;padding:46px 54px;font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:13.5px;line-height:1.55;color:#222;box-shadow:0 1px 4px rgba(16,24,40,.08)}
+.lt27Top{display:flex;justify-content:space-between;gap:30px;margin-bottom:30px}.lt27From{font-size:11.5px;color:#555}.lt27Firm{font-size:16px;font-weight:700;color:#1f3864;margin-bottom:3px}
+.lt27To{margin-top:70px;min-width:250px}.lt27Place{text-align:right;margin:10px 0 4px}.lt27Mode{font-style:italic;font-size:12px;color:#555;margin-bottom:16px}
+.lt27Obj{font-weight:700;margin-bottom:18px}.letter27 p{text-align:justify;margin:0 0 10px}.letter27 ul{margin:0 0 12px 18px;padding:0}.letter27 li{margin:2px 0}
+.lt27Sign{margin:30px 0 0 55%}.lt27SignName{font-weight:700}.lt27Cc{margin-top:40px;font-size:11px;font-style:italic;color:#777}
+@media print{body.printing26 #print26 .letter27{box-shadow:none;padding:0;max-width:none}}`;document.head.append(s);})();
 
 </script>
 <script>
@@ -5290,10 +5614,11 @@ table{font-size:12.5px}th{font-size:10.5px;font-weight:600}
 .grp27{font-size:13.5px;font-weight:650;margin:16px 0 6px}
 .onb27{background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
 .onb27.open{border-color:#c9d8f0}
-.onbHead27{display:grid;grid-template-columns:18px minmax(220px,2fr) 90px 90px minmax(170px,1.3fr) minmax(170px,1.5fr) 80px;gap:12px;align-items:center;padding:9px 12px;cursor:pointer}
+.onbHead27{display:grid;grid-template-columns:18px minmax(200px,2fr) 85px 85px minmax(150px,1.2fr) minmax(150px,1.4fr) 60px 170px;gap:12px;align-items:center;padding:9px 12px;cursor:pointer}
 .onbHead27:hover{background:#fafbfc}.chev27{color:#8a93a3}
 .onbName27{display:flex;flex-direction:column;overflow:hidden}.onbName27 b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .onbMeta27{display:flex;flex-direction:column;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.onbMeta27 .sub{font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.onbAct27{display:flex;gap:6px;justify-content:flex-end;align-items:center}.sec27{font-size:15px;font-weight:650;margin:20px 0 4px;color:#1d2939}
 .late27t{color:#c62a3d;font-weight:600}.soon27t{color:#b26b00;font-weight:600}
 .onbProg27{display:flex;align-items:center;gap:8px;font-size:12px}.bar27{flex:1;height:6px;background:#edf0f4;border-radius:4px;overflow:hidden}.bar27 i{display:block;height:100%}
 .onbBody27{border-top:1px solid #eef0f4;padding:10px 12px 12px 42px}

@@ -46,7 +46,7 @@ const STATUT_COL27=AGO_COLS27.find(c=>c.k==='statutClient');
 const autoPill27=(v,color)=>v?`<span class="pill27 static27" style="background:${color||color27(v)}">${esc(v)}</span>`:'<span class="sub">—</span>';
 const PF_COLS27=[
  {k:'entry',label:'Date entrée',t:'date',get:x=>x.c.entry||'',set:(x,v)=>{x.c.entry=v;}},
- {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
+ {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return x.c.onbValidated27?autoPill27('Validé',C27.green):isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
  ...PEOPLE27,
  clientCol27('siren','SIREN','text',c=>c.siren||'',(c,v)=>{c.siren=String(v).replace(/\s/g,'').slice(0,9);},null,100),
  clientCol27('forme','Forme juridique','text',c=>c.legalForm||'',(c,v)=>{c.legalForm=v;},null,90),
@@ -83,16 +83,16 @@ KINDS27.portfolio={label:'Portefeuille',
  afterSet:(x,k)=>{if(FISCAL_KEYS27.includes(k))regenerateAll(state,x.c.id,true);},
  rerender:['statutClient','entry',...MISSIONS27.map(([k])=>'m_'+k),'honoCourants','honoBilan','honoAgo','honoAutres','ldm','groupe']};
 KINDS27.onb={label:'Onboarding',
- group:x=>{const p=onbProgress27(x.c);return p.blocked?'Bloqués':p.done===p.total?'Prêts à passer en actif':'En cours';},
+ group:x=>{const p=onbProgress27(x.c);return p.blocked?'Bloqués':p.done===p.total?'Prêts à valider':'En cours';},
  due:x=>{const d=val27(x,'deadline');return d?{due:d,label:'Deadline onboarding'}:null;},
  afterSet:(x,k,v)=>{
   if(k==='ldm'&&v==='Oui')onb27(x.c).s[0]=onb27(x.c).s[0]||'Fait';
   const p=onbProgress27(x.c);
-  if(p.done===p.total&&isOnboarding27(x.c)){x.c.status='Actif';toast(x.c.name+' : onboarding terminé, le client passe en portefeuille actif');log25('Onboarding terminé',x.c.id,'Client actif');}
+  if(p.done===p.total&&isOnboarding27(x.c))toast(x.c.name+' : toutes les étapes sont faites, tu peux valider l’onboarding');
  },
  rerender:['entry','deadline','ldm',...ONB_STEPS27.map((_,i)=>'s'+i)]};
 const PF_GROUPS27={order:["En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
-const ONB_GROUPS27={order:['Bloqués','En cours','Prêts à passer en actif'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à passer en actif':C27.green},
+const ONB_GROUPS27={order:['Prêts à valider','Bloqués','En cours'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à valider':C27.green},
  nameExtra:x=>`<button class="btn small light" onclick="letterDialog26('${x.c.id}')" title="Préparer la lettre de mission">LDM</button>`,
  empty:'Aucun client en onboarding. Un prospect validé arrive ici automatiquement, avec ses missions et ses honoraires.'};
 
@@ -111,12 +111,21 @@ function portfolioPage27(){
 /* Onboarding : liste des dossiers ; un clic déroule les 14 étapes (présentation d'origine du CRM). */
 const ONB_ACTIONS27={
  0:c=>`<button class="btn small light" onclick="letterDialog26('${c.id}')">Préparer la LDM</button>`,
+ 1:c=>`<button class="btn small light" onclick="repriseDialog27('${c.id}')">Lettre de reprise</button>`,
  2:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
  4:c=>`<button class="btn small light" onclick="routePage('clients')">Saisir les honoraires</button>`,
  5:c=>`<button class="btn small light" onclick="identityDialog26('client','${c.id}')">Compléter la fiche</button>`,
  7:()=>`<a class="btn small light" href="https://www.impots.gouv.fr/professionnel" target="_blank" rel="noopener">impots.gouv</a>`,
  11:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
 };
+/* Validation manuelle de l'onboarding : le dossier passe dans « Onboarding validé » et le client devient actif. */
+function validateOnb27(cid){
+ const c=cfind(cid);if(!c)return;const p=onbProgress27(c);
+ if(p.done<p.total&&!confirm(`${p.total-p.done} étape(s) ne sont pas terminées pour ${c.name}. Valider l’onboarding quand même ?`))return;
+ c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||state.currentUser||''};
+ log25('Onboarding validé',cid,p.label);persist25();toast(c.name+' : onboarding validé, le client est actif');
+}
+function reopenOnb27(cid){const c=cfind(cid);if(!c||!confirm('Rouvrir l’onboarding de '+c.name+' ?'))return;c.status='Onboarding';delete c.onbValidated27;log25('Onboarding rouvert',cid,'');persist25();}
 function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[cid]=!b.onbOpen[cid];save();render();}
 function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
 function onbRow27(x){
@@ -134,31 +143,35 @@ function onbRow27(x){
    <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
    <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
    <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
+   ${c.onbValidated27?`<div class="onbAct27"><span class="badge green">Validé le ${new Date(c.onbValidated27.date).toLocaleDateString('fr-FR')}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
   </div>
   ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
    <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
 }
 function onboardingPage27(){
  const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
+ const done=filterCtx27(state.clients.filter(c=>c.onbValidated27&&!isOnboarding27(c)).map(c=>ctx27('onb',c,0))).sort((a,b)=>b.c.onbValidated27.date.localeCompare(a.c.onbValidated27.date));
+ const showDone=boards27().collapsed['onb|validated']!==true;
  const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
  const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
- return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; le client passe en portefeuille actif dès que tout est fait.</div></div>
+ return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; c’est toi qui valides l’onboarding, le dossier passe alors dans « Onboarding validé ».</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}
- ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}`;
+ <h2 class="sec27">Onboarding en cours <span class="sub">${list.length} dossier(s)</span></h2>
+ ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}
+ <h2 class="sec27" style="cursor:pointer" onclick="toggleGroup27('onb','validated')">${showDone?'▾':'▸'} Onboarding validé — dossiers actifs <span class="sub">${done.length} dossier(s)</span></h2>
+ ${showDone?done.map(onbRow27).join('')||'<div class="panel panelBody sub">Aucun onboarding validé pour l’instant.</div>':''}`;
 }
 clientsV11=portfolioPage27;
 onboardingV15=onboardingPage27;
 
-/* ---------- Fiscalité : échéances recalculées depuis la fiche, pour l'exercice en cours ---------- */
-// Les tâches de bilan, de juridique et d'onboarding sont désormais portées par les tableaux ;
-// seules les échéances fiscales restent générées, pour l'année en cours, afin de garder la base légère.
+/* ---------- Tâches générées par l'ancienne maquette : remplacées par les tableaux ---------- */
+// Les échéances fiscales sont désormais calculées à la volée par l'onglet Fiscalité (régimes du tableau principal) :
+// plus aucune tâche n'est stockée, ce qui garde la base légère.
 regenerateAll=function(s,cid,first=false){
  const c=s.clients.find(x=>x.id===cid);if(!c)return;
  if(!c.missions)c.missions={};
- const y=new Date().getFullYear();
- s.fiscal=s.fiscal.filter(x=>!(x.client===cid&&x.year===y)).concat(preserve(s.fiscal.filter(x=>x.client===cid&&x.year===y),genFiscal(c,y)));
  if(!first)save();
 };
 
@@ -292,5 +305,5 @@ const previousRenderPortfolio27=render;
 render=function(){
  if(REMOVED_PAGES27.includes(state.page))state.page='cabinetdash';
  previousRenderPortfolio27();
- if(['clients','onboarding'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
+ if(['clients','onboarding','fiscal'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
 };

@@ -209,12 +209,12 @@ function waitFor(proc, text) {
   await page.waitForFunction(() => state.clients.some(c => c.name === 'ONBOARD TEST'));
   const pf = await page.evaluate(() => {
     const c = state.clients.find(x => x.name === 'ONBOARD TEST'), y = new Date().getFullYear();
-    const fisc = () => state.fiscal.filter(t => t.client === c.id && t.year === y);
-    const before = fisc().filter(t => t.type === 'TVA').length;
+    const tva = () => obligations27(c, y).filter(o => o.type === 'TVA').length;
+    const before = tva();
     setCell27({ value: 'Trimestrielle', style: {} }, 'portfolio', c.id, 0, 'tva');
-    const after = fisc().filter(t => t.type === 'TVA').length;
+    const after = tva();
     return { st: c.status, siren: c.siren, mgr: people27(c, 'manager'), m: ['tax', 'annualAccounts', 'legal', 'einvoice'].map(k => c.missions[k]), f: [fees27(c).accounting, fees27(c).annualAccounts, fees27(c).legalAnnual],
-      step: onbStep27(c, 2), prog: onbProgress27(c).label, before, after, is: fisc().filter(t => t.type === 'Acompte IS').length,
+      step: onbStep27(c, 2), prog: onbProgress27(c).label, before, after, is: c.missions.tax ? 4 : 0,
       bilan: val27(ctx27('bilan', c, 2026), 'afaire'), ago: val27(ctx27('ago', c, 2026), 'juridique'), closing: c.closing, html: document.body.innerText.includes('Portefeuille clients') };
   });
   assert.ok(pf.html); assert.equal(pf.st, 'Onboarding'); assert.equal(pf.siren, '222333444', 'SIRET ramené au SIREN'); assert.equal(pf.mgr, 'Bruno Test');
@@ -222,8 +222,11 @@ function waitFor(proc, text) {
   assert.equal(pf.step, 'Bloqué'); assert.equal(pf.prog, '11/14');
   assert.deepEqual([pf.before, pf.after, pf.is], [12, 4, 4], 'échéances fiscales recalculées depuis le portefeuille');
   assert.deepEqual([pf.bilan, pf.ago, pf.closing], ['Oui', 'Oui', '12-31'], 'missions reprises dans Bilan et AGO');
-  const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's13'); return [b, c.status]; });
-  assert.deepEqual(fin, ['13/14', 'Actif'], 'onboarding terminé → client actif');
+  const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's13'); return [b, c.status, group27(ctx27('onb', c, 0))]; });
+  assert.deepEqual(fin, ['13/14', 'Onboarding', 'Prêts à valider'], 'toutes les étapes faites : pas de bascule automatique');
+  await page.click('.onb27:has-text("PRESQUE FINI") button:has-text("Valider l’onboarding")');
+  const val = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); return [c.status, Boolean(c.onbValidated27), document.body.innerText.includes('Onboarding validé')]; });
+  assert.deepEqual(val, ['Actif', true, true], 'validation manuelle → section Onboarding validé');
   // Onboarding : un clic sur le dossier déroule ses étapes, qui restent ouvertes après modification.
   await page.evaluate(() => routePage('onboarding'));
   await page.click('.onbHead27:has-text("ONBOARD TEST")');
@@ -237,6 +240,42 @@ function waitFor(proc, text) {
   await page.locator('.board27 select[onchange*="m_payroll"]').first().selectOption('Oui');
   assert.equal(await page.evaluate(() => document.querySelector('.board27').scrollLeft), 700, 'défilement horizontal conservé');
   console.log('✓ Portefeuille et Onboarding : import Excel, 14 étapes, fiscalité et tableaux reliés, passage automatique en actif');
+
+  // Lettre de reprise
+  const oid = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'ONBOARD TEST'); cabinet26().name = 'RB PARTNERS'; cabinet26().expert = 'Expert Test'; repriseDialog27(c.id); return c.id; });
+  await page.fill('#rp_firm', 'CABINET PRÉCÉDENT'); await page.fill('#rp_confrere', 'Jean Dupont'); await page.fill('#rp_firmAddress', '5 avenue Foch, 75116 Paris');
+  await page.click('.modal button:has-text("Aperçu")');
+  assert.ok(await page.locator('.letter27').innerText().then(t => t.includes('CABINET PRÉCÉDENT') && t.includes('article 163') && t.includes('ONBOARD TEST')), 'aperçu de la lettre');
+  const [wdl] = await Promise.all([page.waitForEvent('download'), page.click('.modal button:has-text("Télécharger Word")')]);
+  const docx = fs.readFileSync(await wdl.path());
+  assert.ok(docx.slice(0, 2).toString() === 'PK' && docx.includes(Buffer.from('word/document.xml')) && docx.includes(Buffer.from('CABINET PR')), 'fichier Word généré');
+  await page.click('.modal button:has-text("Marquer comme envoyée")');
+  assert.equal(await page.evaluate(id => onbStep27(cfind(id), 1), oid), 'Fait', 'étape lettre de reprise cochée');
+  console.log('✓ Lettre de reprise : pré-remplie, aperçu, Word, étape d’onboarding cochée ; validation manuelle de l’onboarding');
+
+  // Fiscalité : tableau principal des régimes et échéances mensuelles automatiques
+  await page.evaluate(() => routePage('fiscal'));
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'fiscal_test.xlsx'));
+  await page.waitForFunction(() => state.clients.some(c => c.name === 'FISC TRIMESTRIEL'));
+  const fi = await page.evaluate(() => {
+    const m = state.clients.find(x => x.name === 'FISC MENSUEL'), t = state.clients.find(x => x.name === 'FISC TRIMESTRIEL'), keys = c => obligations27(c, 2026).map(o => o.key);
+    const r = { mStatus: m.status, tStatus: t.status, mVat: m.vatRegime, mKeys: keys(m).filter(k => !k.startsWith('TVA-')), mTva: keys(m).filter(k => k.startsWith('TVA-')).length,
+      tKeys: keys(t).filter(k => !k.startsWith('DEB-')), tDeb: obligations27(t, 2026).find(o => o.key === 'DEB-03').due, st: row27('fiscm', m.id, 2026)['TVA-01'], tf: obligations27(m, 2026).find(o => o.key === 'TF').def,
+      tax: m.missions.tax, html: document.body.innerText.includes('Tableau principal') };
+    setCell27({ value: 'Annuelle', style: {} }, 'fisc', m.id, 0, 'tva');
+    r.after = keys(m).filter(k => k.startsWith('TVA') || k === 'CA12');
+    setFiscView27('3'); r.march = COLS27.fiscm.map(c => c.label).filter(l => /TVA|IS|DES/.test(l)); r.marchRows = document.querySelectorAll('.board27 tbody tr').length;
+    return r;
+  });
+  assert.ok(fi.html && fi.tax);
+  assert.deepEqual([fi.mStatus, fi.tStatus, fi.mVat], ['Actif', 'Compromis', 'Mensuelle'], 'clients importés actifs / compromis');
+  assert.equal(fi.mTva, 12); assert.deepEqual(fi.mKeys, ['IS-T1', 'IS-T2', 'IS-T3', 'IS-T4', 'CFE-AC', 'CFE', 'TVS', 'TF']);
+  assert.deepEqual(fi.tKeys, ['TVA-01', 'TVA-04', 'TVA-07', 'TVA-10', 'TS-01', 'TS-04', 'TS-07', 'TS-10', 'IFU', 'CRL']);
+  assert.equal(fi.tDeb, '2026-03-08'); assert.equal(fi.st, 'Déclarée', 'statut importé et harmonisé'); assert.equal(fi.tf, 'Payée');
+  assert.deepEqual(fi.after, ['CA12', 'TVA-S1', 'TVA-S2'], 'passage en TVA annuelle → CA12 et acomptes');
+  assert.ok(fi.march.includes('DES/DEB 03') && fi.marchRows >= 1, 'vue mensuelle calculée');
+  if (shots) await page.screenshot({ path: path.join(shots, 'fiscalite.png'), fullPage: false });
+  console.log('✓ Fiscalité : import Excel, tableau principal des régimes, échéances mensuelles et annuelles automatiques');
 
   // Prospect → client : missions et honoraires reportés automatiquement
   await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'PROSPECT TEST', siren: '555666777', contact: 'Louis', email: 'l@x.fr', owner: 'YB', value: 0, stage: 'Négociation', source: '', appointment: '', next: '', notes: '' }); save(); routePage('prospects'); openProspect(id); window._pid = id; });

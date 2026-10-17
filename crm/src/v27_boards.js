@@ -15,7 +15,7 @@ function color27(v){
  v=String(v??'');
  if(!v||v==='-')return C27.empty;
  if(/^(NA|N\.A|Non concerné)$/i.test(v))return C27.grey;
- if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui$|^Actif$/.test(v))return C27.green;
+ if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui|^Actif$|^Validé|^Envoy|^Déclar|^Declar|^Payée|^Fait/.test(v))return C27.green;
  if(/A revoir|vérifier|Bloqué|ompromis/.test(v))return C27.red;
  if(/^1\.|^A faire$/i.test(v))return C27.blue;
  if(/attente|envoyer|Déposé|^[2-8]\.|onboarding/.test(v))return C27.orange;
@@ -163,6 +163,7 @@ function setBoardFilter27(k,v){boards27()[k]=k==='year'?Number(v):v;save();rende
 /* ---------- Rendu ---------- */
 function cell27(kind,x,col){
  if(col.render)return `<td style="min-width:${col.w||110}px">${col.render(x)}</td>`;
+ if(col.na&&col.na(x))return `<td class="na27" style="min-width:${col.w||110}px"></td>`;
  const v=col.get(x),id=`'${kind}','${x.c.id}',${x.y},'${col.k}'`;
  if(col.t==='status')return `<td style="min-width:${col.w||120}px"><select class="pill27" style="background:${color27(v)}" onchange="setCell27(this,${id})">${(col.opts.includes(v)||!v?col.opts:[v,...col.opts]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}${v?'':'<option selected value="">—</option>'}</select></td>`;
  if(col.t==='auto'){
@@ -182,7 +183,7 @@ function groupsHtml27(kind,ctxs,y,opt={}){
  const nameExtra=opt.nameExtra||(x=>kind==='ago'?`<button class="btn small light" onclick="openAgo27('${x.c.id}',${y})">Ouvrir</button>`:'');
  const head=`<tr><th class="n27">Name</th>${cols.map(c=>`<th title="${esc(c.full||c.label.replace('{Y}',y))}">${esc(c.label.replace('{Y}',y))}</th>`).join('')}</tr>`;
  return order.filter(g=>groups[g]).map(g=>{const list=groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))),collapsed=b.collapsed[kind+'|'+g],col=colors[g]||C27.blue;
-  const sums=cols.map(c=>c.t==='num'||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
+  const sums=cols.map(c=>(c.t==='num'&&!c.nosum)||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
   return `<div class="grp27" style="color:${col}" onclick="toggleGroup27('${kind}','${esc(g)}')">${collapsed?'▸':'▾'} ${esc(g)} <span class="sub">${list.length} dossier(s)</span></div>
   ${collapsed?'':`<div class="board27" data-k="${esc(kind+'|'+g)}" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${nameExtra(x)}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
   ${sums.some(v=>v!=null)?`<tfoot><tr><td class="n27"><b>Total</b></td>${sums.map(s=>`<td>${s==null?'':`<b>${euro(s)}</b>`}</td>`).join('')}</tr></tfoot>`:''}</table></div>`}`;}).join('')||`<div class="panel panelBody">${opt.empty||'Aucun client. Importe ton fichier Excel ou crée des clients dans le portefeuille.'}</div>`;
@@ -258,6 +259,7 @@ async function importBoard27(file){
  let rows;try{rows=await readXlsx27(file);}catch(e){return alert('Import impossible : '+e.message);}
  const hi=rows.findIndex(r=>normHead27(r[0])==='name');
  if(hi<0)return alert('Ligne d’en-tête « Name » introuvable : utilise l’export Excel du tableau Portefeuille, Bilan ou AGO.');
+ if(rows[hi].some(h=>['deadline tva','tva 01','acomptes is'].includes(normHead27(h))))return importFiscal27(rows,hi,file);
  if(rows[hi].some(h=>['date entree','onboarding statut','actif/inactif'].includes(normHead27(h))))return importPortfolio27(rows,hi);
  const seen={},keys=rows[hi].map(h=>{let n=normHead27(h);if(/^bilan \d{4} a faire$/.test(n))return 'afaire';if(/^juridique \d{4}$/.test(n))return 'juridique';seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+='#'+seen[n];return HEAD27[n]||null;});
  const kind=keys.includes('statut')?'ago':keys.includes('etat')?'bilan':null;
@@ -270,7 +272,7 @@ async function importBoard27(file){
   const v={};keys.forEach((k,i)=>{if(k&&r[i]!=null&&r[i]!=='')v[k]=r[i];});
   const name=String(v.name).trim(),siren=String(v.siren||'').replace(/\D/g,'');
   let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';state.clients.push(c);created++;}else updated++;
+  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
   const x=ctx27(kind,c,year),row=x.row(true);
   for(const col of COLS27[kind]){
    if(col.t==='auto'||v[col.k]==null)continue;

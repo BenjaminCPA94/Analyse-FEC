@@ -23,10 +23,11 @@ table{font-size:12.5px}th{font-size:10.5px;font-weight:600}
 .grp27{font-size:13.5px;font-weight:650;margin:16px 0 6px}
 .onb27{background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
 .onb27.open{border-color:#c9d8f0}
-.onbHead27{display:grid;grid-template-columns:18px minmax(220px,2fr) 90px 90px minmax(170px,1.3fr) minmax(170px,1.5fr) 80px;gap:12px;align-items:center;padding:9px 12px;cursor:pointer}
+.onbHead27{display:grid;grid-template-columns:18px minmax(200px,2fr) 85px 85px minmax(150px,1.2fr) minmax(150px,1.4fr) 60px 170px;gap:12px;align-items:center;padding:9px 12px;cursor:pointer}
 .onbHead27:hover{background:#fafbfc}.chev27{color:#8a93a3}
 .onbName27{display:flex;flex-direction:column;overflow:hidden}.onbName27 b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .onbMeta27{display:flex;flex-direction:column;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.onbMeta27 .sub{font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.onbAct27{display:flex;gap:6px;justify-content:flex-end;align-items:center}.sec27{font-size:15px;font-weight:650;margin:20px 0 4px;color:#1d2939}
 .late27t{color:#c62a3d;font-weight:600}.soon27t{color:#b26b00;font-weight:600}
 .onbProg27{display:flex;align-items:center;gap:8px;font-size:12px}.bar27{flex:1;height:6px;background:#edf0f4;border-radius:4px;overflow:hidden}.bar27 i{display:block;height:100%}
 .onbBody27{border-top:1px solid #eef0f4;padding:10px 12px 12px 42px}

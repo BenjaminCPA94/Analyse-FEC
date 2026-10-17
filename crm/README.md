@@ -7,7 +7,8 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 | Écran | Ce qui est automatique |
 |---|---|
 | Prospects | La recherche par SIREN interroge l'annuaire officiel des entreprises (gratuit). Le capital social vient de Pappers si `PAPPERS_API_KEY` est configurée. Les missions et honoraires proposés sont saisis sur le prospect et enregistrés au fil de la saisie. À la validation, ils sont repris sur la fiche client et le client passe en onboarding. |
-| Onboarding | Tableau des 14 étapes d'entrée du client (LDM, Pennylane, prélèvement, impots.gouv, LAB…). Certaines se cochent seules à partir des données saisies, et le client passe en portefeuille actif quand tout est fait. |
+| Onboarding | Liste des dossiers : un clic déroule les 14 étapes (LDM, lettre de reprise, Pennylane, prélèvement, impots.gouv, LAB…), dont certaines se cochent seules. La **lettre de reprise** au confrère précédent est pré-remplie, avec aperçu, Word et impression ; l'étape se coche quand elle est envoyée. C'est toi qui valides l'onboarding : le dossier passe alors dans « Onboarding validé » et le client devient actif. |
+| Fiscalité | « Tableau principal » des régimes par client (TVA et date, DEB/DES, taxe sur les salaires, acomptes d'IS, CFE, CVAE, TVS, IFU, CRL, taxe foncière), puis un onglet par mois et un onglet « Annuelle ». Les déclarations de chaque mois sont calculées à partir des régimes : il n'y a rien à recréer d'une année sur l'autre. L'export Excel s'importe tel quel. |
 | Portefeuille clients | Une ligne par client, sur le modèle de l'export Excel : personnes, SIREN, statut, groupe, clôture, régimes, missions, LDM, honoraires, budget, état du bilan et de l'AGO. Ces données sont saisies une seule fois et alimentent la fiscalité (échéances recalculées), les tableaux Bilan et AGO et le contrôle des honoraires. |
 | Clôture & Bilan, Juridique annuel / AGO | Deux tableaux par exercice qui reprennent les suivis Excel du cabinet (« Bilan Fr », « AGO ») : mêmes colonnes et mêmes statuts colorés, dossiers groupés par avancement, cases modifiables directement. Les fichiers Excel s'importent tels quels et le tableau s'exporte en CSV. Automatiquement : échéances calculées (liasse, AGO, dépôt au greffe), retards remontés dans le tableau de bord, colonne « Bilan » reprise dans l'AGO, « Lancer facturation » positionné quand un dossier est terminé, acomptes d'IS proposés, facture vérifiée dans Pennylane. |
 | Contrôle honoraires, Facturation | Les factures clients du cabinet sont lues dans Pennylane (HT, avoirs déduits, brouillons exclus, restant dû). Elles sont rapprochées des fiches par SIREN puis par raison sociale, à chaque ouverture du CRM (toutes les 6 h au plus). |
@@ -103,5 +104,8 @@ crm/
   src/v27_pennylane.js    module Pennylane (factures, dossiers, synchro automatique)
   src/v27_boards.js       tableaux Bilan Fr et AGO (modèle des suivis Excel)
   src/v27_portfolio.js    Portefeuille, Onboarding, prospects reliés, navigation
+  src/v27_fiscal.js       Fiscalité : régimes et échéances mensuelles
+  src/v27_reprise.js      lettre de reprise (aperçu, Word, impression)
+  src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout
 ```
