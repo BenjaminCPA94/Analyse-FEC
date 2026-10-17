@@ -344,8 +344,50 @@ function waitFor(proc, text) {
   assert.deepEqual(legacy, [true, true], 'ancien dossier actif listé dans Onboarding validé');
   console.log('✓ Prospect validé : missions et honoraires repris sur la fiche, arrivée en onboarding');
 
+  // Matrice création : formulaire envoyé au client, réponses reçues, reprise dans le portefeuille
+  await page.evaluate(() => routePage('creation'));
+  assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('prospects') + 1; }), 'onglet Matrice création après Prospects');
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'creation_test.xlsx'));
+  await page.waitForFunction(() => creation27().items.length >= 2);
+  const ci = await page.evaluate(() => { const a = creation27().items.find(x => x.name === 'TEST CREA ALPHA'), b = creation27().items.find(x => x.name === 'TEST CREA BETA'); return { a: a.fields.capital, close: a.fields.firstClose, doc: crDocs27(a, 'docIdSh').length, sa: crStatus27(a), b: b.deadline, sb: crStatus27(b), form: b.legalForm, t: document.body.innerText }; });
+  assert.ok(ci.a === '1000' && ci.close === '2025-12-31' && ci.doc === 1 && ci.sa === 'Société créée' && ci.b === '2025-06-30' && ci.sb === 'Informations reçues' && ci.form === 'SCI' && ci.t.includes('Informations reçues') && ci.t.includes('Banque Test'), 'import Matrice création ' + JSON.stringify({ ...ci, t: '' }));
+  await page.evaluate(() => crNew27());
+  await page.fill('#cr_name', 'Holding Test Création'); await page.selectOption('#cr_form', 'SAS'); await page.fill('#cr_email', 'client@example.com'); await page.fill('#cr_fees', '900');
+  await page.click('button:has-text("Créer sans envoyer")');
+  const crId = await page.evaluate(() => creation27().items.find(x => x.name === 'Holding Test Création').id);
+  assert.equal(await page.evaluate(id => crStatus27(crFind27(id)), crId), 'À envoyer');
+  const mail = await page.evaluate(async id => { let href = ''; crMail27 = h => { href = h; }; await crSend27(id); return { href, url: crUrl27(crFind27(id)), st: crStatus27(crFind27(id)) }; }, crId);
+  assert.ok(mail.url.includes('/creation/') && mail.href.startsWith('mailto:client%40example.com') && decodeURIComponent(mail.href).includes(mail.url) && mail.st === 'En attente du client', 'mail préparé avec le lien');
+  // Le client ouvre le lien sans compte, remplit le formulaire et dépose une pièce d'identité.
+  const ctx2 = await browser.newContext(), pub = await ctx2.newPage();
+  pub.on('pageerror', e => errors.push('public: ' + e.message));
+  await pub.goto(base + '/creation/' + 'x'.repeat(30));
+  await pub.waitForSelector('.center:has-text("plus valide")');
+  await pub.goto(mail.url);
+  await pub.waitForSelector('#f_capital');
+  assert.ok((await pub.textContent('h1')).includes('Holding Test Création') && await pub.inputValue('#f_legalForm') === 'SAS', 'formulaire pré-rempli');
+  await pub.click('#send');
+  assert.ok((await pub.textContent('#msg')).includes('Il manque encore'), 'champs obligatoires contrôlés');
+  for (const [k, v] of [['capital', '5 000 €'], ['seat', '10 rue de la Paix 75002 Paris'], ['purpose', 'Prise de participations'], ['sh1', 'Paul / DUPONT / 02/02/1980 / Lyon'], ['sh1pct', '100'], ['dir1', 'Paul / DUPONT / 02/02/1980 / Lyon']]) await pub.fill('#f_' + k, v);
+  await pub.fill('#f_firstClose', '2026-12-31');
+  await pub.setInputFiles('#files_docIdDir >> xpath=preceding-sibling::div//input', { name: 'CNI_Dupont.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
+  await pub.waitForSelector('#files_docIdDir li');
+  await pub.click('#send');
+  await pub.waitForSelector('#msg .notice.ok');
+  await ctx2.close();
+  await page.evaluate(() => pullCreation27(true));
+  const got = await page.evaluate(async id => { const it = crFind27(id), f = it.files[0], r = await fetch(crFileHref27(it, f)); return { st: crStatus27(it), cap: it.fields.capital, n: it.files.length, body: await r.text() }; }, crId);
+  assert.ok(got.st === 'Informations reçues' && got.cap === '5 000 €' && got.n === 1 && got.body === '%PDF-1.4 test', 'réponses et justificatif reçus ' + JSON.stringify(got));
+  r = await fetch(base + '/api/creation/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"tokens":[]}' });
+  assert.equal(r.status, 401, 'réponses protégées');
+  const cc = await page.evaluate(id => { crClient27(id); const it = crFind27(id), c = cfind(it.client), w = exc27().items.find(x => x.id === it.exc); crStage27(id, 'Société créée'); return { status: c.status, cap: c.identity26.capital, close: c.closing, form: c.legalForm, dir: c.identity26.directors[0].name, w: w && w.fees, done: w && w.statut, bill: toBill27().some(x => x.label === 'Création de société' && x.c.id === c.id) }; }, crId);
+  assert.ok(cc.status === 'Onboarding' && cc.cap === '5 000 €' && cc.close === '12-31' && cc.form === 'SAS' && cc.dir === 'Paul DUPONT' && cc.w === 900 && cc.done === 'Terminé' && cc.bill, 'fiche client, travail exceptionnel et facturation ' + JSON.stringify(cc));
+  const tok = await page.evaluate(async id => { const t = crFind27(id).token; window.confirm = () => true; await crDelete27(id); return t; }, crId);
+  assert.equal((await fetch(base + '/api/public/creation?t=' + tok)).status, 404, 'lien supprimé');
+  console.log('✓ Matrice création : import Excel, formulaire client par mail, réponses et justificatifs reçus, fiche client, facturation');
+
   // Rendu des écrans
-  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'fiscal', 'prospects', 'onboarding', 'clients', 'client', 'exceptional', 'time', 'profit', 'capacity', 'users']) {
+  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'fiscal', 'prospects', 'onboarding', 'clients', 'client', 'exceptional', 'time', 'profit', 'capacity', 'users', 'creation']) {
     await page.evaluate(p => routePage(p), p);
     await page.waitForTimeout(150);
     if (shots && ['fees', 'rules'].includes(p)) await page.screenshot({ path: path.join(shots, p + '.png'), fullPage: false });

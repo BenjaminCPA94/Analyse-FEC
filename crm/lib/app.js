@@ -73,6 +73,10 @@ class FileStore {
     this.write(this.files.state, next);
     return { revision: next.revision };
   }
+  kvFile(key) { const d = path.join(this.dir, 'kv'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return path.join(d, encodeURIComponent(key) + '.json'); }
+  async kvGet(key) { return this.read(this.kvFile(key), null); }
+  async kvSet(key, value) { this.write(this.kvFile(key), value); }
+  async kvDel(key) { try { fs.unlinkSync(this.kvFile(key)); } catch (e) { if (e.code !== 'ENOENT') throw e; } }
   async failCount(key) { const f = this.failures.get(key); return f && f.until > Date.now() ? f.count : 0; }
   async addFailure(key) { const n = (await this.failCount(key)) + 1; this.failures.set(key, { count: n, until: Date.now() + 15 * 60e3 }); }
   async clearFailures(key) { this.failures.delete(key); }
@@ -119,6 +123,9 @@ class RedisStore {
       if (await this.cmd('GET', 'rb:lock') === lock) await this.cmd('DEL', 'rb:lock');
     }
   }
+  async kvGet(key) { const v = await this.cmd('GET', 'rb:kv:' + key); return v ? JSON.parse(v) : null; }
+  async kvSet(key, value) { await this.cmd('SET', 'rb:kv:' + key, JSON.stringify(value)); }
+  async kvDel(key) { await this.cmd('DEL', 'rb:kv:' + key); }
   async failCount(key) { return Number(await this.cmd('GET', 'rb:fail:' + key) || 0); }
   async addFailure(key) { if (await this.cmd('INCR', 'rb:fail:' + key) === 1) await this.cmd('EXPIRE', 'rb:fail:' + key, '900'); }
   async clearFailures(key) { await this.cmd('DEL', 'rb:fail:' + key); }
@@ -204,10 +211,15 @@ function normCustomer(x) {
 /* ---------- page du CRM ---------- */
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_team.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
+  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_team.js', 'creation_fields.js', 'v27_creation.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
   return base.slice(0, i) + modules + base.slice(i);
+}
+
+function buildCreationForm() {
+  const fields = fs.readFileSync(path.join(ROOT, 'src', 'creation_fields.js'), 'utf8');
+  return fs.readFileSync(path.join(ROOT, 'src', 'creation_form.html'), 'utf8').replace('/*CREATION_FIELDS*/', () => fields);
 }
 
 /* ---------- HTTP ---------- */
@@ -245,11 +257,14 @@ function validState(s) {
   return s && typeof s === 'object' && Array.isArray(s.clients) && Array.isArray(s.prospects) && Array.isArray(s.invoices) && Array.isArray(s.time)
     && ['onboarding', 'fiscal', 'closing', 'legal'].every(k => Array.isArray(s[k]));
 }
+const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
+const MAX_FILE = 3 * 1024 * 1024;
+const SAFE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/webp'];
 const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 function createApp({ store = createStore(), cfg = config() } = {}) {
-  let INDEX = null;
+  let INDEX = null, CREATION_FORM = null;
   const sign = async payload => {
     const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
     return data + '.' + crypto.createHmac('sha256', await store.secret()).update(data).digest('base64url');
@@ -274,6 +289,13 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
   async function openSession(req, res, user) {
     const token = await sign({ u: user.username, v: user.hash.slice(0, 16), exp: Date.now() + cfg.sessionHours * 3600e3 });
     send(res, 200, { username: user.username, role: user.role }, { 'Set-Cookie': cookie(req, token, cfg.sessionHours * 3600) });
+  }
+  async function publicLink(req, token) {
+    const ip = 'pub:' + clientIp(req);
+    if (await store.failCount(ip) >= 30) throw httpError(429, 'Trop de tentatives, réessaie plus tard.');
+    const link = TOKEN_RE.test(String(token || '')) ? await store.kvGet('cr:link:' + token) : null;
+    if (!link) { await store.addFailure(ip); throw httpError(404, 'Ce lien n’est plus valide. Contacte ton cabinet.'); }
+    return { token, link };
   }
   const admin = s => { if (s.role !== 'admin') throw httpError(403, 'Réservé aux administrateurs'); };
   const requireCabinet = () => { if (!cfg.pennylane.cabinetToken) throw new PennylaneError('PENNYLANE_CABINET_TOKEN non renseigné sur le serveur.', 400); };
@@ -353,6 +375,72 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     },
 
     /* --- Pennylane --- */
+    /* Matrice création : liens envoyés aux futurs clients et réponses reçues (stockées à part de l'état partagé). */
+    'POST /api/creation/link': async (req, res) => {
+      const b = await readBody(req), token = crypto.randomBytes(18).toString('base64url');
+      const link = { name: String(b.name || '').slice(0, 200), legalForm: String(b.legalForm || '').slice(0, 40), cabinet: String(b.cabinet || '').slice(0, 200), createdAt: new Date().toISOString() };
+      await store.kvSet('cr:link:' + token, link);
+      send(res, 200, { token });
+    },
+    // Le CRM envoie la liste de ses liens (elle fait partie de l'état partagé) et reçoit les réponses des clients.
+    'POST /api/creation/list': async (req, res) => {
+      const { tokens } = await readBody(req), items = [];
+      for (const token of (Array.isArray(tokens) ? tokens : []).filter(t => TOKEN_RE.test(String(t))).slice(0, 500)) {
+        const sub = await store.kvGet('cr:sub:' + token);
+        if (sub) items.push({ token, fields: sub.fields || {}, files: (sub.files || []).map(({ id, name, kind, size, at }) => ({ id, name, kind, size, at })), submittedAt: sub.submittedAt || null, updatedAt: sub.updatedAt || null });
+      }
+      send(res, 200, { items });
+    },
+    'GET /api/creation/file': async (req, res, s, url) => {
+      const token = url.searchParams.get('t') || '', id = url.searchParams.get('id') || '';
+      if (!TOKEN_RE.test(token) || !/^[a-z0-9]{6,20}$/.test(id)) throw httpError(400, 'Paramètres invalides');
+      const f = await store.kvGet(`cr:file:${token}:${id}`);
+      if (!f) throw httpError(404, 'Fichier introuvable');
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': SAFE_TYPES.includes(f.type) ? f.type : 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}` });
+      res.end(Buffer.from(f.data, 'base64'));
+    },
+    'POST /api/creation/delete': async (req, res) => {
+      const { token } = await readBody(req);
+      if (!TOKEN_RE.test(String(token || ''))) throw httpError(400, 'Lien invalide');
+      const sub = await store.kvGet('cr:sub:' + token);
+      for (const f of sub?.files || []) await store.kvDel(`cr:file:${token}:${f.id}`);
+      await store.kvDel('cr:sub:' + token); await store.kvDel('cr:link:' + token);
+      send(res, 200, { ok: true });
+    },
+    /* Formulaire public (sans connexion) : l'accès se fait uniquement avec le lien secret envoyé au client. */
+    'GET /api/public/creation': async (req, res, s, url) => {
+      const { token, link } = await publicLink(req, url.searchParams.get('t'));
+      const sub = await store.kvGet('cr:sub:' + token);
+      send(res, 200, { name: link.name, legalForm: link.legalForm, cabinet: link.cabinet, fields: sub?.fields || {}, files: (sub?.files || []).map(({ id, name, kind, size }) => ({ id, name, kind, size })), submittedAt: sub?.submittedAt || null });
+    },
+    'POST /api/public/creation/file': async (req, res, s, url) => {
+      const { token } = await publicLink(req, url.searchParams.get('t'));
+      const b = await readBody(req, 6 * 1024 * 1024), data = String(b.data || ''), size = Math.floor(data.length * 3 / 4);
+      if (!data || size > MAX_FILE) throw httpError(413, 'Fichier trop volumineux (3 Mo maximum).');
+      if (!/^[A-Za-z0-9+/=]+$/.test(data)) throw httpError(400, 'Fichier illisible');
+      const sub = (await store.kvGet('cr:sub:' + token)) || { fields: {}, files: [] };
+      if (sub.files.length >= 30) throw httpError(400, 'Nombre maximum de fichiers atteint (30).');
+      const id = crypto.randomBytes(6).toString('hex'), meta = { id, name: String(b.name || 'document').replace(/[\/\r\n"]/g, '_').slice(0, 120), kind: String(b.kind || '').slice(0, 40), type: String(b.type || '').slice(0, 80), size, at: new Date().toISOString() };
+      await store.kvSet(`cr:file:${token}:${id}`, { name: meta.name, type: meta.type, data });
+      sub.files.push(meta); sub.updatedAt = meta.at;
+      await store.kvSet('cr:sub:' + token, sub);
+      send(res, 200, { id, name: meta.name, kind: meta.kind, size });
+    },
+    'POST /api/public/creation/file/delete': async (req, res, s, url) => {
+      const { token } = await publicLink(req, url.searchParams.get('t'));
+      const { id } = await readBody(req), sub = await store.kvGet('cr:sub:' + token);
+      if (sub && sub.files.some(f => f.id === id)) { await store.kvDel(`cr:file:${token}:${id}`); sub.files = sub.files.filter(f => f.id !== id); await store.kvSet('cr:sub:' + token, sub); }
+      send(res, 200, { ok: true });
+    },
+    'POST /api/public/creation': async (req, res, s, url) => {
+      const { token } = await publicLink(req, url.searchParams.get('t'));
+      const b = await readBody(req, 200 * 1024), fields = {};
+      for (const [k, v] of Object.entries(b.fields || {})) if (/^[a-zA-Z0-9]{1,30}$/.test(k) && Object.keys(fields).length < 60) fields[k] = String(v ?? '').slice(0, 5000);
+      const sub = (await store.kvGet('cr:sub:' + token)) || { files: [] };
+      const now = new Date().toISOString();
+      await store.kvSet('cr:sub:' + token, { ...sub, fields, submittedAt: b.final ? now : sub.submittedAt || null, updatedAt: now });
+      send(res, 200, { ok: true });
+    },
     'GET /api/pennylane/status': async (req, res) => send(res, 200, { cabinet: Boolean(cfg.pennylane.cabinetToken), firm: Boolean(cfg.pennylane.firmToken), pappers: Boolean(process.env.PAPPERS_API_KEY), storage: store.kind.split(' (')[0] }),
     'POST /api/pennylane/test': async (req, res) => {
       const out = {};
@@ -392,6 +480,7 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     const url = new URL(req.url, 'http://local');
     try {
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, INDEX || (INDEX = buildIndex()));
+      if (req.method === 'GET' && /^\/creation\/[A-Za-z0-9_-]{20,64}$/.test(url.pathname)) return send(res, 200, CREATION_FORM || (CREATION_FORM = buildCreationForm()), { 'Referrer-Policy': 'no-referrer' });
       if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true });
       const route = routes[`${req.method} ${url.pathname}`];
       if (!route) return send(res, 404, { error: 'Introuvable' });
@@ -399,7 +488,7 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
         if (!sameOrigin(req)) return send(res, 403, { error: 'Origine refusée' });
         if (!String(req.headers['content-type'] || '').includes('application/json') && url.pathname !== '/api/logout') return send(res, 415, { error: 'JSON attendu' });
       }
-      const open = ['/api/login', '/api/logout'].includes(url.pathname);
+      const open = ['/api/login', '/api/logout'].includes(url.pathname) || url.pathname.startsWith('/api/public/');
       const s = open ? null : await sessionOf(req);
       if (!open && !s) return send(res, 401, { error: 'Session expirée' });
       await route(req, res, s, url);
@@ -412,4 +501,4 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
   return { handle, store, cfg };
 }
 
-module.exports = { createApp, createStore, config, newUser, buildIndex, normInvoice, normCustomer, plList, FileStore, RedisStore };
+module.exports = { createApp, createStore, config, newUser, buildIndex, buildCreationForm, normInvoice, normCustomer, plList, FileStore, RedisStore };

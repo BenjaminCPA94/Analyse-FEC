@@ -7,6 +7,7 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 | Écran | Ce qui est automatique |
 |---|---|
 | Prospects | La recherche par SIREN interroge l'annuaire officiel des entreprises (gratuit). Le capital social vient de Pappers si `PAPPERS_API_KEY` est configurée. Les missions et honoraires proposés sont saisis sur le prospect et enregistrés au fil de la saisie. À la validation, ils sont repris sur la fiche client et le client passe en onboarding. |
+| Matrice création | Modèle du tableau Monday « Matrice création » (import Excel possible). « Nouvelle création » prépare un mail avec un lien sécurisé vers un formulaire (sans compte) où le client renseigne la société, les actionnaires, les dirigeants et dépose ses justificatifs (3 Mo max par fichier). Les réponses arrivent automatiquement dans le tableau ; « Créer la fiche client » les reverse dans le portefeuille (onboarding) et crée le travail exceptionnel « Création de société », qui passe en « À facturer » quand la société est créée. |
 | Onboarding | Liste des dossiers : un clic déroule les 14 étapes (LDM, lettre de reprise, Pennylane, prélèvement, impots.gouv, LAB…), dont certaines se cochent seules. La **lettre de reprise** au confrère précédent est pré-remplie, avec aperçu, Word et impression ; l'étape se coche quand elle est envoyée. C'est toi qui valides l'onboarding : le dossier passe alors dans « Onboarding validé » et le client devient actif. |
 | Fiscalité | « Tableau principal » des régimes par client (TVA et date, DEB/DES, taxe sur les salaires, acomptes d'IS, CFE, CVAE, TVS, IFU, CRL, taxe foncière), puis un onglet par mois et un onglet « Annuelle ». Les déclarations de chaque mois sont calculées à partir des régimes : il n'y a rien à recréer d'une année sur l'autre. L'export Excel s'importe tel quel. |
 | Travaux exceptionnels | Tableau « Autres travaux » par exercice (client, associé, réalisé et revu par, date, description, typologie, deadline, honoraires prévus, temps estimé, statut). Un travail terminé passe automatiquement en « Lancer facturation : Oui » puis dans Facturation ; la facture Pennylane correspondante est reconnue toute seule. L'export Excel s'importe tel quel. |
@@ -113,6 +114,9 @@ crm/
   src/v27_reprise.js      lettre de reprise (aperçu, Word, impression)
   src/v27_cabinet.js      Travaux exceptionnels, Facturation, Tableau de bord
   src/v27_team.js         équipe, temps, rentabilité, charge, fiche client, recherche
+  src/creation_fields.js  questions du formulaire de création (partagées CRM / formulaire)
+  src/v27_creation.js     Matrice création (liens, réponses, fiche client)
+  src/creation_form.html  formulaire public envoyé au client (/creation/<lien>)
   src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout
 ```
