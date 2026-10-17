@@ -12,6 +12,8 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 | Travaux exceptionnels | Tableau « Autres travaux » par exercice (client, associé, réalisé et revu par, date, description, typologie, deadline, honoraires prévus, temps estimé, statut). Un travail terminé passe automatiquement en « Lancer facturation : Oui » puis dans Facturation ; la facture Pennylane correspondante est reconnue toute seule. L'export Excel s'importe tel quel. |
 | Facturation | « À facturer » est rempli automatiquement : bilans et AGO terminés, travaux exceptionnels terminés, écarts d'honoraires courants. Une ligne disparaît dès que la facture est trouvée dans Pennylane ou marquée facturée. Factures émises : montants, encaissements et retards. |
 | Tableau de bord cabinet | Calculé en temps réel, sans aucun chiffre de démonstration : clients, onboarding, prospects, honoraires, facturé, à facturer, encaissements, avancement des bilans, des AGO et de la fiscalité du mois, liste des retards. |
+| Saisie des temps, Rentabilité, Charge équipe | L'équipe est déduite des personnes saisies dans les tableaux (rôle, coût horaire, capacité et compte CRM modifiables dans Charge équipe). Les temps saisis par client et par mission alimentent la rentabilité (honoraires facturés ou budget, coût du temps, marge, budget d'heures) et la charge de chacun : dossiers, bilans, AGO, déclarations du mois, onboardings, travaux exceptionnels, heures du mois. |
+| Fiche client | Une page unique par client : synthèse (identité, équipe, régimes, missions, honoraires), onboarding, échéances fiscales, bilan et AGO, travaux exceptionnels, factures, temps et historique des actions. |
 | Portefeuille clients | Une ligne par client, sur le modèle de l'export Excel : personnes, SIREN, statut, groupe, clôture, régimes, missions, LDM, honoraires, budget, état du bilan et de l'AGO. Ces données sont saisies une seule fois et alimentent la fiscalité (échéances recalculées), les tableaux Bilan et AGO et le contrôle des honoraires. |
 | Clôture & Bilan, Juridique annuel / AGO | Deux tableaux par exercice qui reprennent les suivis Excel du cabinet (« Bilan Fr », « AGO ») : mêmes colonnes et mêmes statuts colorés, dossiers groupés par avancement, cases modifiables directement. Les fichiers Excel s'importent tels quels et le tableau s'exporte en CSV. Automatiquement : échéances calculées (liasse, AGO, dépôt au greffe), retards remontés dans le tableau de bord, colonne « Bilan » reprise dans l'AGO, « Lancer facturation » positionné quand un dossier est terminé, acomptes d'IS proposés, facture vérifiée dans Pennylane. |
 | Contrôle honoraires, Facturation | Les factures clients du cabinet sont lues dans Pennylane (HT, avoirs déduits, brouillons exclus, restant dû). Elles sont rapprochées des fiches par SIREN puis par raison sociale, à chaque ouverture du CRM (toutes les 6 h au plus). |
@@ -110,6 +112,7 @@ crm/
   src/v27_fiscal.js       Fiscalité : régimes et échéances mensuelles
   src/v27_reprise.js      lettre de reprise (aperçu, Word, impression)
   src/v27_cabinet.js      Travaux exceptionnels, Facturation, Tableau de bord
+  src/v27_team.js         équipe, temps, rentabilité, charge, fiche client, recherche
   src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout
 ```

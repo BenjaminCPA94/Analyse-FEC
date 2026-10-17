@@ -305,6 +305,24 @@ function waitFor(proc, text) {
   if (shots) await page.screenshot({ path: path.join(shots, 'dashboard.png'), fullPage: false });
   console.log('✓ Travaux exceptionnels (import, facturation automatique), Facturation, Tableau de bord en temps réel, Boîte documents retirée');
 
+  // Équipe réelle, temps, rentabilité, charge, fiche client, recherche, prototypes retirés
+  const navNow = await page.evaluate(() => [...document.querySelectorAll('.nav a')].map(a => a.dataset.page));
+  for (const gone of ['skills', 'paperasse', 'users', 'docs']) assert.ok(!navNow.includes(gone), 'prototype retiré : ' + gone);
+  assert.ok(!(await page.evaluate(() => [...document.querySelectorAll('.top button')].some(b => /IA/.test(b.textContent)))), 'bouton IA retiré');
+  const tm = await page.evaluate(() => team27().map(m => m.name + ':' + m.role));
+  assert.ok(tm.includes('Alice Test:Associé') && tm.includes('Bruno Test:Manager') && tm.includes('Chloé Test:Collaborateur') && !tm.some(x => x.startsWith('YB:')), 'équipe déduite des tableaux');
+  await page.evaluate(() => routePage('time'));
+  await page.selectOption('#t27_who', 'Chloé Test'); await page.fill('#t27_client', 'STOIK France'); await page.selectOption('#t27_mission', 'Bilan'); await page.fill('#t27_hours', '3');
+  await page.click('button:has-text("Ajouter")');
+  const tt = await page.evaluate(() => { const t = state.time[0]; const m = team27().find(x => x.name === 'Chloé Test'); setMember27(m.id, 'cost', 60); routePage('profit'); const r = profitRows27(new Date().getFullYear()).find(r => r.c.id === 'C2'); routePage('capacity'); const w = workload27(m); return { t: [t.user, cfind(t.client).name, t.mission, t.hours], cost: r.cost, hours: r.hours, wh: w.hours, cap: document.body.innerText.includes('Équipe du cabinet') }; });
+  assert.deepEqual(tt.t, ['Chloé Test', 'STOIK France', 'Bilan', 3]); assert.equal(await page.evaluate(() => costOf27('Chloé Test') * 3), 180, '3 h × 60 €'); assert.ok(tt.cost >= 180 && tt.hours >= 3, 'temps repris dans la rentabilité'); assert.equal(tt.wh, 3); assert.ok(tt.cap);
+  await page.fill('#globalSearch', 'stoik');
+  assert.equal(await page.evaluate(() => state.page), 'capacity', 'la saisie ne change plus de page');
+  await page.click('#search27 a:has-text("STOIK France")');
+  const cp = await page.evaluate(() => { const out = []; for (const t of ['synthese', 'onb', 'fisc', 'bilan', 'exc', 'fact', 'temps', 'hist']) { clientTab27(t); out.push(document.getElementById('root').innerText.length > 100); } clientTab27('temps'); return { page: state.page, ok: out.every(Boolean), temps: document.body.innerText.includes('TVA') || document.body.innerText.includes('Bilan') }; });
+  assert.deepEqual(cp, { page: 'client', ok: true, temps: true }, 'fiche client complète');
+  console.log('✓ Équipe réelle, saisie des temps, rentabilité, charge équipe, fiche client, recherche ; prototypes IA retirés');
+
   // Prospect → client : missions et honoraires reportés automatiquement
   await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'PROSPECT TEST', siren: '555666777', contact: 'Louis', email: 'l@x.fr', owner: 'YB', value: 0, stage: 'Négociation', source: '', appointment: '', next: '', notes: '' }); save(); routePage('prospects'); openProspect(id); window._pid = id; });
   await page.fill('#p27_f_accounting', '24000'); await page.press('#p27_f_accounting', 'Tab');
