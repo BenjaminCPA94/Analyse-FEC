@@ -133,39 +133,68 @@ function waitFor(proc, text) {
   assert.deepEqual(await page.evaluate(() => [cfind('C2').pl27.companyId, cfind('C3').pl27.companyId, cfind('C2').links.pennylane]), [501, 502, 'https://app.pennylane.com/companies/501']);
   console.log('✓ Dossiers Pennylane rattachés, lien direct vers le dossier');
 
-  // Suivi Clôture & Bilan
-  const sv = await page.evaluate(() => {
-    routePage('closing'); setSuiviFilter27('year', 2025);
-    const rows = exercises27(2025), r2 = rows.find(r => r.c.id === 'C2');
-    return { n: rows.length, bilan: r2.bilan, uB: r2.uB?.level, liasse: r2.liasse, ago: r2.ago, jurReady: r2.jurReady,
-      future: exercise27(cfind('C2'), new Date().getFullYear()).bilan, june: iso(liasseDue27(new Date(2026, 5, 30))),
-      c1Billed: exercise27(cfind('C1'), 2025)?.invB.length, html: document.body.innerText.includes('Dossiers — exercice 2025') };
+  // Tableaux Bilan et AGO (modèle des suivis Excel)
+  const FIX = path.join(__dirname, 'fixtures');
+  const before = await page.evaluate(() => {
+    routePage('closing'); setBoardFilter27('year', 2025);
+    const x = ctx27('bilan', cfind('C2'), 2025);
+    return { etat: val27(x, 'etat'), ech: val27(x, 'echeance'), u: urgency27(x)?.level, june: iso(liasseDue27(new Date(2026, 5, 30))), html: document.body.innerText.includes('Bilan Fr 2025') };
   });
-  assert.ok(sv.n >= 2 && sv.html);
-  assert.equal(sv.bilan, 'À lancer'); assert.equal(sv.uB, 'retard');
-  assert.equal(sv.liasse, '2026-05-20', 'liasse 31/12 : 2e jour ouvré après le 1er mai + 15 j');
-  assert.equal(sv.ago, '2026-06-30'); assert.equal(sv.june, '2026-10-15'); assert.equal(sv.jurReady, false);
-  assert.equal(sv.future, 'Exercice en cours');
-  const after = await page.evaluate(() => {
-    setBilan27('C2', 2025, 'Liasse déposée');
-    const r = exercise27(cfind('C2'), 2025);
-    const tasks = state.closing.filter(t => t.client === 'C2' && t.year === 2025).every(t => t.status === 'Terminée');
-    setJur27('C2', 2025, 4);
-    const r2 = exercise27(cfind('C2'), 2025), ex = deriveExceptionsV18().filter(x => x.client === 'C2' && x.id.includes('SUIVI'));
-    return { done: r.bilanDone, ready: r.jurReady, tasks, notBilled: r2.notBilledB, legal: legalStateV18('C2', 2025).signed, jurDue: r2.jurDue,
-      ex: ex.map(x => x.area + ':' + x.title), alerts: deriveAlerts().filter(a => a.client === 'C2' && a.action === 'closing').length, log: r2.log[0].status };
+  assert.ok(before.html);
+  assert.equal(before.etat, '1. A faire'); assert.equal(before.ech, '2026-05-20', 'liasse 31/12 : 2e jour ouvré après le 1er mai + 15 j');
+  assert.equal(before.u, 'retard'); assert.equal(before.june, '2026-10-15');
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'bilan_test.xlsx'));
+  await page.waitForFunction(() => state.clients.some(c => c.name === 'NOUVEAU CLIENT'));
+  const bi = await page.evaluate(() => {
+    const c2 = cfind('C2'), n = state.clients.find(c => c.name === 'NOUVEAU CLIENT'), x2 = ctx27('bilan', c2, 2025), xn = ctx27('bilan', n, 2025);
+    setCell27({ value: '9. Bilan télédéclaré', style: {} }, 'bilan', n.id, 2025, 'etat');
+    const xn2 = ctx27('bilan', n, 2025);
+    return { etat2: val27(x2, 'etat'), people: people27(c2, 'associe'), fees: fees27(c2).accounting, budget: val27(x2, 'budget'), clients: state.clients.length,
+      nClose: n.closing, nEch: val27(xn, 'echeance'), nSiren: n.siren, nGroup: n.group27, nLancer: val27(xn2, 'lancerFact'), nLiasse: val27(xn2, 'liasse'),
+      c1Inv: ctx27('bilan', cfind('C1'), 2025).invB?.number, group: group27(x2), ac: val27(x2, 'ac1') };
   });
-  assert.ok(after.done && after.ready && after.tasks && after.legal);
-  assert.equal(after.notBilled, true, 'bilan terminé sans facture bilan');
-  assert.equal(after.jurDue, '2026-07-31');
-  assert.ok(after.ex.some(x => x.startsWith('Facturation:Bilan 2025 terminé non facturé')), after.ex.join(' | '));
-  assert.ok(after.ex.some(x => x.startsWith('Juridique:Dépôt des comptes en retard')), after.ex.join(' | '));
-  assert.ok(after.alerts >= 2); assert.equal(after.log, 'AGO signée');
-  const hist = await page.evaluate(() => { window.confirm = () => true; closeYear27(2024); return exercises27(2024).every(r => r.bilanDone && r.jurDone) && !suiviAlerts27().some(a => a.r.y === 2024); });
-  assert.ok(hist, 'reprise d’historique 2024');
-  await page.evaluate(() => { setSuiviFilter27('year', 2025); });
-  if (shots) await page.screenshot({ path: path.join(shots, 'suivi.png'), fullPage: false });
-  console.log('✓ Suivi des exercices : échéances, retards, déblocage du juridique, contrôle de facturation, alertes');
+  assert.equal(bi.etat2, '9. Bilan télédéclaré', 'client existant rapproché par SIREN');
+  assert.equal(bi.people, 'Alice Test', 'noms dédoublonnés'); assert.equal(bi.fees, 10800); assert.equal(bi.budget, 15000);
+  assert.equal(bi.nClose, '06-30'); assert.equal(bi.nEch, '2026-01-15'); assert.equal(bi.nSiren, '123456789'); assert.equal(bi.nGroup, 'Groupe Test');
+  assert.equal(bi.nLancer, 'Oui', 'bilan terminé → facturation à lancer'); assert.equal(bi.nLiasse, 'Télédéclaré');
+  assert.equal(bi.c1Inv, 'F-3', 'facture bilan Pennylane reconnue'); assert.equal(bi.group, 'Terminés'); assert.equal(bi.ac, 2000);
+  if (shots) await page.screenshot({ path: path.join(shots, 'bilan.png'), fullPage: false });
+  console.log('✓ Tableau Bilan : import Excel (rapprochement SIREN, création), échéances, automatismes, facture Pennylane');
+
+  await page.evaluate(() => routePage('legal'));
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'ago_test.xlsx'));
+  await page.waitForFunction(() => state.clients.some(c => c.name === 'AUTRE SAS'));
+  const ag = await page.evaluate(() => {
+    const c2 = cfind('C2'), au = state.clients.find(c => c.name === 'AUTRE SAS'), sci = state.clients.find(c => c.name === 'SCI SANS AGO');
+    const x2 = ctx27('ago', c2, 2025), xa = ctx27('ago', au, 2025);
+    const ex = deriveExceptionsV18().filter(e => e.id.includes('BOARD')).map(e => e.area + ':' + cfind(e.client).name + ':' + e.title);
+    return { statut: val27(x2, 'statut'), bilan: val27(x2, 'bilanAuto'), g2: group27(x2), ga: group27(xa), gs: group27(ctx27('ago', sci, 2025)), au: au.status, sci: sci.status,
+      ua: urgency27(xa)?.label + ':' + urgency27(xa)?.level, honor: fees27(c2).legalAnnual, ex, alerts: deriveAlerts().filter(a => a.action === 'legal').length,
+      html: document.body.innerText.includes('AGO 2025') };
+  });
+  assert.ok(ag.html);
+  assert.equal(ag.statut, '7. Validé par le greffe'); assert.equal(ag.bilan, '9. Bilan télédéclaré', 'AGO reprend l’état du bilan');
+  assert.deepEqual([ag.g2, ag.ga, ag.gs], ['Terminés', 'À faire', 'Non concernés']);
+  assert.deepEqual([ag.au, ag.sci], ['Onboarding', 'Inactif']); assert.equal(ag.ua, 'AGO:retard'); assert.equal(ag.honor, 450);
+  assert.ok(ag.ex.some(x => x === 'Juridique:AUTRE SAS:AGO en retard — exercice 2025'), ag.ex.join(' | '));
+  assert.ok(ag.ex.some(x => x === 'Facturation:STOIK France:Bilan 2025 terminé non facturé'), ag.ex.join(' | '));
+  assert.ok(ag.ex.some(x => x === 'Facturation:STOIK France:Juridique 2025 terminé non facturé'), ag.ex.join(' | '));
+  assert.ok(ag.alerts >= 1);
+  await page.selectOption(`tr:has(a:text-is("AUTRE SAS")) select[onchange*="'statut'"]`, '2. A revoir par Manager');
+  await page.waitForFunction(() => val27(ctx27('ago', state.clients.find(c => c.name === 'AUTRE SAS'), 2025), 'statut') === '2. A revoir par Manager');
+  await page.fill(`tr:has(a:text-is("AUTRE SAS")) input[onchange*="'honoAgo'"]`, '520');
+  await page.press(`tr:has(a:text-is("AUTRE SAS")) input[onchange*="'honoAgo'"]`, 'Tab');
+  assert.equal(await page.evaluate(() => fees27(state.clients.find(c => c.name === 'AUTRE SAS')).legalAnnual), 520, 'saisie directe dans une case');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportBoard27('ago'))]);
+  const csv = fs.readFileSync(await dl.path(), 'utf8');
+  assert.ok(csv.includes('"STOIK France";"Terminés"') && csv.includes('Statut AGO'), 'export CSV');
+  await page.evaluate(() => openAgo27('C2', 2025));
+  assert.equal(await page.evaluate(() => state.legalView.mode), 'detail', 'pack AGO ouvert');
+  await page.evaluate(() => backLegalPortfolioV20());
+  assert.ok(await page.evaluate(() => document.body.innerText.includes('AGO 2025')));
+  if (shots) await page.screenshot({ path: path.join(shots, 'ago.png'), fullPage: false });
+  console.log('✓ Tableau AGO : import Excel, lien avec le bilan, retards, contrôle de facturation, export, pack AGO');
 
   // Rendu des écrans
   for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'inbox', 'control', 'clients']) {
@@ -191,7 +220,7 @@ function waitFor(proc, text) {
   r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'benjamin', password: PASSWORD }) });
   const sid = r.headers.get('set-cookie').split(';')[0];
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: sid } })).json();
-  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 7); assert.equal(st.state.suivi27['C2|2025'].bilan, 'Liasse déposée');
+  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 7); assert.equal(Object.values(st.state.boards27.bilan).filter(r => r.etat === '9. Bilan télédéclaré').length, 2);
   assert.ok(REDIS ? kv.run(['LLEN', 'rb:history']) >= 1 : fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
   console.log(`✓ Données conservées après redémarrage (révision ${rev}, historique présent)`);
 

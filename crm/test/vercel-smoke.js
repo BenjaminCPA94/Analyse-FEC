@@ -27,7 +27,7 @@ const upstash = require('./mock-upstash');
   delete require.cache[require.resolve('../api/index.js')];
   handler = require('../api/index.js');
   r = await call(handler, 'GET', '/');
-  assert.equal(r.status, 200); assert.match(r.text, /suiviPage27/);
+  assert.equal(r.status, 200); assert.match(r.text, /boardPage27/);
   r = await call(handler, 'POST', '/api/login', { username: 'benjamin', password: 'motdepasse-test-123' });
   assert.equal(r.status, 200);
   const cookie = String(r.headers['Set-Cookie']).split(';')[0];

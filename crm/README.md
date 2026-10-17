@@ -6,7 +6,7 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 
 | Écran | Ce qui est automatique |
 |---|---|
-| Clôture & Bilan | Les dossiers de chaque exercice sont générés à partir des missions (« comptes annuels », « juridique »). Les échéances sont calculées : liasse, AGO dans les 6 mois, dépôt au greffe. Les retards remontent dans le tableau de bord et dans « À traiter aujourd'hui ». Le juridique se débloque quand le bilan est validé. Un travail terminé sans facture Pennylane correspondante est signalé. |
+| Clôture & Bilan, Juridique annuel / AGO | Deux tableaux par exercice qui reprennent les suivis Excel du cabinet (« Bilan Fr », « AGO ») : mêmes colonnes et mêmes statuts colorés, dossiers groupés par avancement, cases modifiables directement. Les fichiers Excel s'importent tels quels et le tableau s'exporte en CSV. Automatiquement : échéances calculées (liasse, AGO, dépôt au greffe), retards remontés dans le tableau de bord, colonne « Bilan » reprise dans l'AGO, « Lancer facturation » positionné quand un dossier est terminé, acomptes d'IS proposés, facture vérifiée dans Pennylane. |
 | Contrôle honoraires, Facturation | Les factures clients du cabinet sont lues dans Pennylane (HT, avoirs déduits, brouillons exclus, restant dû). Elles sont rapprochées des fiches par SIREN puis par raison sociale, à chaque ouverture du CRM (toutes les 6 h au plus). |
 | Fiche client | Lien direct vers le dossier Pennylane, rattaché automatiquement. |
 
@@ -34,9 +34,11 @@ Au premier lancement, la base est vide. Pour reprendre les données du CRM V26, 
 
 > Si **Tester la connexion** renvoie une erreur 404 sur l'API cabinet, vérifie son adresse dans la documentation Pennylane de ton compte : elle est réglable dans `.env`.
 
-## Mise en service du suivi Clôture & Bilan
+## Mise en service des tableaux Bilan et AGO
 
-Ouvre l'exercice passé (par exemple 2024) et clique sur **Reprise d'historique** : les dossiers déjà traités avant le CRM sont marqués terminés. Les alertes portent ensuite sur les exercices N-1 et N.
+Dans **Clôture & Bilan**, clique sur **Importer un Excel** et choisis l'export du tableau Bilan (par exemple `Bilan_Fr_2025.xlsx`). Fais de même dans **Juridique annuel / AGO** avec l'export AGO.
+
+L'exercice est lu dans le titre du fichier. Les clients sont rapprochés par SIREN, puis par nom ; ceux qui manquent sont créés. Tu peux réimporter un fichier à jour à tout moment : ses valeurs remplacent celles de l'exercice.
 
 ## Mettre le CRM en ligne avec Vercel
 
@@ -85,7 +87,7 @@ npm i -g playwright   # une seule fois
 npm test   # fichiers, puis Upstash simulé, puis point d'entrée Vercel
 ```
 
-Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, le suivi Clôture & Bilan (échéances, retards, facturation, reprise d'historique), les conflits de version et la persistance après redémarrage.
+Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, les tableaux Bilan et AGO (import Excel avec des fichiers fictifs, échéances, retards, facturation, saisie directe, export), les conflits de version et la persistance après redémarrage.
 
 ## Structure
 
@@ -96,6 +98,6 @@ crm/
   api/index.js, vercel.json   déploiement Vercel
   src/crm_v26.html        CRM V26 d'origine, non modifié
   src/v27_pennylane.js    module Pennylane (factures, dossiers, synchro automatique)
-  src/v27_suivi.js        suivi Clôture & Bilan par exercice
+  src/v27_boards.js       tableaux Bilan Fr et AGO (modèle des suivis Excel)
   test/                   faux Pennylane + test de bout en bout
 ```
