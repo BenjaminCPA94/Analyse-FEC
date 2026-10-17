@@ -64,21 +64,25 @@ function waitFor(proc, text) {
   await page.waitForFunction(() => typeof shared25 !== 'undefined' && shared25.ready);
   assert.equal(await page.title(), 'RB Partners CRM V27');
 
+  // Synchronisation automatique à l'ouverture, sans clic.
+  await page.waitForFunction(() => state.pennylaneSync?.auto && state.pennylaneCompaniesSync && !pl27.busy);
+  console.log('✓ Synchronisation Pennylane lancée automatiquement à la connexion');
+
   // Données de démonstration chargées dans la base partagée.
   await page.evaluate(() => { state = load(); init25(); save(); render(); });
-  await page.waitForFunction(() => shared25.revision >= 1 && !shared25.busy);
-  console.log('✓ Connexion navigateur et enregistrement partagé (révision 1)');
+  await page.waitForFunction(() => !shared25.busy && !shared25.pending);
+  console.log('✓ Connexion navigateur et enregistrement partagé');
 
   await page.evaluate(() => routePage('rules'));
-  await page.waitForFunction(() => pl27.status && document.body.innerText.includes('Rattachement des dossiers'));
+  await page.waitForFunction(() => document.body.innerText.includes('Rattachement des dossiers'));
   await page.evaluate(() => testPennylane27());
   await page.waitForFunction(() => !pl27.busy && pl27.test);
   assert.ok(await page.evaluate(() => pl27.test.cabinet.ok && pl27.test.firm.ok), 'test connexion');
-  console.log('✓ Test de connexion Pennylane (cabinet + API cabinet)');
+  console.log('✓ Test de connexion Pennylane (cabinet + dossiers)');
 
   // Factures
   await page.evaluate(() => syncInvoices27());
-  await page.waitForFunction(() => !pl27.busy && state.pennylaneSync?.unmatched);
+  await page.waitForFunction(() => !pl27.busy && state.pennylaneSync?.unmatched && !state.pennylaneSync.auto);
   const fees = await page.evaluate(() => ({
     c1: state.pennylaneInvoices.filter(i => i.client === 'C1').length,
     c2: state.pennylaneInvoices.filter(i => i.client === 'C2').map(i => i.status).sort(),
@@ -87,58 +91,56 @@ function waitFor(proc, text) {
     billing: state.invoices.filter(i => i.source === 'pennylane').length,
     unpaid: state.invoices.find(i => i.id === 'PL_3').paid,
     match: cfind('C2').pl27.customerMatch,
-    filter: true,
   }));
-  assert.equal(fees.c1, 3, 'factures C1 (2024 exclue)');
+  assert.equal(fees.c1, 4, 'factures C1 depuis N-2');
   assert.deepEqual(fees.c2, ['Annulée', 'Avoir', 'Finalisée'], 'brouillon exclu');
   assert.equal(fees.inv1, 640); assert.equal(fees.inv2, 800, 'avoir déduit, annulée exclue');
   assert.deepEqual(fees.unmatched, ['INCONNU SARL']);
-  assert.equal(fees.billing, 5); assert.equal(fees.unpaid, 0); assert.equal(fees.match, 'Nom');
+  assert.equal(fees.billing, 6); assert.equal(fees.unpaid, 0); assert.equal(fees.match, 'Nom');
   assert.ok(m.calls.some(c => c.path === '/v2/customer_invoices' && c.query.filter && c.query.cursor), 'filtre + curseur envoyés');
   console.log('✓ Synchronisation factures : rapprochement SIREN/nom, avoirs, annulées, brouillons, non rattachées');
 
-  // Dossiers du cabinet
   await page.evaluate(() => loadCompanies27());
-  await page.waitForFunction(() => !pl27.busy && pl27.companies);
-  assert.deepEqual(await page.evaluate(() => [cfind('C2').pl27.companyId, cfind('C3').pl27.companyId]), [501, 502]);
-  console.log('✓ Rapprochement des dossiers du cabinet (pagination page/total_pages)');
+  await page.waitForFunction(() => !pl27.busy && cfind('C2').pl27?.companyId);
+  assert.deepEqual(await page.evaluate(() => [cfind('C2').pl27.companyId, cfind('C3').pl27.companyId, cfind('C2').links.pennylane]), [501, 502, 'https://app.pennylane.com/companies/501']);
+  console.log('✓ Dossiers Pennylane rattachés, lien direct vers le dossier');
 
-  // Clôture
-  await page.evaluate(() => { routePage('closing'); state.closingView.year = 2026; openClosingDossierV19('C2'); syncClosing27(); });
-  await page.waitForFunction(() => !pl27.busy && closingAnalysisCurrent()?.real27);
-  const a = await page.evaluate(() => { const a = closingAnalysisCurrent(); return { t: a.turnoverN, t1: a.turnoverN1, r: a.resultN, st: a.balanceStatus, titles: a.anomalies.map(x => x.cycle + ' ' + x.title) }; });
-  assert.equal(a.t, 29800); assert.equal(a.t1, 20000); assert.equal(a.r, 17800); assert.equal(a.st, 'Équilibrée');
-  for (const k of ['I12 Compte courant', 'I12 Compte d’attente 47100000', 'I13 Trésorerie créditrice', 'I1 Résultat antérieur', 'I8 Aucune facture non parvenue']) assert.ok(a.titles.some(t => t.startsWith(k)), 'anomalie ' + k + ' dans ' + a.titles.join(' | '));
-  assert.ok(m.calls.some(c => c.path === '/firm/companies/501/trial_balance' && c.query.period_start === '2026-01-01' && c.query.period_end === '2026-12-31'));
-  assert.ok(await page.evaluate(() => document.body.innerText.includes('Source : Pennylane — balance du 01/01/2026 au 31/12/2026')));
-  if (shots) await page.screenshot({ path: path.join(shots, 'cloture.png'), fullPage: false });
-  console.log('✓ Clôture : balance N/N-1 via API cabinet, chiffres et contrôles réels');
-
-  // Jeton propre au dossier
-  const tokenRes = await page.evaluate(async () => { await api27('/api/pennylane/dossier-token', { method: 'PUT', body: JSON.stringify({ client: 'C1', token: 'dossier-token' }) }); await refreshStatus27(); return Object.keys(pl27.status.dossierTokens); });
-  assert.deepEqual(tokenRes, ['C1']);
-  const bad = await page.evaluate(async () => { try { await api27('/api/pennylane/dossier-token', { method: 'PUT', body: JSON.stringify({ client: 'C4', token: 'faux' }) }); return 'accepté'; } catch (e) { return e.message; } });
-  assert.match(bad, /refusé/);
-  assert.ok(!JSON.stringify(await page.evaluate(() => pl27.status)).includes('dossier-token'), 'jeton jamais renvoyé au navigateur');
-
-  // Revue mensuelle via le jeton du dossier
-  await page.evaluate(() => { state.selectedClient = 'C1'; state.reviewPeriod25 = '2026-09'; routePage('review25'); importReview27(); });
-  await page.waitForFunction(() => !pl27.busy && init25().reviews['C1|2026-09']);
-  const rv = await page.evaluate(() => { const r = init25().reviews['C1|2026-09']; return { n: r.rows.length, prev: !!r.previous }; });
-  assert.ok(rv.n > 5 && rv.prev);
-  assert.ok(m.calls.some(c => c.path === '/v2/trial_balance' && c.token === 'dossier-token' && c.query.period_end === '2026-09-30'));
-  console.log('✓ Jeton par dossier (vérifié, stocké côté serveur) + revue mensuelle importée');
-
-  // Juridique
-  await page.evaluate(() => syncLegal27('C2', 2026));
-  await page.waitForFunction(() => !pl27.busy && cfind('C2').pennylaneSync?.status === 'Synchronisé');
-  assert.equal(await page.evaluate(() => cfind('C2').legalInputs.result), 17800);
-  await page.evaluate(() => { closeModal(); importAccountsLegal27('C2', 2026); });
-  assert.equal(await page.evaluate(() => legalStateV18('C2', 2026).result), 17800);
-  console.log('✓ Juridique annuel : résultat repris de Pennylane');
+  // Suivi Clôture & Bilan
+  const sv = await page.evaluate(() => {
+    routePage('closing'); setSuiviFilter27('year', 2025);
+    const rows = exercises27(2025), r2 = rows.find(r => r.c.id === 'C2');
+    return { n: rows.length, bilan: r2.bilan, uB: r2.uB?.level, liasse: r2.liasse, ago: r2.ago, jurReady: r2.jurReady,
+      future: exercise27(cfind('C2'), new Date().getFullYear()).bilan, june: iso(liasseDue27(new Date(2026, 5, 30))),
+      c1Billed: exercise27(cfind('C1'), 2025)?.invB.length, html: document.body.innerText.includes('Dossiers — exercice 2025') };
+  });
+  assert.ok(sv.n >= 2 && sv.html);
+  assert.equal(sv.bilan, 'À lancer'); assert.equal(sv.uB, 'retard');
+  assert.equal(sv.liasse, '2026-05-20', 'liasse 31/12 : 2e jour ouvré après le 1er mai + 15 j');
+  assert.equal(sv.ago, '2026-06-30'); assert.equal(sv.june, '2026-10-15'); assert.equal(sv.jurReady, false);
+  assert.equal(sv.future, 'Exercice en cours');
+  const after = await page.evaluate(() => {
+    setBilan27('C2', 2025, 'Liasse déposée');
+    const r = exercise27(cfind('C2'), 2025);
+    const tasks = state.closing.filter(t => t.client === 'C2' && t.year === 2025).every(t => t.status === 'Terminée');
+    setJur27('C2', 2025, 4);
+    const r2 = exercise27(cfind('C2'), 2025), ex = deriveExceptionsV18().filter(x => x.client === 'C2' && x.id.includes('SUIVI'));
+    return { done: r.bilanDone, ready: r.jurReady, tasks, notBilled: r2.notBilledB, legal: legalStateV18('C2', 2025).signed, jurDue: r2.jurDue,
+      ex: ex.map(x => x.area + ':' + x.title), alerts: deriveAlerts().filter(a => a.client === 'C2' && a.action === 'closing').length, log: r2.log[0].status };
+  });
+  assert.ok(after.done && after.ready && after.tasks && after.legal);
+  assert.equal(after.notBilled, true, 'bilan terminé sans facture bilan');
+  assert.equal(after.jurDue, '2026-07-31');
+  assert.ok(after.ex.some(x => x.startsWith('Facturation:Bilan 2025 terminé non facturé')), after.ex.join(' | '));
+  assert.ok(after.ex.some(x => x.startsWith('Juridique:Dépôt des comptes en retard')), after.ex.join(' | '));
+  assert.ok(after.alerts >= 2); assert.equal(after.log, 'AGO signée');
+  const hist = await page.evaluate(() => { window.confirm = () => true; closeYear27(2024); return exercises27(2024).every(r => r.bilanDone && r.jurDone) && !suiviAlerts27().some(a => a.r.y === 2024); });
+  assert.ok(hist, 'reprise d’historique 2024');
+  await page.evaluate(() => { setSuiviFilter27('year', 2025); });
+  if (shots) await page.screenshot({ path: path.join(shots, 'suivi.png'), fullPage: false });
+  console.log('✓ Suivi des exercices : échéances, retards, déblocage du juridique, contrôle de facturation, alertes');
 
   // Rendu des écrans
-  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'review25', 'clients']) {
+  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'inbox', 'control', 'clients']) {
     await page.evaluate(p => routePage(p), p);
     await page.waitForTimeout(150);
     if (shots && ['fees', 'rules'].includes(p)) await page.screenshot({ path: path.join(shots, p + '.png'), fullPage: false });
@@ -161,7 +163,7 @@ function waitFor(proc, text) {
   r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'benjamin', password: PASSWORD }) });
   const sid = r.headers.get('set-cookie').split(';')[0];
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: sid } })).json();
-  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 6);
+  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 7); assert.equal(st.state.suivi27['C2|2025'].bilan, 'Liasse déposée');
   assert.ok(fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
   console.log(`✓ Données conservées après redémarrage (révision ${rev}, historique présent)`);
 

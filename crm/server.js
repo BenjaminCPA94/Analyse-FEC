@@ -3,7 +3,7 @@
  * RB Partners CRM — serveur V27.
  * Node >= 18, aucune dépendance. Sert le CRM, gère les comptes, la base partagée
  * versionnée, la recherche SIREN et le pont Pennylane (les clés API restent ici,
- * jamais dans le navigateur).
+ * jamais dans le navigateur). Lecture seule : factures du cabinet et liste des dossiers.
  *
  *   node server.js                     démarre le serveur
  *   node server.js add-user <nom> [--admin]   crée ou réinitialise un compte
@@ -38,7 +38,6 @@ const FILES = {
   users: path.join(CONFIG.dataDir, 'users.json'),
   state: path.join(CONFIG.dataDir, 'state.json'),
   history: path.join(CONFIG.dataDir, 'history'),
-  tokens: path.join(CONFIG.dataDir, 'pennylane-dossiers.json'),
 };
 
 function loadEnv(file) {
@@ -116,8 +115,6 @@ function saveShared(next, username) {
 }
 
 /* ---------- Pennylane ---------- */
-function dossierTokens() { return readJSON(FILES.tokens, {}); }
-
 class PennylaneError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
@@ -165,7 +162,6 @@ async function plList(base, pathName, token, params = {}, maxPages = 500) {
 }
 
 const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
-const cents = v => Math.round((Number(v) || 0) * 100);
 
 function normInvoice(x) {
   const ttc = num(x.currency_amount ?? x.amount) ?? 0;
@@ -191,37 +187,14 @@ function normInvoice(x) {
 function normCustomer(x) {
   return { id: x.id, name: x.name || [x.first_name, x.last_name].filter(Boolean).join(' '), siren: String(x.reg_no || '').replace(/\s/g, '').slice(0, 9), emails: x.emails || [], reference: x.external_reference || '' };
 }
-function normTrialBalance(items) {
-  const byAccount = new Map();
-  for (const x of items) {
-    const account = String(x.formatted_number || x.number || x.account_number || '').replace(/\s/g, '');
-    if (!account) continue;
-    const row = byAccount.get(account) || { account, label: x.label || x.name || '', debit: 0, credit: 0 };
-    row.debit += cents(x.debits ?? x.debit);
-    row.credit += cents(x.credits ?? x.credit);
-    byAccount.set(account, row);
-  }
-  return [...byAccount.values()].sort((a, b) => a.account.localeCompare(b.account));
-}
-
-async function trialBalanceFor(clientId, companyId, start, end) {
-  const token = dossierTokens()[clientId]?.token;
-  const params = { period_start: start, period_end: end };
-  if (token) return { source: 'Jeton du dossier (API entreprise)', rows: normTrialBalance(await plList(CONFIG.pennylane.apiBase, '/trial_balance', token, params)) };
-  if (CONFIG.pennylane.firmToken && companyId) {
-    return { source: 'Jeton cabinet (API cabinet)', rows: normTrialBalance(await plList(CONFIG.pennylane.firmBase, `/companies/${encodeURIComponent(companyId)}/trial_balance`, CONFIG.pennylane.firmToken, params)) };
-  }
-  throw new PennylaneError('Aucun accès Pennylane pour ce dossier : renseigne son identifiant Pennylane (jeton cabinet) ou un jeton propre au dossier dans Automatisations cabinet.', 400);
-}
-
 /* ---------- HTTP ---------- */
 let INDEX = '';
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const v27 = fs.readFileSync(path.join(ROOT, 'src', 'v27_pennylane.js'), 'utf8');
+  const modules = ['v27_pennylane.js', 'v27_suivi.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
-  return base.slice(0, i) + '<script>\n' + v27 + '\n</script>\n' + base.slice(i);
+  return base.slice(0, i) + modules + base.slice(i);
 }
 
 const SECURITY_HEADERS = {
@@ -297,12 +270,7 @@ const routes = {
 
   /* --- Pennylane --- */
   'GET /api/pennylane/status': async (req, res) => {
-    const t = dossierTokens();
-    send(res, 200, {
-      cabinet: Boolean(CONFIG.pennylane.cabinetToken),
-      firm: Boolean(CONFIG.pennylane.firmToken),
-      dossierTokens: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, { addedAt: v.addedAt, addedBy: v.addedBy }])),
-    });
+    send(res, 200, { cabinet: Boolean(CONFIG.pennylane.cabinetToken), firm: Boolean(CONFIG.pennylane.firmToken) });
   },
   'POST /api/pennylane/test': async (req, res) => {
     const out = {};
@@ -335,24 +303,6 @@ const routes = {
     if (!CONFIG.pennylane.firmToken) throw new PennylaneError('PENNYLANE_FIRM_TOKEN non renseigné sur le serveur.', 400);
     const items = await plList(CONFIG.pennylane.firmBase, '/companies', CONFIG.pennylane.firmToken);
     send(res, 200, { items: items.map(x => ({ id: x.id, name: x.name || '', siren: String(x.reg_no || x.siren || '').replace(/\s/g, '').slice(0, 9) })) });
-  },
-  'GET /api/pennylane/trial-balance': async (req, res, s, url) => {
-    const q = Object.fromEntries(url.searchParams);
-    if (!q.client || !isDate(q.start) || !isDate(q.end) || q.start > q.end) return send(res, 400, { error: 'Paramètres client, start et end (AAAA-MM-JJ) requis' });
-    send(res, 200, { ...(await trialBalanceFor(q.client, q.companyId, q.start, q.end)), start: q.start, end: q.end, fetchedAt: new Date().toISOString() });
-  },
-  'PUT /api/pennylane/dossier-token': async (req, res, s) => {
-    if (s.role !== 'admin') return send(res, 403, { error: 'Réservé aux administrateurs' });
-    const { client, token } = await readBody(req, 10_000);
-    if (!client || typeof client !== 'string') return send(res, 400, { error: 'Client requis' });
-    const t = dossierTokens();
-    if (token) {
-      try { await plFetch(CONFIG.pennylane.apiBase + '/me', String(token).trim()); }
-      catch (e) { return send(res, 400, { error: 'Jeton refusé par Pennylane : ' + e.message }); }
-      t[client] = { token: String(token).trim(), addedAt: new Date().toISOString(), addedBy: s.username };
-    } else delete t[client];
-    writeJSON(FILES.tokens, t);
-    send(res, 200, { ok: true });
   },
 };
 
@@ -420,4 +370,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(e => { console.error(e.message); process.exit(1); });
-module.exports = { normInvoice, normCustomer, normTrialBalance, plList, buildIndex };
+module.exports = { normInvoice, normCustomer, plList, buildIndex };

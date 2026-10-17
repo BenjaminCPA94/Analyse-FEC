@@ -2,16 +2,15 @@
 
 Le CRM V26 était un fichier HTML seul : ses données restaient dans le navigateur. Il appelait aussi un serveur (`/api/login`, `/api/state`, `/api/company`) qui n'avait jamais été livré, et les écrans Pennylane étaient simulés.
 
-La V27 fournit ce serveur et branche Pennylane pour de vrai, en **lecture seule** :
+La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptable (saisie des factures, rapprochement bancaire, lettrage) relève d'un outil de production séparé.
 
-| Écran du CRM | Donnée Pennylane | Origine |
-|---|---|---|
-| Contrôle honoraires, Facturation | Factures clients émises par le cabinet (HT, avoirs déduits, brouillons exclus, restant dû) | Pennylane **du cabinet** |
-| Clôture & Bilan | Balance N et N-1 de l'exercice du client, puis contrôles automatiques (voir plus bas) | **Dossier client** |
-| Juridique annuel / AGO | Résultat, chiffre d'affaires, total bilan, report à nouveau | **Dossier client** |
-| Préparation mensuelle | Balance cumulée à fin de mois et comparatif N-1 | **Dossier client** |
+| Écran | Ce qui est automatique |
+|---|---|
+| Clôture & Bilan | Les dossiers de chaque exercice sont générés à partir des missions (« comptes annuels », « juridique »). Les échéances sont calculées : liasse, AGO dans les 6 mois, dépôt au greffe. Les retards remontent dans le tableau de bord et dans « À traiter aujourd'hui ». Le juridique se débloque quand le bilan est validé. Un travail terminé sans facture Pennylane correspondante est signalé. |
+| Contrôle honoraires, Facturation | Les factures clients du cabinet sont lues dans Pennylane (HT, avoirs déduits, brouillons exclus, restant dû). Elles sont rapprochées des fiches par SIREN puis par raison sociale, à chaque ouverture du CRM (toutes les 6 h au plus). |
+| Fiche client | Lien direct vers le dossier Pennylane, rattaché automatiquement. |
 
-Aucune écriture n'est envoyée dans Pennylane. Les clés API restent sur le serveur : le navigateur ne les voit jamais.
+Pennylane est lu, jamais modifié. Les clés API restent sur le serveur.
 
 ## Installation
 
@@ -29,38 +28,20 @@ Au premier lancement, la base est vide. Pour reprendre les données du CRM V26, 
 
 ## Brancher Pennylane
 
-1. **Facturation du cabinet.** Dans la société RB Partners sur Pennylane, ouvre **Paramètres › Connectivité › Développeurs** et génère un jeton en lecture seule (factures clients et clients). Colle-le dans `PENNYLANE_CABINET_TOKEN`.
-2. **Dossiers clients.** Deux options, qu'on peut combiner :
-   - un jeton **API cabinet** dans `PENNYLANE_FIRM_TOKEN`, qui donne accès à tout le portefeuille ;
-   - un jeton **par dossier**, collé dans le CRM (bouton « Jeton », réservé aux administrateurs). Pennylane le vérifie avant qu'il soit enregistré dans `data/`.
-3. Redémarre le serveur. Dans **Automatisations cabinet › Pennylane**, procède dans cet ordre :
-   - **Tester la connexion** ;
-   - **Rapprocher les clients facturés** et **Rapprocher les dossiers du cabinet**. Le rapprochement se fait par SIREN, puis par raison sociale, et chaque ligne reste modifiable à la main ;
-   - **Synchroniser les factures**. Les factures sans fiche CRM correspondante sont listées pour que tu puisses les rattacher.
+1. **Factures du cabinet.** Dans la société qui émet tes honoraires sur Pennylane, ouvre **Paramètres › Connectivité › Développeurs** et génère un jeton en lecture seule (factures clients et clients). Colle-le dans `PENNYLANE_CABINET_TOKEN`.
+2. **Liste des dossiers (optionnel).** Ajoute un jeton API cabinet dans `PENNYLANE_FIRM_TOKEN` : il sert aux liens directs vers chaque dossier.
+3. Redémarre le serveur. Ensuite, tout est automatique. **Automatisations cabinet › Pennylane** permet de tester la connexion, de forcer une synchronisation et de corriger un rattachement.
 
-> Les adresses de l'API v2 et de l'API cabinet sont réglables dans `.env`. Si **Tester la connexion** renvoie une erreur 404 sur l'API cabinet, vérifie l'adresse indiquée dans la documentation Pennylane de ton compte.
+> Si **Tester la connexion** renvoie une erreur 404 sur l'API cabinet, vérifie son adresse dans la documentation Pennylane de ton compte : elle est réglable dans `.env`.
 
-## Contrôles de clôture calculés sur la balance réelle
+## Mise en service du suivi Clôture & Bilan
 
-- balance déséquilibrée ;
-- comptes d'attente (47) non soldés ;
-- 401 débiteur ou 411 créditeur ;
-- variations N/N-1 d'au moins 1 000 € et 30 % ;
-- banque créditrice ;
-- compte courant d'associé débiteur ;
-- 120 ou 129 non affectés ;
-- stock créditeur ;
-- immobilisations sans amortissement ;
-- aucune FNP (408) ;
-- capital comptable différent de la fiche SIREN ;
-- pièces manquantes de la collecte.
-
-Le CRM ne propose **aucune OD inventée**. Le cut-off, les provisions et le résultat fiscal restent à réviser sur pièces.
+Ouvre l'exercice passé (par exemple 2024) et clique sur **Reprise d'historique** : les dossiers déjà traités avant le CRM sont marqués terminés. Les alertes portent ensuite sur les exercices N-1 et N.
 
 ## Mise en production
 
 - Héberge le serveur derrière HTTPS (Caddy, Nginx, ou un PaaS avec disque persistant) et règle `COOKIE_SECURE=true`.
-- Toutes les données sont dans `crm/data/` : `state.json`, les 30 dernières versions dans `history/`, `users.json` et les jetons par dossier. **Sauvegarde ce dossier**, et ne le commite jamais (il est dans `.gitignore`).
+- Toutes les données sont dans `crm/data/` : `state.json`, les 30 dernières versions dans `history/` et `users.json`. **Sauvegarde ce dossier**, et ne le commite jamais (il est dans `.gitignore`).
 - Si deux personnes modifient les données en même temps, le serveur refuse l'enregistrement le plus ancien (erreur 409). Le CRM propose alors de recharger, sans rien perdre.
 
 ## Tests
@@ -70,7 +51,7 @@ npm i -g playwright   # une seule fois
 node test/e2e.js
 ```
 
-Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation des factures, le rapprochement des clients, la clôture, le juridique, la revue mensuelle, les jetons, les conflits de version et la persistance après redémarrage.
+Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, le suivi Clôture & Bilan (échéances, retards, facturation, reprise d'historique), les conflits de version et la persistance après redémarrage.
 
 ## Structure
 
@@ -78,6 +59,7 @@ Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et
 crm/
   server.js               serveur HTTP (comptes, base partagée, SIREN, pont Pennylane)
   src/crm_v26.html        CRM V26 d'origine, non modifié
-  src/v27_pennylane.js    module V27, injecté au démarrage du serveur
+  src/v27_pennylane.js    module Pennylane (factures, dossiers, synchro automatique)
+  src/v27_suivi.js        suivi Clôture & Bilan par exercice
   test/                   faux Pennylane + test de bout en bout
 ```
