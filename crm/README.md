@@ -6,6 +6,9 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 
 | Écran | Ce qui est automatique |
 |---|---|
+| Prospects | La recherche par SIREN interroge l'annuaire officiel des entreprises (gratuit). Le capital social vient de Pappers si `PAPPERS_API_KEY` est configurée. Les missions et honoraires proposés sont saisis sur le prospect et enregistrés au fil de la saisie. À la validation, ils sont repris sur la fiche client et le client passe en onboarding. |
+| Onboarding | Tableau des 14 étapes d'entrée du client (LDM, Pennylane, prélèvement, impots.gouv, LAB…). Certaines se cochent seules à partir des données saisies, et le client passe en portefeuille actif quand tout est fait. |
+| Portefeuille clients | Une ligne par client, sur le modèle de l'export Excel : personnes, SIREN, statut, groupe, clôture, régimes, missions, LDM, honoraires, budget, état du bilan et de l'AGO. Ces données sont saisies une seule fois et alimentent la fiscalité (échéances recalculées), les tableaux Bilan et AGO et le contrôle des honoraires. |
 | Clôture & Bilan, Juridique annuel / AGO | Deux tableaux par exercice qui reprennent les suivis Excel du cabinet (« Bilan Fr », « AGO ») : mêmes colonnes et mêmes statuts colorés, dossiers groupés par avancement, cases modifiables directement. Les fichiers Excel s'importent tels quels et le tableau s'exporte en CSV. Automatiquement : échéances calculées (liasse, AGO, dépôt au greffe), retards remontés dans le tableau de bord, colonne « Bilan » reprise dans l'AGO, « Lancer facturation » positionné quand un dossier est terminé, acomptes d'IS proposés, facture vérifiée dans Pennylane. |
 | Contrôle honoraires, Facturation | Les factures clients du cabinet sont lues dans Pennylane (HT, avoirs déduits, brouillons exclus, restant dû). Elles sont rapprochées des fiches par SIREN puis par raison sociale, à chaque ouverture du CRM (toutes les 6 h au plus). |
 | Fiche client | Lien direct vers le dossier Pennylane, rattaché automatiquement. |
@@ -36,7 +39,7 @@ Au premier lancement, la base est vide. Pour reprendre les données du CRM V26, 
 
 ## Mise en service des tableaux Bilan et AGO
 
-Dans **Clôture & Bilan**, clique sur **Importer un Excel** et choisis l'export du tableau Bilan (par exemple `Bilan_Fr_2025.xlsx`). Fais de même dans **Juridique annuel / AGO** avec l'export AGO.
+Commence par **Portefeuille clients › Importer un Excel** (l'export du portefeuille, avec ses étapes d'onboarding). Ensuite, dans **Clôture & Bilan**, clique sur **Importer un Excel** et choisis l'export du tableau Bilan (par exemple `Bilan_Fr_2025.xlsx`). Fais de même dans **Juridique annuel / AGO** avec l'export AGO.
 
 L'exercice est lu dans le titre du fichier. Les clients sont rapprochés par SIREN, puis par nom ; ceux qui manquent sont créés. Tu peux réimporter un fichier à jour à tout moment : ses valeurs remplacent celles de l'exercice.
 
@@ -99,5 +102,6 @@ crm/
   src/crm_v26.html        CRM V26 d'origine, non modifié
   src/v27_pennylane.js    module Pennylane (factures, dossiers, synchro automatique)
   src/v27_boards.js       tableaux Bilan Fr et AGO (modèle des suivis Excel)
+  src/v27_portfolio.js    Portefeuille, Onboarding, prospects reliés, navigation
   test/                   faux Pennylane + test de bout en bout
 ```

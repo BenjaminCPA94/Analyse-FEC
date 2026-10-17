@@ -196,8 +196,50 @@ function waitFor(proc, text) {
   if (shots) await page.screenshot({ path: path.join(shots, 'ago.png'), fullPage: false });
   console.log('✓ Tableau AGO : import Excel, lien avec le bilan, retards, contrôle de facturation, export, pack AGO');
 
+  // Navigation simplifiée
+  const nav = await page.evaluate(() => [...document.querySelectorAll('.nav a')].map(a => a.dataset.page));
+  for (const gone of ['dashboard', 'inbox', 'control', 'notifications']) assert.ok(!nav.includes(gone), 'onglet retiré : ' + gone);
+  assert.ok(nav.indexOf('onboarding') < nav.indexOf('clients') && nav.indexOf('prospects') < nav.indexOf('onboarding'), 'Prospects → Onboarding → Portefeuille');
+  assert.equal(await page.evaluate(() => { routePage('control'); return state.page; }), 'cabinetdash');
+  console.log('✓ Navigation : onglets inutiles retirés, Onboarding avant Portefeuille');
+
+  // Portefeuille clients (import Excel avec étapes d'onboarding) et données reliées
+  await page.evaluate(() => routePage('clients'));
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'portfolio_test.xlsx'));
+  await page.waitForFunction(() => state.clients.some(c => c.name === 'ONBOARD TEST'));
+  const pf = await page.evaluate(() => {
+    const c = state.clients.find(x => x.name === 'ONBOARD TEST'), y = new Date().getFullYear();
+    const fisc = () => state.fiscal.filter(t => t.client === c.id && t.year === y);
+    const before = fisc().filter(t => t.type === 'TVA').length;
+    setCell27({ value: 'Trimestrielle', style: {} }, 'portfolio', c.id, 0, 'tva');
+    const after = fisc().filter(t => t.type === 'TVA').length;
+    return { st: c.status, siren: c.siren, mgr: people27(c, 'manager'), m: ['tax', 'annualAccounts', 'legal', 'einvoice'].map(k => c.missions[k]), f: [fees27(c).accounting, fees27(c).annualAccounts, fees27(c).legalAnnual],
+      step: onbStep27(c, 2), prog: onbProgress27(c).label, before, after, is: fisc().filter(t => t.type === 'Acompte IS').length,
+      bilan: val27(ctx27('bilan', c, 2026), 'afaire'), ago: val27(ctx27('ago', c, 2026), 'juridique'), closing: c.closing, html: document.body.innerText.includes('Portefeuille clients') };
+  });
+  assert.ok(pf.html); assert.equal(pf.st, 'Onboarding'); assert.equal(pf.siren, '222333444', 'SIRET ramené au SIREN'); assert.equal(pf.mgr, 'Bruno Test');
+  assert.deepEqual(pf.m, [true, true, true, true]); assert.deepEqual(pf.f, [2400, 800, 453]);
+  assert.equal(pf.step, 'Bloqué'); assert.equal(pf.prog, '11/14');
+  assert.deepEqual([pf.before, pf.after, pf.is], [12, 4, 4], 'échéances fiscales recalculées depuis le portefeuille');
+  assert.deepEqual([pf.bilan, pf.ago, pf.closing], ['Oui', 'Oui', '12-31'], 'missions reprises dans Bilan et AGO');
+  const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's13'); return [b, c.status]; });
+  assert.deepEqual(fin, ['13/14', 'Actif'], 'onboarding terminé → client actif');
+  if (shots) await page.screenshot({ path: path.join(shots, 'onboarding.png'), fullPage: false });
+  console.log('✓ Portefeuille et Onboarding : import Excel, 14 étapes, fiscalité et tableaux reliés, passage automatique en actif');
+
+  // Prospect → client : missions et honoraires reportés automatiquement
+  await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'PROSPECT TEST', siren: '555666777', contact: 'Louis', email: 'l@x.fr', owner: 'YB', value: 0, stage: 'Négociation', source: '', appointment: '', next: '', notes: '' }); save(); routePage('prospects'); openProspect(id); window._pid = id; });
+  await page.fill('#p27_f_accounting', '24000'); await page.press('#p27_f_accounting', 'Tab');
+  await page.fill('#p27_f_annualAccounts', '3000'); await page.press('#p27_f_annualAccounts', 'Tab');
+  await page.check('#p27_m_annualAccounts'); await page.check('#p27_m_accounting');
+  assert.equal(await page.inputValue('#p_value'), '27000', 'valeur estimée calculée');
+  await page.evaluate(() => validateProspect(window._pid));
+  const pr = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); return { page: state.page, v: pfind(window._pid).value, fees: [fees27(c).accounting, fees27(c).annualAccounts], total: c.annualFees, st: c.status, bilan: c.missions.annualAccounts, onb: onbStep27(c, 4) }; });
+  assert.deepEqual(pr, { page: 'onboarding', v: 27000, fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'Fait' });
+  console.log('✓ Prospect validé : missions et honoraires repris sur la fiche, arrivée en onboarding');
+
   // Rendu des écrans
-  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'inbox', 'control', 'clients']) {
+  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'fiscal', 'prospects', 'onboarding', 'clients', 'client']) {
     await page.evaluate(p => routePage(p), p);
     await page.waitForTimeout(150);
     if (shots && ['fees', 'rules'].includes(p)) await page.screenshot({ path: path.join(shots, p + '.png'), fullPage: false });

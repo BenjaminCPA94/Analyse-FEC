@@ -29,7 +29,7 @@ function boards27(){
  if(!state.boards27)state.boards27={bilan:{},ago:{},year:new Date().getFullYear()-1,q:'',who:'',collapsed:{}};
  return state.boards27;
 }
-function row27(kind,cid,y,create){const b=boards27(),k=cid+'|'+y;if(create&&!b[kind][k])b[kind][k]={};return b[kind][k]||{};}
+function row27(kind,cid,y,create){const b=boards27(),k=cid+'|'+y;if(!b[kind])b[kind]={};if(create&&!b[kind][k])b[kind][k]={};return b[kind][k]||{};}
 function today27(){return iso(new Date());}
 function addMonths27(d,n){const y=d.getFullYear(),m=d.getMonth()+n,last=new Date(y,m+1,0).getDate();return new Date(y,m,Math.min(d.getDate(),last));}
 function daysBetween27(a,b){return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5);}
@@ -108,16 +108,19 @@ const AGO_COLS27=[
  {k:'factPL',label:'Facturation (Pennylane)',t:'auto',w:150,get:x=>x.invJ?x.invJ.number||'Facturé':''},
 ];
 const COLS27={bilan:BILAN_COLS27,ago:AGO_COLS27};
+/* Extensions par type de tableau (portefeuille, onboarding…) : groupes, échéances, automatismes. */
+const KINDS27={};
 
 /* Contexte d'une ligne : client, exercice, valeurs et signaux automatiques. */
 function ctx27(kind,c,y){
  const r=row27(kind,c.id,y),x={kind,c,y,r,cd:closeOf27(c,y),row:create=>row27(kind,c.id,y,create)};
  if(kind==='bilan'){x.invB=plInvoice27(c,y,'Bilan / clôture');}
- else{x.invJ=plInvoice27(c,y,'Juridique annuel');const b=row27('bilan',c.id,y);x.bilanEtat=b.etat||(c.missions?.annualAccounts?'1. A faire':'');}
+ else if(kind==='ago'){x.invJ=plInvoice27(c,y,'Juridique annuel');const b=row27('bilan',c.id,y);x.bilanEtat=b.etat||(c.missions?.annualAccounts?'1. A faire':'');}
  return x;
 }
 function val27(x,k){const col=COLS27[x.kind].find(c=>c.k===k);return col?col.get(x):undefined;}
 function group27(x){
+ if(KINDS27[x.kind])return KINDS27[x.kind].group(x);
  if(x.kind==='bilan'){
   const a=val27(x,'afaire'),e=val27(x,'etat');
   if(a!=='Oui')return 'Non concernés';if(/^9\./.test(e))return 'Terminés';if(/^1\./.test(e))return 'À faire';return 'En cours';
@@ -128,12 +131,13 @@ function group27(x){
 const GROUP_COLORS27={'À faire':C27.blue,'En cours':C27.orange,'En attente':C27.orange,'Terminés':C27.green,'Non concernés':C27.grey};
 const GROUP_ORDER27=['À faire','En cours','En attente','Terminés','Non concernés'];
 function dueOf27(x){
+ if(KINDS27[x.kind])return KINDS27[x.kind].due?.(x)||null;
  if(x.kind==='bilan'){if(val27(x,'afaire')!=='Oui'||/^9\./.test(val27(x,'etat')))return null;return {due:val27(x,'echeance'),label:'Échéance bilan'};}
  if(val27(x,'juridique')!=='Oui'||/^7\.|N\.A/.test(val27(x,'statut')))return null;
  return /^5\.|Greffe/.test(val27(x,'statut'))?{due:iso(addMonths27(x.cd,7)),label:'Dépôt greffe'}:{due:iso(addMonths27(x.cd,6)),label:'AGO'};
 }
 function urgency27(x){
- const d=dueOf27(x);if(!d||!d.due||x.cd>new Date())return null;
+ const d=dueOf27(x);if(!d||!d.due||(!KINDS27[x.kind]&&x.cd>new Date()))return null;
  const n=daysBetween27(today27(),d.due);
  return n<0?{...d,level:'retard',days:-n}:n<=30?{...d,level:'proche',days:n}:null;
 }
@@ -145,11 +149,12 @@ function setCell27(el,kind,cid,y,k){
  let v=el.value;if(col.t==='num')v=v===''?'':Number(v);
  col.set(x,v);
  // Automatismes : dossier terminé → facturation à lancer, liasse et AGO cohérents.
- const r=x.row(true);
+ const r=['bilan','ago'].includes(kind)?x.row(true):{};
  if(kind==='bilan'&&k==='etat'&&/^9\./.test(v)){if(!r.lancerFact||r.lancerFact==='Non')r.lancerFact='Oui';if(!r.liasse||r.liasse==='A Faire')r.liasse='Télédéclaré';}
  if(kind==='ago'&&k==='statut'&&/^7\./.test(v)&&(!r.lancerFact||r.lancerFact==='-'))r.lancerFact='Oui';
- log25((kind==='bilan'?'Bilan ':'AGO ')+y+' · '+col.label.replace('{Y}',y),cid,String(v));
- if(['etat','statut','afaire','juridique','echeance','miroir','statutClient','isCrl','honoAnnuels','honoBilan','cloture'].includes(k)||kind==='bilan'&&k==='etat'){save();render();}
+ KINDS27[kind]?.afterSet?.(x,k,v);
+ log25((KINDS27[kind]?.label||(kind==='bilan'?'Bilan ':'AGO ')+y)+' · '+col.label.replace('{Y}',y),cid,String(v));
+ if(KINDS27[kind]?.rerender?.includes(k)||['etat','statut','afaire','juridique','echeance','miroir','statutClient','isCrl','honoAnnuels','honoBilan','cloture'].includes(k)||kind==='bilan'&&k==='etat'){save();render();}
  else{save();if(col.t==='status')el.style.background=color27(v);}
 }
 function toggleGroup27(kind,g){const b=boards27(),k=kind+'|'+g;b.collapsed[k]=!b.collapsed[k];save();render();}
@@ -157,6 +162,7 @@ function setBoardFilter27(k,v){boards27()[k]=k==='year'?Number(v):v;save();rende
 
 /* ---------- Rendu ---------- */
 function cell27(kind,x,col){
+ if(col.render)return `<td style="min-width:${col.w||110}px">${col.render(x)}</td>`;
  const v=col.get(x),id=`'${kind}','${x.c.id}',${x.y},'${col.k}'`;
  if(col.t==='status')return `<td style="min-width:${col.w||120}px"><select class="pill27" style="background:${color27(v)}" onchange="setCell27(this,${id})">${(col.opts.includes(v)||!v?col.opts:[v,...col.opts]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}${v?'':'<option selected value="">—</option>'}</select></td>`;
  if(col.t==='auto'){
@@ -169,30 +175,42 @@ function cell27(kind,x,col){
  if(col.t==='num')return `<td style="min-width:${col.w||95}px"><input class="cell27" type="number" step="any" value="${v===''||v==null?'':esc(v)}" placeholder="${col.k.startsWith('ac')&&v?esc(v):''}" onchange="setCell27(this,${id})"></td>`;
  return `<td style="min-width:${col.w||(col.t==='people'?160:110)}px"><input class="cell27 ${col.t==='people'?'people27':''}" value="${esc(v)}" title="${esc(v)}" onchange="setCell27(this,${id})"></td>`;
 }
+function groupsHtml27(kind,ctxs,y,opt={}){
+ const b=boards27(),cols=COLS27[kind],order=opt.order||GROUP_ORDER27,colors=opt.colors||GROUP_COLORS27;
+ const groups={};ctxs.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
+ const sortKey=opt.sortKey||(x=>(dueOf27(x)?.due||'9999')+x.c.name.toLowerCase());
+ const nameExtra=opt.nameExtra||(x=>kind==='ago'?`<button class="btn small light" onclick="openAgo27('${x.c.id}',${y})">Ouvrir</button>`:'');
+ const head=`<tr><th class="n27">Name</th>${cols.map(c=>`<th title="${esc(c.full||c.label.replace('{Y}',y))}">${esc(c.label.replace('{Y}',y))}</th>`).join('')}</tr>`;
+ return order.filter(g=>groups[g]).map(g=>{const list=groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))),collapsed=b.collapsed[kind+'|'+g],col=colors[g]||C27.blue;
+  const sums=cols.map(c=>c.t==='num'||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
+  return `<div class="grp27" style="color:${col}" onclick="toggleGroup27('${kind}','${esc(g)}')">${collapsed?'▸':'▾'} ${esc(g)} <span class="sub">${list.length} dossier(s)</span></div>
+  ${collapsed?'':`<div class="board27" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${nameExtra(x)}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
+  ${sums.some(v=>v!=null)?`<tfoot><tr><td class="n27"><b>Total</b></td>${sums.map(s=>`<td>${s==null?'':`<b>${euro(s)}</b>`}</td>`).join('')}</tr></tfoot>`:''}</table></div>`}`;}).join('')||`<div class="panel panelBody">${opt.empty||'Aucun client. Importe ton fichier Excel ou crée des clients dans le portefeuille.'}</div>`;
+}
+function filterCtx27(list){
+ const b=boards27(),q=(b.q||'').toLowerCase(),who=(b.who||'').toLowerCase();
+ return list.filter(x=>(!q||x.c.name.toLowerCase().includes(q)||(x.c.siren||'').includes(q)||(x.c.group27||'').toLowerCase().includes(q))&&(!who||['associe','manager','collab'].some(k=>people27(x.c,k).toLowerCase().includes(who))));
+}
+function filtersHtml27(extra=''){
+ const b=boards27(),who=(b.who||'').toLowerCase();
+ const people=[...new Set(state.clients.flatMap(c=>['associe','manager','collab'].flatMap(k=>people27(c,k).split(',').map(s=>s.trim()))).filter(Boolean))].sort();
+ return `<div class="v25actions" style="margin-bottom:6px"><input class="mini" style="width:240px" placeholder="Rechercher client, SIREN, groupe" value="${esc(b.q||'')}" onchange="setBoardFilter27('q',this.value)">
+  <select class="statusSelect" onchange="setBoardFilter27('who',this.value)"><option value="">Toute l’équipe</option>${people.map(p=>`<option ${p.toLowerCase()===who?'selected':''}>${esc(p)}</option>`).join('')}</select>${extra}</div>`;
+}
 function boardPage27(kind){
- const b=boards27(),y=b.year,cols=COLS27[kind],q=(b.q||'').toLowerCase(),who=(b.who||'').toLowerCase();
- const ctxs=state.clients.map(c=>ctx27(kind,c,y)).filter(x=>(!q||x.c.name.toLowerCase().includes(q)||(x.c.siren||'').includes(q)||(x.c.group27||'').toLowerCase().includes(q))&&(!who||['associe','manager','collab'].some(k=>people27(x.c,k).toLowerCase().includes(who))));
- const groups={};ctxs.forEach(x=>{(groups[group27(x)]=groups[group27(x)]||[]).push(x);});
- const sortKey=x=>(dueOf27(x)?.due||'9999')+x.c.name.toLowerCase();
+ const b=boards27(),y=b.year;
+ const ctxs=filterCtx27(state.clients.map(c=>ctx27(kind,c,y)));
  const title=kind==='bilan'?`Bilan Fr ${y}`:`AGO ${y}`;
  const all=state.clients.map(c=>ctx27(kind,c,y)),concern=all.filter(x=>group27(x)!=='Non concernés');
  const late=concern.filter(x=>urgency27(x)?.level==='retard').length,done=concern.filter(x=>group27(x)==='Terminés').length;
  const unbilled=concern.filter(x=>group27(x)==='Terminés'&&state.pennylaneSync?.lastSync&&!(kind==='bilan'?x.invB:x.invJ)).length;
- const people=[...new Set(state.clients.flatMap(c=>['associe','manager','collab'].flatMap(k=>people27(c,k).split(',').map(s=>s.trim()))).filter(Boolean))].sort();
- const head=`<tr><th class="n27">Name</th>${cols.map(c=>`<th>${esc(c.label.replace('{Y}',y))}</th>`).join('')}</tr>`;
  return `<div class="titleRow"><div><h1>${esc(title)}</h1><div class="sub">${kind==='bilan'?'Suivi des bilans de l’exercice':'Suivi du juridique annuel de l’exercice'} ${y} — modifiable directement dans les cases, enregistré automatiquement.</div></div>
   <div class="v25actions">${[-2,-1,0,1].map(d=>new Date().getFullYear()+d).map(v=>`<button class="btn small ${v===y?'':'secondary'}" onclick="setBoardFilter27('year',${v})">${v}</button>`).join('')}
   <label class="btn small light">Importer un Excel<input hidden type="file" accept=".xlsx" onchange="importBoard27(this.files[0]);this.value=''"></label>
   <button class="btn small secondary" onclick="exportBoard27('${kind}')">Exporter (Excel)</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Dossiers concernés</small><span class="big">${concern.length}</span></div><div class="card"><small>Terminés</small><span class="big good">${done} / ${concern.length}</span></div><div class="card"><small>En retard</small><span class="big ${late?'bad':'good'}">${late}</span></div><div class="card"><small>Terminés non facturés</small><span class="big ${unbilled?'warn':'good'}">${unbilled}</span>${state.pennylaneSync?.lastSync?'':'<div class="sub">synchro Pennylane à venir</div>'}</div></div>
- <div class="v25actions" style="margin-bottom:6px"><input class="mini" style="width:240px" placeholder="Rechercher client, SIREN, groupe" value="${esc(b.q||'')}" onchange="setBoardFilter27('q',this.value)">
-  <select class="statusSelect" onchange="setBoardFilter27('who',this.value)"><option value="">Toute l’équipe</option>${people.map(p=>`<option ${p.toLowerCase()===who?'selected':''}>${esc(p)}</option>`).join('')}</select>
-  ${kind==='ago'?'<span class="sub">« Ouvrir » sur une ligne prépare le pack AGO (procès-verbal, rapport de gestion).</span>':''}</div>
- ${GROUP_ORDER27.filter(g=>groups[g]).map(g=>{const list=groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))),collapsed=b.collapsed[kind+'|'+g],col=GROUP_COLORS27[g];
-  const sums=cols.map(c=>c.t==='num'||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
-  return `<div class="grp27" style="color:${col}" onclick="toggleGroup27('${kind}','${g}')">${collapsed?'▸':'▾'} ${g} <span class="sub">${list.length} dossier(s)</span></div>
-  ${collapsed?'':`<div class="board27" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${kind==='ago'?`<button class="btn small light" onclick="openAgo27('${x.c.id}',${y})">Ouvrir</button>`:''}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
-  <tfoot><tr><td class="n27"><b>Total</b></td>${sums.map(s=>`<td>${s==null?'':`<b>${euro(s)}</b>`}</td>`).join('')}</tr></tfoot></table></div>`}`;}).join('')||'<div class="panel panelBody">Aucun client. Importe ton fichier Excel ou crée des clients dans le portefeuille.</div>'}
+ ${filtersHtml27(kind==='ago'?'<span class="sub">« Ouvrir » sur une ligne prépare le pack AGO (procès-verbal, rapport de gestion).</span>':'')}
+ ${groupsHtml27(kind,ctxs,y)}
  <div class="info" style="margin-top:14px"><b>Automatique :</b> ${kind==='bilan'?'échéance proposée = date limite de la liasse (2<sup>e</sup> jour ouvré après le 1<sup>er</sup> mai + 15 j pour une clôture au 31/12, sinon 3 mois + 15 j), modifiable ; un bilan passé en « 9. Bilan télédéclaré » met « Lancer Facturation » à Oui et la liasse à Télédéclaré ; acomptes d’IS proposés au quart de l’IS au-delà de 3 000 €.':'échéance AGO = clôture + 6 mois, puis dépôt au greffe à + 7 mois ; la colonne « Bilan » reprend l’état du tableau Bilan ; un dossier « 7. Validé par le greffe » met « Lancer facturation » à Oui.'} Les retards remontent dans le tableau de bord et la facturation est vérifiée dans les factures Pennylane du cabinet.</div>`;
 }
 function openAgo27(cid,y){ensureV20State();state.legalView.year=y;openLegalDossierV20(cid);}
@@ -239,12 +257,13 @@ async function importBoard27(file){
  if(!file)return;
  let rows;try{rows=await readXlsx27(file);}catch(e){return alert('Import impossible : '+e.message);}
  const hi=rows.findIndex(r=>normHead27(r[0])==='name');
- if(hi<0)return alert('Ligne d’en-tête « Name » introuvable : utilise l’export Excel du tableau Bilan ou AGO.');
+ if(hi<0)return alert('Ligne d’en-tête « Name » introuvable : utilise l’export Excel du tableau Portefeuille, Bilan ou AGO.');
+ if(rows[hi].some(h=>['date entree','onboarding statut','actif/inactif'].includes(normHead27(h))))return importPortfolio27(rows,hi);
  const seen={},keys=rows[hi].map(h=>{let n=normHead27(h);if(/^bilan \d{4} a faire$/.test(n))return 'afaire';if(/^juridique \d{4}$/.test(n))return 'juridique';seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+='#'+seen[n];return HEAD27[n]||null;});
  const kind=keys.includes('statut')?'ago':keys.includes('etat')?'bilan':null;
  if(!kind)return alert('Colonnes « Etat dossier » (Bilan) ou « Statut AGO » introuvables.');
  const year=Number((String(rows[0]?.[0]||'')+' '+file.name).match(/\b(20\d\d)\b/)?.[1])||boards27().year;
- const data=rows.slice(hi+1).filter(r=>r[0]&&String(r[0]).trim()&&normHead27(r[0])!=='name'&&r.slice(1).some(v=>v!=null&&v!==''));
+ const data=rows.slice(hi+1).filter(r=>r[0]&&String(r[0]).trim()&&normHead27(r[0])!=='name'&&normHead27(r[0])!=='subitems'&&r.slice(1).some(v=>v!=null&&v!==''));
  if(!confirm(`Importer ${data.length} dossier(s) dans ${kind==='bilan'?'Bilan Fr':'AGO'} ${year} ?\nLes clients sont rapprochés par SIREN puis par nom ; les absents sont créés. Les valeurs du fichier remplacent celles du CRM pour cet exercice.`))return;
  let created=0,updated=0;
  for(const r of data){
@@ -324,6 +343,7 @@ deriveAlerts=function(){
 .pill27 option{color:#323338;background:#fff}.static27{cursor:default}
 .cell27{border:0;background:transparent;width:100%;height:36px;text-align:center;font-size:12px;padding:0 6px;font-family:inherit}
 .cell27:focus{outline:2px solid #579bfc;background:#fff}.people27{font-size:11px}
+.board27 td>a{text-decoration:none}
 .late27{background:#fde8eb;color:#c62a3d;font-weight:700}.soon27{background:#fff4e0;color:#b26b00;font-weight:700}
 .grp27{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;margin:18px 0 8px;cursor:pointer;user-select:none}`;document.head.append(s);})();
 closingPageV19=()=>boardPage27('bilan');

@@ -165,7 +165,7 @@ settings25=function(){
  let h=previousSettings27();
  const s=pl27.status||{};
  h=h.replace('<span>Non connecté — aucune synchronisation réelle</span>',`<span>${shared25.active?(s.cabinet||s.firm?'Connecté en lecture seule'+(state.pennylaneSync?.lastSync?' · dernière synchro '+new Date(state.pennylaneSync.lastSync).toLocaleString('fr-FR'):''):'Serveur prêt — clés API à renseigner (voir ci-dessous)'):'Disponible uniquement via le serveur'}</span>`);
- if(shared25.active)h=h.replace('<span>Non connecté — saisie manuelle du SIREN</span>','<span>Annuaire des entreprises (API publique) actif via le serveur · Pappers non utilisé</span>');
+ if(shared25.active)h=h.replace('<span>Non connecté — saisie manuelle du SIREN</span>',`<span>${s.pappers?'Annuaire des entreprises + Pappers (capital social) actifs':'Annuaire des entreprises (API publique, gratuit) actif · Pappers non configuré : ajoute la variable PAPPERS_API_KEY pour récupérer le capital social'}</span>`);
  const i=h.indexOf('<div class="panel panelBody"><h2>Sauvegardes');
  return i<0?h+accountsPanel27()+pennylanePanel27():h.slice(0,i)+accountsPanel27()+pennylanePanel27()+h.slice(i);
 };

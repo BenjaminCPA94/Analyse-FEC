@@ -204,7 +204,7 @@ function normCustomer(x) {
 /* ---------- page du CRM ---------- */
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const modules = ['v27_pennylane.js', 'v27_boards.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
+  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
   return base.slice(0, i) + modules + base.slice(i);
@@ -313,7 +313,16 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
       if (!/^\d{9}$/.test(siren)) return send(res, 400, { error: 'SIREN invalide' });
       const r = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${siren}&per_page=1`, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
       if (!r.ok) return send(res, r.status === 429 ? 429 : 502, { error: 'Service de recherche indisponible' });
-      send(res, 200, await r.json());
+      const data = await r.json();
+      // L'annuaire public ne donne pas le capital social : Pappers le complète si une clé est configurée.
+      if (process.env.PAPPERS_API_KEY) {
+        try {
+          const p = await fetch(`https://api.pappers.fr/v2/entreprise?siren=${siren}`, { headers: { 'api-key': process.env.PAPPERS_API_KEY, Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+          const hit = (data.results || []).find(x => x.siren === siren);
+          if (p.ok && hit) { const j = await p.json(); if (j.capital != null) hit.capital_pappers = j.capital; }
+        } catch (e) { console.error('Pappers', e.message); }
+      }
+      send(res, 200, data);
     },
 
     /* --- comptes --- */
@@ -344,7 +353,7 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     },
 
     /* --- Pennylane --- */
-    'GET /api/pennylane/status': async (req, res) => send(res, 200, { cabinet: Boolean(cfg.pennylane.cabinetToken), firm: Boolean(cfg.pennylane.firmToken), storage: store.kind.split(' (')[0] }),
+    'GET /api/pennylane/status': async (req, res) => send(res, 200, { cabinet: Boolean(cfg.pennylane.cabinetToken), firm: Boolean(cfg.pennylane.firmToken), pappers: Boolean(process.env.PAPPERS_API_KEY), storage: store.kind.split(' (')[0] }),
     'POST /api/pennylane/test': async (req, res) => {
       const out = {};
       if (cfg.pennylane.cabinetToken) {
