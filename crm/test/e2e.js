@@ -296,8 +296,15 @@ function waitFor(proc, text) {
   await page.evaluate(() => routePage('billing'));
   const bl = await page.evaluate(() => ({ html: document.body.innerText.includes('À facturer') && document.body.innerText.includes('Factures émises'), n: toBill27().length }));
   assert.ok(bl.html && bl.n >= 2);
-  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); window.prompt = () => 'F-99'; markBilled27(x.key, x.exc); });
-  assert.ok(await page.evaluate(() => !toBill27().some(x => x.label === 'Création holding') && exc27().items.find(w => w.name === 'Création holding').factRef === 'F-99'), 'marqué facturé');
+  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });
+  await page.fill('#bf_num', 'F-99'); await page.fill('#bf_ht', '1500');
+  await page.click('button:has-text("Enregistrer la facture")');
+  const fb = await page.evaluate(() => { const inv = state.invoices.find(i => i.source === 'manual' && i.number === 'F-99'); return { gone: !toBill27().some(x => x.label === 'Création holding'), ref: exc27().items.find(w => w.name === 'Création holding').factRef, inv: inv && { amount: inv.amount, id: inv.id }, shown: document.body.innerText.includes('F-99 · Création holding') }; });
+  assert.ok(fb.gone && fb.ref === 'F-99' && fb.inv && Math.abs(fb.inv.amount - 1800) < 0.01 && fb.shown, 'marqué facturé → factures émises ' + JSON.stringify(fb));
+  await page.evaluate(id => delInvoice27(id), fb.inv.id);
+  assert.ok(await page.evaluate(() => toBill27().some(x => x.label === 'Création holding') && !state.invoices.some(i => i.number === 'F-99')), 'suppression → retour à facturer');
+  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });
+  await page.fill('#bf_num', 'F-99'); await page.click('button:has-text("Enregistrer la facture")');
   await page.evaluate(() => routePage('cabinetdash'));
   const db = await page.evaluate(() => ({ t: document.body.innerText, demo: (state.pennylaneInvoices || []).every(i => i.source === 'pennylane') }));
   assert.ok(db.t.includes('Calculé en temps réel') && db.t.includes('Production') && db.t.includes('À traiter en priorité') && db.demo, 'tableau de bord réel');

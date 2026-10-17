@@ -5676,7 +5676,6 @@ function excPage27(){
  <div class="v25actions" style="margin-bottom:6px"><input class="mini" style="width:260px" placeholder="Rechercher travail, client, typologie" value="${esc(e.q||'')}" onchange="exc27().q=this.value;save();render()"></div>
  ${Object.entries(groups).filter(([,l])=>l.length).map(([g,l])=>{const k='exc|'+g,col=boards27().collapsed[k];return `<div class="grp27" style="color:${colors[g]}" onclick="toggleGroup27('exc','${g}')">${col?'▸':'▾'} ${g} <span class="sub">${l.length} travail(aux) · ${euro(sum(l))}</span></div>${col?'':`<div class="board27" data-k="${esc(k)}" style="--g:${colors[g]}"><table><thead>${head}</thead><tbody>${l.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(row).join('')}</tbody><tfoot><tr><td class="n27"><b>Total</b></td><td colspan="8"></td><td><b>${euro(sum(l))}</b></td><td colspan="5"></td></tr></tfoot></table></div>`}`;}).join('')||'<div class="panel panelBody">Aucun travail exceptionnel pour cet exercice. Crée-en un ou importe ton fichier Excel « Autres travaux ».</div>'}`;
 }
-function markExcBilled27(id){const w=exc27().items.find(x=>x.id===id);if(!w)return;const ref=prompt('Numéro de facture (facultatif) :','');if(ref===null)return;w.factStatus='Facturé';w.factRef=ref||'manuel';log25('Travail exceptionnel facturé',w.client,w.name);persist25();}
 function exportExc27(){
  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"',inv=excInvoices27(),y=exc27().year;
  const lines=[['Name','Client','Associé','Réalisé par','Revu par','Date mission','Description','Typologie','Deadline','Honoraires prévus','Temps estimé','Statut','Lancer Facturation','Statut facturation','Facture'].map(q).join(';')];
@@ -5719,15 +5718,78 @@ function toBill27(){
  if(synced){const m=new Date().getMonth()+1;state.clients.filter(c=>!['Inactif','Compromis'].includes(c.status)).forEach(c=>{const r=feeReconciliation(c,y,m);if(r.gap>10)out.push({key:'R|'+c.id+'|'+y+'-'+m,c,src:'Honoraires courants',label:`Écart à date ${MONTHS27[m-1].toLowerCase()} ${y}`,amount:Math.round(r.gap),page:'fees'});});}
  return out.filter(x=>!done[x.key]);
 }
-function markBilled27(key,excId){
- if(excId)return markExcBilled27(excId);
- const [t,cid,yy]=key.split('|');
- if(t==='B'||t==='J'){const x=ctx27(t==='B'?'bilan':'ago',cfind(cid),Number(yy));x.row(true).factManual=today27();}
- else billingKey27().done[key]=today27();
- log25('Marqué facturé',cid,key);persist25();
+/* « Marquer facturé » crée la facture dans « Factures émises » (source CRM) puis retire la ligne de « À facturer ».
+ * Quand Pennylane renvoie la même facture, la saisie CRM est remplacée automatiquement (pas de doublon). */
+function billItem27(key,excId){
+ if(excId){const w=exc27().items.find(x=>x.id===excId);return w&&{key:'X|'+w.id,c:cfind(w.client),label:w.name,amount:Number(w.fees||0),exc:w.id};}
+ return toBill27().find(x=>x.key===key)||null;
 }
+function markBilled27(key,excId){
+ const it=billItem27(key,excId);if(!it||!it.c)return toast('Élément introuvable.');
+ const due=iso(addDays(new Date(),30));
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(620px,96vw)"><div class="modalHead"><div><h3>Facture émise · ${esc(it.c.name)}</h3><div class="sub">${esc(it.label)}</div></div><button class="btn secondary" onclick="closeModal()">Fermer</button></div><div class="modalBody"><div class="formGrid">
+  <div class="field"><label>Numéro de facture</label><input id="bf_num" placeholder="Ex. : F-2026-0123"></div>
+  <div class="field"><label>Date de facture</label><input id="bf_date" type="date" value="${today27()}"></div>
+  <div class="field"><label>Montant HT (€)</label><input id="bf_ht" type="number" step="0.01" min="0" value="${it.amount||''}" oninput="billTtc27()"></div>
+  <div class="field"><label>TVA (%)</label><input id="bf_vat" type="number" step="0.1" min="0" value="20" oninput="billTtc27()"></div>
+  <div class="field"><label>Échéance</label><input id="bf_due" type="date" value="${due}"></div>
+  <div class="field"><label>Déjà encaissé (TTC)</label><input id="bf_paid" type="number" step="0.01" min="0" value="0"></div></div>
+  <p class="sub" id="bf_ttc"></p></div>
+ <div class="modalFooter" style="display:flex;justify-content:flex-end"><button class="btn green" onclick="saveBill27('${esc(it.key)}',${it.exc?`'${it.exc}'`:'null'})">Enregistrer la facture</button></div></div></div>`;
+ billTtc27();
+}
+function billTtc27(){const ht=Number(document.getElementById('bf_ht')?.value||0),v=Number(document.getElementById('bf_vat')?.value||0),el=document.getElementById('bf_ttc');if(el)el.textContent='Montant TTC : '+(ht*(1+v/100)).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});}
+function flagBilled27(key,date,ref){
+ const [t,cid,yy]=key.split('|');
+ if(t==='B'||t==='J')ctx27(t==='B'?'bilan':'ago',cfind(cid),Number(yy)).row(true).factManual=date;
+ else if(t==='X'){const w=exc27().items.find(x=>x.id===cid);if(w){w.factStatus='Facturé';w.factRef=ref||'CRM';}}
+ else billingKey27().done[key]=date;
+}
+function unflagBilled27(key){
+ const [t,cid,yy]=key.split('|');
+ if(t==='B'||t==='J'){const r=ctx27(t==='B'?'bilan':'ago',cfind(cid),Number(yy)).row(true);delete r.factManual;}
+ else if(t==='X'){const w=exc27().items.find(x=>x.id===cid);if(w){delete w.factStatus;delete w.factRef;}}
+ else delete billingKey27().done[key];
+}
+function saveBill27(key,excId){
+ const it=billItem27(key,excId),g=k=>document.getElementById('bf_'+k)?.value.trim();if(!it)return;
+ const ht=Number(g('ht')||0),vat=Number(g('vat')||0),ttc=Math.round(ht*(1+vat/100)*100)/100;
+ if(!(ht>0))return toast('Indique le montant HT de la facture.');
+ const num=g('num'),date=g('date')||today27();
+ state.invoices.push({id:uid('I'),client:it.c.id,label:(num?num+' · ':'')+it.label,number:num,date,due:g('due')||date,ht,vat,amount:ttc,paid:Math.min(ttc,Number(g('paid')||0)),source:'manual',origin:it.key});
+ flagBilled27(it.key,date,num);
+ log25('Facture émise',it.c.id,`${num||'sans numéro'} · ${it.label} · ${euro(ht)} HT`);
+ closeModal();persist25();toast('Facture ajoutée dans « Factures émises »');
+}
+function delInvoice27(id){
+ const i=state.invoices.find(x=>x.id===id);if(!i||i.source==='pennylane')return;
+ if(!confirm('Supprimer cette facture saisie dans le CRM ? La prestation reviendra dans « À facturer ».'))return;
+ state.invoices=state.invoices.filter(x=>x.id!==id);if(i.origin)unflagBilled27(i.origin);
+ log25('Facture CRM supprimée',i.client,i.label);persist25();
+}
+/* Une facture saisie dans le CRM est remplacée par la facture Pennylane correspondante (même numéro, ou même montant à 45 jours près). */
+function dedupManual27(){
+ const pl=state.invoices.filter(i=>i.source==='pennylane');let n=0;
+ state.invoices=state.invoices.filter(m=>{
+  if(m.source!=='manual')return true;
+  const dup=pl.some(p=>p.client===m.client&&((m.number&&String(p.label).startsWith(m.number+' '))||(Math.abs(Number(p.amount)-Number(m.amount))<1&&Math.abs(new Date(p.date)-new Date(m.date))<=45*864e5)));
+  if(dup)n++;return !dup;
+ });
+ return n;
+}
+const previousSyncInvoices27=syncInvoices27;
+syncInvoices27=async function(silent){await previousSyncInvoices27(silent);if(dedupManual27()){save();render();}};
+/* Prestations déjà marquées facturées avant cette version : leur facture est créée une fois dans « Factures émises ». */
+function backfillBilled27(){
+ const b=billingKey27();if(b.backfilled27)return;b.backfilled27=true;
+ const has=k=>state.invoices.some(i=>i.origin===k),add=(c,key,label,ht,date,num)=>{if(!c||has(key)||!(ht>0))return;const ttc=Math.round(ht*1.2*100)/100;state.invoices.push({id:uid('I'),client:c.id,label:(num?num+' · ':'')+label,number:num||'',date,due:iso(addDays(new Date(date+'T12:00:00'),30)),ht,vat:20,amount:ttc,paid:0,source:'manual',origin:key});};
+ for(const c of state.clients)for(const kind of ['bilan','ago']){const rows=boards27()[kind]||{};Object.keys(rows).filter(k=>k.startsWith(c.id+'|')).forEach(k=>{const r=rows[k],yy=k.split('|')[1];if(r.factManual&&/^\d{4}-\d{2}-\d{2}$/.test(r.factManual))add(c,(kind==='bilan'?'B|':'J|')+c.id+'|'+yy,(kind==='bilan'?'Bilan ':'Juridique annuel ')+yy,Number(kind==='bilan'?fees27(c).annualAccounts:fees27(c).legalAnnual),r.factManual);});}
+ exc27().items.filter(w=>w.factStatus==='Facturé'&&w.factRef&&w.factRef!=='import').forEach(w=>add(cfind(w.client),'X|'+w.id,w.name,Number(w.fees||0),w.doneAt||today27(),w.factRef==='manuel'?'':w.factRef));
+}
+function markExcBilled27(id){return markBilled27(null,id);}
 function invoiceState27(i){const rest=Math.max(0,Number(i.amount||0)-Number(i.paid||0));return rest<=0.01?'Payée':i.due&&i.due<today27()?'Échue':Number(i.paid||0)>0?'Partielle':'À encaisser';}
 function billingPage27(){
+ backfillBilled27();
  const list=toBill27(),inv=state.invoices.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),f=billingKey27().filter||'À facturer';
  const y=new Date().getFullYear(),plYear=(state.pennylaneInvoices||[]).filter(i=>String(i.date).startsWith(y)&&i.status!=='Annulée');
  const factured=plYear.reduce((a,i)=>a+Number(i.amount||0),0),rest=inv.reduce((a,i)=>a+Math.max(0,Number(i.amount||0)-Number(i.paid||0)),0),overdue=inv.filter(i=>invoiceState27(i)==='Échue').reduce((a,i)=>a+Number(i.amount||0)-Number(i.paid||0),0);
@@ -5736,8 +5798,8 @@ function billingPage27(){
  <div class="v25actions"><button class="btn small secondary" onclick="syncInvoices27()">↻ Synchroniser Pennylane</button><a class="btn small light" href="https://app.pennylane.com/" target="_blank" rel="noopener">Ouvrir Pennylane</a></div></div>
  <div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>À facturer</small><span class="big ${list.length?'bad':'good'}">${euro(list.reduce((a,x)=>a+x.amount,0))}</span><div class="sub">${list.length} élément(s)</div></div><div class="card"><small>Facturé ${y} (HT, Pennylane)</small><span class="big">${euro(factured)}</span></div><div class="card"><small>Restant à encaisser (TTC)</small><span class="big">${euro(rest)}</span></div><div class="card"><small>Dont échu</small><span class="big ${overdue?'bad':'good'}">${euro(overdue)}</span></div></div>
  ${state.pennylaneSync?.lastSync?'':'<div class="note" style="margin-bottom:12px">Pennylane n’est pas encore synchronisé : les factures déjà émises ne sont pas reconnues et les écarts d’honoraires ne sont pas calculés.</div>'}
- <div class="panel"><div class="panelHead"><h3>À facturer</h3><span class="sub">Disparaît dès que la facture est trouvée dans Pennylane ou marquée facturée</span></div><table><thead><tr><th>Client</th><th>Origine</th><th>Objet</th><th style="text-align:right">Montant HT</th><th></th></tr></thead><tbody>${list.map(x=>`<tr><td><b><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')">${esc(x.c.name)}</a></b></td><td><a href="#" onclick="event.preventDefault();routePage('${x.page}')">${esc(x.src)}</a></td><td>${esc(x.label)}</td><td style="text-align:right">${x.amount?euro(x.amount):'<span class="sub">honoraires à renseigner</span>'}</td><td style="text-align:right"><button class="btn small light" onclick="markBilled27('${x.key}',${x.exc?`'${x.exc}'`:'null'})">Marquer facturé</button></td></tr>`).join('')||'<tr><td colspan="5" class="sub">Rien à facturer pour l’instant.</td></tr>'}</tbody></table></div>
- <div class="panel"><div class="panelHead"><h3>Factures émises</h3><div class="v25actions">${['À facturer','Impayées','Échues','Toutes'].slice(1).map(o=>`<button class="btn small ${f===o?'':'secondary'}" onclick="billingKey27().filter='${o}';save();render()">${o}</button>`).join('')}</div></div><table><thead><tr><th>Client</th><th>Facture</th><th>Date</th><th>Échéance</th><th style="text-align:right">Montant TTC</th><th style="text-align:right">Encaissé</th><th style="text-align:right">Reste</th><th>État</th></tr></thead><tbody>${(f==='À facturer'?inv:shown).slice(0,300).map(i=>{const s=invoiceState27(i);return `<tr><td><b>${esc(cfind(i.client)?.name||'—')}</b></td><td>${esc(i.label||'')}${i.source==='pennylane'?' <span class="sub">· Pennylane</span>':''}</td><td>${datefr(i.date)}</td><td>${datefr(i.due)}</td><td style="text-align:right">${euro(i.amount)}</td><td style="text-align:right">${i.source==='pennylane'?euro(i.paid):`<input class="mini" type="number" value="${Number(i.paid||0)}" onchange="iPaid('${i.id}',this.value)" style="width:90px">`}</td><td style="text-align:right">${euro(Math.max(0,i.amount-i.paid))}</td><td><span class="badge ${s==='Payée'?'green':s==='Échue'?'red':s==='Partielle'?'orange':'blue'}">${s}</span></td></tr>`;}).join('')||'<tr><td colspan="8" class="sub">Aucune facture. Synchronise Pennylane.</td></tr>'}</tbody></table></div>`;
+ <div class="panel"><div class="panelHead"><h3>À facturer</h3><span class="sub">« Marquer facturé » enregistre la facture dans « Factures émises » ; une facture trouvée dans Pennylane retire aussi la ligne</span></div><table><thead><tr><th>Client</th><th>Origine</th><th>Objet</th><th style="text-align:right">Montant HT</th><th></th></tr></thead><tbody>${list.map(x=>`<tr><td><b><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')">${esc(x.c.name)}</a></b></td><td><a href="#" onclick="event.preventDefault();routePage('${x.page}')">${esc(x.src)}</a></td><td>${esc(x.label)}</td><td style="text-align:right">${x.amount?euro(x.amount):'<span class="sub">honoraires à renseigner</span>'}</td><td style="text-align:right"><button class="btn small light" onclick="markBilled27('${x.key}',${x.exc?`'${x.exc}'`:'null'})">Marquer facturé</button></td></tr>`).join('')||'<tr><td colspan="5" class="sub">Rien à facturer pour l’instant.</td></tr>'}</tbody></table></div>
+ <div class="panel"><div class="panelHead"><h3>Factures émises</h3><div class="v25actions">${['À facturer','Impayées','Échues','Toutes'].slice(1).map(o=>`<button class="btn small ${f===o?'':'secondary'}" onclick="billingKey27().filter='${o}';save();render()">${o}</button>`).join('')}</div></div><table><thead><tr><th>Client</th><th>Facture</th><th>Date</th><th>Échéance</th><th style="text-align:right">Montant TTC</th><th style="text-align:right">Encaissé</th><th style="text-align:right">Reste</th><th>État</th></tr></thead><tbody>${(f==='À facturer'?inv:shown).slice(0,300).map(i=>{const s=invoiceState27(i);return `<tr><td><b>${esc(cfind(i.client)?.name||'—')}</b></td><td>${esc(i.label||'')} <span class="sub">· ${i.source==='pennylane'?'Pennylane':i.source==='manual'?'saisie CRM':''}</span>${i.source==='manual'?` <button class="btn small secondary" title="Supprimer" onclick="delInvoice27('${i.id}')">×</button>`:''}</td><td>${datefr(i.date)}</td><td>${datefr(i.due)}</td><td style="text-align:right">${euro(i.amount)}</td><td style="text-align:right">${i.source==='pennylane'?euro(i.paid):`<input class="mini" type="number" value="${Number(i.paid||0)}" onchange="iPaid('${i.id}',this.value)" style="width:90px">`}</td><td style="text-align:right">${euro(Math.max(0,i.amount-i.paid))}</td><td><span class="badge ${s==='Payée'?'green':s==='Échue'?'red':s==='Partielle'?'orange':'blue'}">${s}</span></td></tr>`;}).join('')||'<tr><td colspan="8" class="sub">Aucune facture. Synchronise Pennylane.</td></tr>'}</tbody></table></div>`;
 }
 billing=billingPage27;
 
