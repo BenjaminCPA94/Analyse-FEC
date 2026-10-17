@@ -62,7 +62,7 @@ async function syncInvoices27(silent=false){
    mapped.push({id:'PL_'+i.plId,client:c.id,date:i.date,deadline:i.deadline||i.date,category:category27(i.label),amount:i.amountHT,amountTTC:i.amountTTC,remaining:i.remainingTTC,status:i.status==='cancelled'?'Annulée':i.creditNote?'Avoir':'Finalisée',plStatus:i.status,number:i.number,label:i.label,source:'pennylane'});
   }
   state.pennylaneInvoices=mapped;
-  state.invoices=state.invoices.filter(i=>i.source!=='pennylane').concat(mapped.filter(i=>i.status!=='Annulée').map(i=>({id:i.id,client:i.client,label:(i.number?i.number+' · ':'')+(i.label||'Facture Pennylane'),date:i.date,due:i.deadline,amount:i.amountTTC,paid:Math.round((i.amountTTC-i.remaining)*100)/100,source:'pennylane'})));
+  state.invoices=state.invoices.filter(i=>i.source!=='pennylane').concat(mapped.filter(i=>i.status!=='Annulée').map(i=>({id:i.id,client:i.client,label:(i.number?i.number+' · ':'')+(i.label||'Facture Pennylane'),date:i.date,due:i.deadline,ht:i.amount,amount:i.amountTTC,paid:Math.round((i.amountTTC-i.remaining)*100)/100,source:'pennylane'})));
   const un=Object.values(unmatched).sort((a,b)=>b.amountHT-a.amountHT);
   state.pennylaneSync={lastSync:x.fetchedAt,status:`Pennylane synchronisé · ${mapped.length} facture(s) rattachée(s)`+(un.length?` · ${un.reduce((a,u)=>a+u.count,0)} non rattachée(s)`:''),from,unmatched:un,total:x.items.length,auto:silent};
   log25(silent?'Synchronisation automatique des factures Pennylane':'Synchronisation factures Pennylane','',`${mapped.length} rattachées, ${matched} nouveau(x) rapprochement(s) client`);

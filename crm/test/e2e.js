@@ -299,8 +299,8 @@ function waitFor(proc, text) {
   await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });
   await page.fill('#bf_num', 'F-99'); await page.fill('#bf_ht', '1500');
   await page.click('button:has-text("Enregistrer la facture")');
-  const fb = await page.evaluate(() => { const inv = state.invoices.find(i => i.source === 'manual' && i.number === 'F-99'); return { gone: !toBill27().some(x => x.label === 'Création holding'), ref: exc27().items.find(w => w.name === 'Création holding').factRef, inv: inv && { amount: inv.amount, id: inv.id }, shown: document.body.innerText.includes('F-99 · Création holding') }; });
-  assert.ok(fb.gone && fb.ref === 'F-99' && fb.inv && Math.abs(fb.inv.amount - 1800) < 0.01 && fb.shown, 'marqué facturé → factures émises ' + JSON.stringify(fb));
+  const fb = await page.evaluate(() => { const inv = state.invoices.find(i => i.source === 'manual' && i.number === 'F-99'); return { gone: !toBill27().some(x => x.label === 'Création holding'), ref: exc27().items.find(w => w.name === 'Création holding').factRef, inv: inv && { ht: inv.ht, id: inv.id }, cash: /encaiss|Échu/i.test(document.querySelector('.panel:last-child')?.innerText || ''), shown: document.body.innerText.includes('F-99 · Création holding') }; });
+  assert.ok(fb.gone && fb.ref === 'F-99' && fb.inv && fb.inv.ht === 1500 && fb.shown && !fb.cash, 'marqué facturé → factures émises ' + JSON.stringify(fb));
   await page.evaluate(id => delInvoice27(id), fb.inv.id);
   assert.ok(await page.evaluate(() => toBill27().some(x => x.label === 'Création holding') && !state.invoices.some(i => i.number === 'F-99')), 'suppression → retour à facturer');
   await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });

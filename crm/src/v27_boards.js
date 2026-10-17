@@ -321,8 +321,7 @@ const previousExceptions27=deriveExceptionsV18;
 deriveExceptionsV18=function(){
  const t=today27();
  const base=previousExceptions27().filter(x=>!['Juridique','Clôture','Recouvrement'].includes(x.area));
- // Factures échues : comparées à la date du jour (la maquette utilisait une date figée).
- state.invoices.filter(i=>Number(i.paid||0)<Number(i.amount||0)&&i.due&&i.due<t).forEach(i=>base.push({id:exceptionId(['AR',i.id]),area:'Recouvrement',client:i.client,severity:'À vérifier',title:'Facture échue non réglée',detail:`${i.label} · solde ${euro(i.amount-i.paid)}`,amount:i.amount-i.paid,auto:true,action:'billing',owner:cfind(i.client)?.manager||''}));
+ // Recouvrement : suivi dans Pennylane, pas d'alerte de factures échues dans le CRM.
  boardAlerts27().forEach(a=>base.push({id:exceptionId(['BOARD',a.kind,a.x.c.id,a.x.y]),area:a.kind.startsWith('F')?'Facturation':a.kind==='bilan'?'Clôture':'Juridique',client:a.x.c.id,severity:a.u?.level==='retard'?'Critique':'À vérifier',title:a.title,detail:a.detail,auto:true,action:a.kind.startsWith('F')?'fees':a.kind==='bilan'?'closing':'legal',owner:people27(a.x.c,'manager')}));
  return base.filter(x=>!state.v18.resolved[x.id]);
 };
