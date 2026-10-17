@@ -277,6 +277,34 @@ function waitFor(proc, text) {
   if (shots) await page.screenshot({ path: path.join(shots, 'fiscalite.png'), fullPage: false });
   console.log('✓ Fiscalité : import Excel, tableau principal des régimes, échéances mensuelles et annuelles automatiques');
 
+  // Travaux exceptionnels, Facturation et Tableau de bord
+  await page.evaluate(() => routePage('exceptional'));
+  assert.ok(!(await page.evaluate(() => document.body.innerText.includes('BR IMMOBILIER Transfert de siège'))), 'plus de maquette figée');
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'autres_test.xlsx'));
+  await page.waitForFunction(() => exc27().items.length >= 3);
+  const ex = await page.evaluate(() => {
+    const it = exc27().items, sto = cfind('C2'), nv = state.clients.find(c => c.name === 'CLIENT EXC NOUVEAU'), inv = excInvoices27();
+    const bill = toBill27().filter(x => x.src === 'Travail exceptionnel').map(x => x.label);
+    const tr = it.find(w => w.name === 'Transfert de siège');
+    setExc27({ value: 'Terminé', style: {}, tagName: 'SELECT' }, tr.id, 'statut');
+    const bill2 = toBill27().filter(x => x.src === 'Travail exceptionnel').map(x => x.label).sort();
+    return { n: it.length, stoik: it.filter(w => w.client === sto.id).length, nv: Boolean(nv && nv.status === 'Actif'), billed: excBilling27(it.find(w => w.name === 'STOIK - Evaluation'), inv.x).label, bill, bill2, lancer: tr.lancerFact, html: document.body.innerText.includes('Autres travaux Fr 2025') };
+  });
+  assert.ok(ex.html); assert.equal(ex.n, 3); assert.equal(ex.stoik, 2, 'travaux rattachés au client existant'); assert.ok(ex.nv, 'client absent créé');
+  assert.equal(ex.billed, 'Facturé'); assert.deepEqual(ex.bill, ['Création holding']);
+  assert.deepEqual(ex.bill2, ['Création holding', 'Transfert de siège'], 'travail terminé → à facturer'); assert.equal(ex.lancer, 'Oui');
+  await page.evaluate(() => routePage('billing'));
+  const bl = await page.evaluate(() => ({ html: document.body.innerText.includes('À facturer') && document.body.innerText.includes('Factures émises'), n: toBill27().length }));
+  assert.ok(bl.html && bl.n >= 2);
+  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); window.prompt = () => 'F-99'; markBilled27(x.key, x.exc); });
+  assert.ok(await page.evaluate(() => !toBill27().some(x => x.label === 'Création holding') && exc27().items.find(w => w.name === 'Création holding').factRef === 'F-99'), 'marqué facturé');
+  await page.evaluate(() => routePage('cabinetdash'));
+  const db = await page.evaluate(() => ({ t: document.body.innerText, demo: (state.pennylaneInvoices || []).every(i => i.source === 'pennylane') }));
+  assert.ok(db.t.includes('Calculé en temps réel') && db.t.includes('Production') && db.t.includes('À traiter en priorité') && db.demo, 'tableau de bord réel');
+  assert.ok(!(await page.evaluate(() => [...document.querySelectorAll('.nav a')].some(a => a.dataset.page === 'docs'))), 'Boîte documents retirée');
+  if (shots) await page.screenshot({ path: path.join(shots, 'dashboard.png'), fullPage: false });
+  console.log('✓ Travaux exceptionnels (import, facturation automatique), Facturation, Tableau de bord en temps réel, Boîte documents retirée');
+
   // Prospect → client : missions et honoraires reportés automatiquement
   await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'PROSPECT TEST', siren: '555666777', contact: 'Louis', email: 'l@x.fr', owner: 'YB', value: 0, stage: 'Négociation', source: '', appointment: '', next: '', notes: '' }); save(); routePage('prospects'); openProspect(id); window._pid = id; });
   await page.fill('#p27_f_accounting', '24000'); await page.press('#p27_f_accounting', 'Tab');
@@ -286,10 +314,13 @@ function waitFor(proc, text) {
   await page.evaluate(() => validateProspect(window._pid));
   const pr = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); return { page: state.page, v: pfind(window._pid).value, fees: [fees27(c).accounting, fees27(c).annualAccounts], total: c.annualFees, st: c.status, bilan: c.missions.annualAccounts, onb: onbStep27(c, 4) }; });
   assert.deepEqual(pr, { page: 'onboarding', v: 27000, fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'Fait' });
+  // Client issu d'un prospect passé actif sans le bouton (ancienne version) : visible dans « Onboarding validé ».
+  const legacy = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); c.status = 'Actif'; delete c.onbValidated27; routePage('onboarding'); return [onbDone27(c), [...document.querySelectorAll('.onb27')].some(e => e.textContent.includes('PROSPECT TEST') && e.textContent.includes('Validé'))]; });
+  assert.deepEqual(legacy, [true, true], 'ancien dossier actif listé dans Onboarding validé');
   console.log('✓ Prospect validé : missions et honoraires repris sur la fiche, arrivée en onboarding');
 
   // Rendu des écrans
-  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'fiscal', 'prospects', 'onboarding', 'clients', 'client']) {
+  for (const p of ['fees', 'billing', 'closing', 'legal', 'rules', 'cabinetdash', 'fiscal', 'prospects', 'onboarding', 'clients', 'client', 'exceptional', 'time', 'profit', 'capacity', 'users']) {
     await page.evaluate(p => routePage(p), p);
     await page.waitForTimeout(150);
     if (shots && ['fees', 'rules'].includes(p)) await page.screenshot({ path: path.join(shots, p + '.png'), fullPage: false });

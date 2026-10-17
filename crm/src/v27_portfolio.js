@@ -46,7 +46,7 @@ const STATUT_COL27=AGO_COLS27.find(c=>c.k==='statutClient');
 const autoPill27=(v,color)=>v?`<span class="pill27 static27" style="background:${color||color27(v)}">${esc(v)}</span>`:'<span class="sub">—</span>';
 const PF_COLS27=[
  {k:'entry',label:'Date entrée',t:'date',get:x=>x.c.entry||'',set:(x,v)=>{x.c.entry=v;}},
- {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return x.c.onbValidated27?autoPill27('Validé',C27.green):isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
+ {k:'onbAuto',label:'Onboarding',t:'auto',w:100,render:x=>{const p=onbProgress27(x.c);return onbDone27(x.c)?autoPill27('Validé',C27.green):isOnboarding27(x.c)||p.done<p.total?`<a href="#" onclick="event.preventDefault();routePage('onboarding')">${autoPill27(p.label,p.color)}</a>`:autoPill27('Terminé',C27.green);}},
  ...PEOPLE27,
  clientCol27('siren','SIREN','text',c=>c.siren||'',(c,v)=>{c.siren=String(v).replace(/\s/g,'').slice(0,9);},null,100),
  clientCol27('forme','Forme juridique','text',c=>c.legalForm||'',(c,v)=>{c.legalForm=v;},null,90),
@@ -125,6 +125,8 @@ function validateOnb27(cid){
  c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||state.currentUser||''};
  log25('Onboarding validé',cid,p.label);persist25();toast(c.name+' : onboarding validé, le client est actif');
 }
+/* Dossier sorti de l'onboarding : validé avec le bouton, ou passé actif avant son ajout (prospect validé, étapes renseignées). */
+function onbDone27(c){return !isOnboarding27(c)&&!['Inactif','Compromis'].includes(c.status)&&Boolean(c.onbValidated27||c.prospectId||Object.keys(c.onb27?.s||{}).length);}
 function reopenOnb27(cid){const c=cfind(cid);if(!c||!confirm('Rouvrir l’onboarding de '+c.name+' ?'))return;c.status='Onboarding';delete c.onbValidated27;log25('Onboarding rouvert',cid,'');persist25();}
 function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[cid]=!b.onbOpen[cid];save();render();}
 function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
@@ -143,14 +145,14 @@ function onbRow27(x){
    <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
    <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
    <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
-   ${c.onbValidated27?`<div class="onbAct27"><span class="badge green">Validé le ${new Date(c.onbValidated27.date).toLocaleDateString('fr-FR')}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
+   ${onbDone27(c)?`<div class="onbAct27"><span class="badge green">${c.onbValidated27?'Validé le '+new Date(c.onbValidated27.date).toLocaleDateString('fr-FR'):'Validé'}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
   </div>
   ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
    <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
 }
 function onboardingPage27(){
  const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
- const done=filterCtx27(state.clients.filter(c=>c.onbValidated27&&!isOnboarding27(c)).map(c=>ctx27('onb',c,0))).sort((a,b)=>b.c.onbValidated27.date.localeCompare(a.c.onbValidated27.date));
+ const done=filterCtx27(state.clients.filter(onbDone27).map(c=>ctx27('onb',c,0))).sort((a,b)=>(b.c.onbValidated27?.date||b.c.entry||'').localeCompare(a.c.onbValidated27?.date||a.c.entry||''));
  const showDone=boards27().collapsed['onb|validated']!==true;
  const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
  const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();

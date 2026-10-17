@@ -15,10 +15,10 @@ function color27(v){
  v=String(v??'');
  if(!v||v==='-')return C27.empty;
  if(/^(NA|N\.A|Non concerné)$/i.test(v))return C27.grey;
- if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui|^Actif$|^Validé|^Envoy|^Déclar|^Declar|^Payée|^Fait/.test(v))return C27.green;
+ if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui|^Actif$|^Validé|^Envoy|^Déclar|^Declar|^Payée|^Fait|^Terminé|^Facturé/.test(v))return C27.green;
  if(/A revoir|vérifier|Bloqué|ompromis/.test(v))return C27.red;
  if(/^1\.|^A faire$/i.test(v))return C27.blue;
- if(/attente|envoyer|Déposé|^[2-8]\.|onboarding/.test(v))return C27.orange;
+ if(/attente|envoyer|Déposé|^[2-8]\.|onboarding|^En cours/.test(v))return C27.orange;
  if(/A définir|Autres dossiers/.test(v))return C27.purple;
  if(/^Non$|Inactif/.test(v))return C27.dark;
  if(/RAN|Dividendes|réserves|Compte courant/.test(v))return C27.purple;
@@ -252,13 +252,14 @@ async function readXlsx27(file){
  }
  return Array.from(rows,r=>r||[]);
 }
-const HEAD27={'name':'name','associe':'associe','manager':'manager','collaborateur':'collab','collaborateurs':'collab','groupe':'groupe','groupe#2':'statutClient','cloture':'cloture','date de cloture':'cloture','echeance':'echeance','siren':'siren','etat dossier':'etat','regime fiscal':'regimeFiscal','regime tva':'tva','solde is':'soldeIS','solde cvae':'cvae','solde ca12':'ca12','das 2':'das2','liasse fiscale':'liasse','decloyer':'decloyer','lancer facturation':'lancerFact','honoraires annuels':'honoAnnuels','honoraires bilans':'honoBilan','forme juridique':'forme','miroir':'miroir','is/crl':'isCrl','acompte 1':'ac1','acompte 2':'ac2','acompte 3':'ac3','acompte 4':'ac4','formule':'formule','rl 10 %':'rl','dividendes ou ran':'affectation','statut ago':'statut',"type d'annexe":'annexe','honoraires':'honoAgo'};
+const HEAD27={'name':'name','associe':'associe','manager':'manager','collaborateur':'collab','collaborateurs':'collab','groupe':'groupe','groupe#2':'statutClient','cloture':'cloture','date de cloture':'cloture','echeance':'echeance','siren':'siren','etat dossier':'etat','regime fiscal':'regimeFiscal','regime tva':'tva','solde is':'soldeIS','solde cvae':'cvae','solde ca12':'ca12','das 2':'das2','liasse fiscale':'liasse','decloyer':'decloyer','lancer facturation':'lancerFact','honoraires annuels':'honoAnnuels','honoraires bilans':'honoBilan','forme juridique':'forme','miroir':'miroir','is/crl':'isCrl','acompte 1':'ac1','acompte 2':'ac2','acompte 3':'ac3','acompte 4':'ac4','formule':'formule','rl 10 %':'rl','dividendes ou ran':'affectation','statut ago':'statut','facturation':'factLink',"type d'annexe":'annexe','honoraires':'honoAgo'};
 const normHead27=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[’`]/g,"'").replace(/\s+/g,' ').trim();
 async function importBoard27(file){
  if(!file)return;
  let rows;try{rows=await readXlsx27(file);}catch(e){return alert('Import impossible : '+e.message);}
  const hi=rows.findIndex(r=>normHead27(r[0])==='name');
  if(hi<0)return alert('Ligne d’en-tête « Name » introuvable : utilise l’export Excel du tableau Portefeuille, Bilan ou AGO.');
+ if(rows[hi].some(h=>['realise par','honoraires prevus'].includes(normHead27(h))))return importExc27(rows,hi,file);
  if(rows[hi].some(h=>['deadline tva','tva 01','acomptes is'].includes(normHead27(h))))return importFiscal27(rows,hi,file);
  if(rows[hi].some(h=>['date entree','onboarding statut','actif/inactif'].includes(normHead27(h))))return importPortfolio27(rows,hi);
  const seen={},keys=rows[hi].map(h=>{let n=normHead27(h);if(/^bilan \d{4} a faire$/.test(n))return 'afaire';if(/^juridique \d{4}$/.test(n))return 'juridique';seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+='#'+seen[n];return HEAD27[n]||null;});
@@ -285,6 +286,8 @@ async function importBoard27(file){
    if(col.k==='siren'&&String(val).replace(/\D/g,'').length!==9)continue;
    col.set(x,val);
   }
+  // Colonne « Facturation » renseignée dans l'export : le dossier a déjà été facturé.
+  if(v.factLink)row.factManual=row.factManual||'import';
   if(!c.missions)c.missions={};
   if(kind==='bilan'&&v.afaire)c.missions.annualAccounts=row.afaire==='Oui'||c.missions.annualAccounts;
   if(kind==='ago'&&v.juridique)c.missions.legal=row.juridique==='Oui'||c.missions.legal;
