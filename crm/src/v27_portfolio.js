@@ -306,6 +306,8 @@ const REMOVED_PAGES27=['dashboard','inbox','control','notifications'];
 const previousRenderPortfolio27=render;
 render=function(){
  if(REMOVED_PAGES27.includes(state.page))state.page='cabinetdash';
+ // Statuts posés par la version de test des prospects (retirée) : ramenés aux étapes de cet écran.
+ const back={'À contacter':'Nouveau','RDV':'RDV réalisé','Gagné':'Validé','Perdu':'Refusé'};(state.prospects||[]).forEach(p=>{if(back[p.stage])p.stage=back[p.stage];});
  previousRenderPortfolio27();
  if(['clients','onboarding','fiscal'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
 };
