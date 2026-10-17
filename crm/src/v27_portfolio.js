@@ -108,13 +108,45 @@ function portfolioPage27(){
  ${filtersHtml27('<span class="sub">Clique sur un nom pour ouvrir la fiche complète.</span>')}
  ${groupsHtml27('portfolio',filterCtx27(all),0,PF_GROUPS27)}`;
 }
+/* Onboarding : liste des dossiers ; un clic déroule les 14 étapes (présentation d'origine du CRM). */
+const ONB_ACTIONS27={
+ 0:c=>`<button class="btn small light" onclick="letterDialog26('${c.id}')">Préparer la LDM</button>`,
+ 2:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
+ 4:c=>`<button class="btn small light" onclick="routePage('clients')">Saisir les honoraires</button>`,
+ 5:c=>`<button class="btn small light" onclick="identityDialog26('client','${c.id}')">Compléter la fiche</button>`,
+ 7:()=>`<a class="btn small light" href="https://www.impots.gouv.fr/professionnel" target="_blank" rel="noopener">impots.gouv</a>`,
+ 11:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
+};
+function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[cid]=!b.onbOpen[cid];save();render();}
+function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
+function onbRow27(x){
+ const c=x.c,p=onbProgress27(c),open=boards27().onbOpen?.[c.id],u=urgency27(x),dl=val27(x,'deadline');
+ const steps=ONB_STEPS27.map(([full],i)=>{const st=onbStep27(c,i),auto=!onb27(c).s[i]&&st!=='A faire';
+  return `<tr><td class="onbNum27">${i+1}</td><td>${esc(full)}${auto?' <span class="sub">· automatique</span>':''}</td>
+   <td><input class="cell27 onbPerson27" value="${esc(onb27(c).p[i]||'')}" placeholder="${esc(people27(c,'collab').split(',')[0]||'Responsable')}" onchange="setOnbPerson27('${c.id}',${i},this.value)"></td>
+   <td style="width:150px"><select class="pill27 onbPill27" style="background:${color27(st==='Fait'?'Oui':st==='Bloqué'?'Bloqué':st==='En cours'?'2.':st==='NA'?'NA':'1.')}" onchange="setCell27(this,'onb','${c.id}',0,'s${i}')">${ONB_OPTS27.map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td style="width:150px;text-align:right">${ONB_ACTIONS27[i]?ONB_ACTIONS27[i](c):''}</td></tr>`;}).join('');
+ return `<div class="onb27 ${open?'open':''}"><div class="onbHead27" onclick="toggleOnb27('${c.id}')">
+   <span class="chev27">${open?'▾':'▸'}</span>
+   <div class="onbName27"><b>${esc(c.name)}</b><span class="sub">${esc(c.legalForm||'')}${c.siren?' · '+esc(c.siren):''}</span></div>
+   <div class="onbMeta27"><span class="sub">Entrée</span>${c.entry?datefr(c.entry):'—'}</div>
+   <div class="onbMeta27 ${u?.level==='retard'?'late27t':u?'soon27t':''}"><span class="sub">Deadline</span>${dl?datefr(dl):'—'}</div>
+   <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
+   <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
+   <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
+  </div>
+  ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
+   <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
+}
 function onboardingPage27(){
- const list=state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0));
- return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Les 14 étapes d’entrée d’un client. Certaines se cochent seules (LDM validée, client trouvé dans Pennylane, honoraires saisis, fiche complète, client catégorisé). Le client passe en portefeuille actif dès que tout est fait.</div></div>
+ const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
+ const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
+ const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
+ return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; le client passe en portefeuille actif dès que tout est fait.</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}
- ${groupsHtml27('onb',filterCtx27(list),0,ONB_GROUPS27)}`;
+ ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}`;
 }
 clientsV11=portfolioPage27;
 onboardingV15=onboardingPage27;

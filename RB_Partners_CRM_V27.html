@@ -4791,7 +4791,7 @@ function groupsHtml27(kind,ctxs,y,opt={}){
  return order.filter(g=>groups[g]).map(g=>{const list=groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))),collapsed=b.collapsed[kind+'|'+g],col=colors[g]||C27.blue;
   const sums=cols.map(c=>c.t==='num'||c.sum?list.reduce((a,x)=>a+Number(c.get(x)||0),0):null);
   return `<div class="grp27" style="color:${col}" onclick="toggleGroup27('${kind}','${esc(g)}')">${collapsed?'▸':'▾'} ${esc(g)} <span class="sub">${list.length} dossier(s)</span></div>
-  ${collapsed?'':`<div class="board27" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${nameExtra(x)}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
+  ${collapsed?'':`<div class="board27" data-k="${esc(kind+'|'+g)}" style="--g:${col}"><table><thead>${head}</thead><tbody>${list.map(x=>{const u=urgency27(x);return `<tr><td class="n27"><div class="name27"><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')" title="${esc(x.c.name)}">${esc(x.c.name)}</a>${u?`<span class="badge ${u.level==='retard'?'red':'orange'}">${u.level==='retard'?'Retard '+u.days+' j':'J-'+u.days}</span>`:''}${nameExtra(x)}</div></td>${cols.map(c=>cell27(kind,x,c)).join('')}</tr>`;}).join('')}</tbody>
   ${sums.some(v=>v!=null)?`<tfoot><tr><td class="n27"><b>Total</b></td>${sums.map(s=>`<td>${s==null?'':`<b>${euro(s)}</b>`}</td>`).join('')}</tr></tfoot>`:''}</table></div>`}`;}).join('')||`<div class="panel panelBody">${opt.empty||'Aucun client. Importe ton fichier Excel ou crée des clients dans le portefeuille.'}</div>`;
 }
 function filterCtx27(list){
@@ -5076,13 +5076,45 @@ function portfolioPage27(){
  ${filtersHtml27('<span class="sub">Clique sur un nom pour ouvrir la fiche complète.</span>')}
  ${groupsHtml27('portfolio',filterCtx27(all),0,PF_GROUPS27)}`;
 }
+/* Onboarding : liste des dossiers ; un clic déroule les 14 étapes (présentation d'origine du CRM). */
+const ONB_ACTIONS27={
+ 0:c=>`<button class="btn small light" onclick="letterDialog26('${c.id}')">Préparer la LDM</button>`,
+ 2:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
+ 4:c=>`<button class="btn small light" onclick="routePage('clients')">Saisir les honoraires</button>`,
+ 5:c=>`<button class="btn small light" onclick="identityDialog26('client','${c.id}')">Compléter la fiche</button>`,
+ 7:()=>`<a class="btn small light" href="https://www.impots.gouv.fr/professionnel" target="_blank" rel="noopener">impots.gouv</a>`,
+ 11:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
+};
+function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[cid]=!b.onbOpen[cid];save();render();}
+function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
+function onbRow27(x){
+ const c=x.c,p=onbProgress27(c),open=boards27().onbOpen?.[c.id],u=urgency27(x),dl=val27(x,'deadline');
+ const steps=ONB_STEPS27.map(([full],i)=>{const st=onbStep27(c,i),auto=!onb27(c).s[i]&&st!=='A faire';
+  return `<tr><td class="onbNum27">${i+1}</td><td>${esc(full)}${auto?' <span class="sub">· automatique</span>':''}</td>
+   <td><input class="cell27 onbPerson27" value="${esc(onb27(c).p[i]||'')}" placeholder="${esc(people27(c,'collab').split(',')[0]||'Responsable')}" onchange="setOnbPerson27('${c.id}',${i},this.value)"></td>
+   <td style="width:150px"><select class="pill27 onbPill27" style="background:${color27(st==='Fait'?'Oui':st==='Bloqué'?'Bloqué':st==='En cours'?'2.':st==='NA'?'NA':'1.')}" onchange="setCell27(this,'onb','${c.id}',0,'s${i}')">${ONB_OPTS27.map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td style="width:150px;text-align:right">${ONB_ACTIONS27[i]?ONB_ACTIONS27[i](c):''}</td></tr>`;}).join('');
+ return `<div class="onb27 ${open?'open':''}"><div class="onbHead27" onclick="toggleOnb27('${c.id}')">
+   <span class="chev27">${open?'▾':'▸'}</span>
+   <div class="onbName27"><b>${esc(c.name)}</b><span class="sub">${esc(c.legalForm||'')}${c.siren?' · '+esc(c.siren):''}</span></div>
+   <div class="onbMeta27"><span class="sub">Entrée</span>${c.entry?datefr(c.entry):'—'}</div>
+   <div class="onbMeta27 ${u?.level==='retard'?'late27t':u?'soon27t':''}"><span class="sub">Deadline</span>${dl?datefr(dl):'—'}</div>
+   <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
+   <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
+   <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
+  </div>
+  ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
+   <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
+}
 function onboardingPage27(){
- const list=state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0));
- return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Les 14 étapes d’entrée d’un client. Certaines se cochent seules (LDM validée, client trouvé dans Pennylane, honoraires saisis, fiche complète, client catégorisé). Le client passe en portefeuille actif dès que tout est fait.</div></div>
+ const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
+ const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
+ const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
+ return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; le client passe en portefeuille actif dès que tout est fait.</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}
- ${groupsHtml27('onb',filterCtx27(list),0,ONB_GROUPS27)}`;
+ ${ONB_GROUPS27.order.filter(g=>groups[g]).map(g=>`<div class="grp27" style="color:${ONB_GROUPS27.colors[g]}">${esc(g)} <span class="sub">${groups[g].length} dossier(s)</span></div>${groups[g].sort((a,b)=>sortKey(a).localeCompare(sortKey(b))).map(onbRow27).join('')}`).join('')||`<div class="panel panelBody">${ONB_GROUPS27.empty}</div>`}`;
 }
 clientsV11=portfolioPage27;
 onboardingV15=onboardingPage27;
@@ -5229,6 +5261,54 @@ render=function(){
  if(REMOVED_PAGES27.includes(state.page))state.page='cabinetdash';
  previousRenderPortfolio27();
  if(['clients','onboarding'].includes(state.page)){const root=document.getElementById('root');[...root.children].forEach(el=>{if(el.classList.contains('note')&&el.textContent.startsWith('Module historique'))el.remove();});}
+};
+
+</script>
+<script>
+/* RB Partners V27 — style épuré (typographie plus fine, moins d'ombres) et position de défilement conservée. */
+(function(){const s=document.createElement('style');s.textContent=`
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px;color:#2b3445;-webkit-font-smoothing:antialiased;background:#f7f8fa}
+h1{font-size:20px;font-weight:650;letter-spacing:-.01em}h2{font-size:15px;font-weight:650}h3{font-size:13.5px;font-weight:650}
+.sub{font-size:11.5px}.titleRow{margin-bottom:14px}
+.brand{font-size:16px;font-weight:700}.navsec{font-size:9.5px;font-weight:700}
+.nav a{font-size:12.5px;padding:7px 10px}.nav a:hover,.nav a.active{font-weight:600}
+.btn{font-weight:600;font-size:11.5px;padding:7px 11px;border-radius:6px}.btn.small{padding:5px 8px;font-size:11px}
+.card{padding:11px 14px;border-radius:9px;box-shadow:none}.card small{font-weight:600;font-size:11px}
+.big{font-size:19px;font-weight:700;margin-top:4px}
+.panel{box-shadow:none;border-radius:9px}.panelHead{padding:10px 14px}.panelBody{padding:13px}
+table{font-size:12.5px}th{font-size:10.5px;font-weight:600}
+.badge{font-weight:600;font-size:10.5px;padding:3px 6px}
+.field label{font-size:10px;font-weight:700}
+.field input,.field select,.field textarea{font-size:13px;padding:7px 9px}
+.modal input,.modal select,.modal textarea{font-size:13px}
+.modalHead h3,.modal h3{font-size:14px}
+.search{font-size:12.5px}.top{height:56px}
+.statusSelect,.mini{font-size:11.5px}
+.kpiLine{padding:7px 0}
+.pill27{font-weight:500;font-size:11px;height:32px}.cell27{height:32px;font-size:12px}.board27 td{height:32px}
+.board27 th{font-weight:600;font-size:10.5px}.name27 a{font-weight:500}
+.grp27{font-size:13.5px;font-weight:650;margin:16px 0 6px}
+.onb27{background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.onb27.open{border-color:#c9d8f0}
+.onbHead27{display:grid;grid-template-columns:18px minmax(220px,2fr) 90px 90px minmax(170px,1.3fr) minmax(170px,1.5fr) 80px;gap:12px;align-items:center;padding:9px 12px;cursor:pointer}
+.onbHead27:hover{background:#fafbfc}.chev27{color:#8a93a3}
+.onbName27{display:flex;flex-direction:column;overflow:hidden}.onbName27 b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.onbMeta27{display:flex;flex-direction:column;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.onbMeta27 .sub{font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.late27t{color:#c62a3d;font-weight:600}.soon27t{color:#b26b00;font-weight:600}
+.onbProg27{display:flex;align-items:center;gap:8px;font-size:12px}.bar27{flex:1;height:6px;background:#edf0f4;border-radius:4px;overflow:hidden}.bar27 i{display:block;height:100%}
+.onbBody27{border-top:1px solid #eef0f4;padding:10px 12px 12px 42px}
+.onbSteps27{width:100%;border-collapse:collapse}.onbSteps27 td{border-bottom:1px solid #f1f2f5;padding:0 6px;height:34px}.onbSteps27 th{text-align:left;padding:6px}
+.onbSteps27 a,.onbHead27 a{text-decoration:none}.onbNum27{color:#8a93a3;width:28px}.onbPerson27{text-align:left;max-width:200px}.onbPill27{border-radius:5px;height:26px}
+.v25actions label.sub{display:flex;align-items:center;gap:6px}`;document.head.append(s);})();
+// Une modification ne ramène plus en haut ni tout à gauche : le défilement est conservé après le rafraîchissement.
+const previousRenderStyle27=render;
+render=function(){
+ const page=state.page,pos={y:window.scrollY,b:{}};
+ document.querySelectorAll('.board27[data-k]').forEach(e=>{pos.b[e.dataset.k]=e.scrollLeft;});
+ previousRenderStyle27();
+ if(state.page!==page)return;
+ document.querySelectorAll('.board27[data-k]').forEach(e=>{if(pos.b[e.dataset.k])e.scrollLeft=pos.b[e.dataset.k];});
+ if(pos.y)window.scrollTo(0,pos.y);
 };
 
 </script>

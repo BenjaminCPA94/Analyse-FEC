@@ -224,7 +224,18 @@ function waitFor(proc, text) {
   assert.deepEqual([pf.bilan, pf.ago, pf.closing], ['Oui', 'Oui', '12-31'], 'missions reprises dans Bilan et AGO');
   const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's13'); return [b, c.status]; });
   assert.deepEqual(fin, ['13/14', 'Actif'], 'onboarding terminé → client actif');
+  // Onboarding : un clic sur le dossier déroule ses étapes, qui restent ouvertes après modification.
+  await page.evaluate(() => routePage('onboarding'));
+  await page.click('.onbHead27:has-text("ONBOARD TEST")');
+  await page.selectOption('.onbSteps27 tr:nth-child(4) select', 'Fait');
+  assert.equal(await page.evaluate(() => onbStep27(state.clients.find(x => x.name === 'ONBOARD TEST'), 3)), 'Fait');
+  assert.equal(await page.locator('.onbBody27').count(), 1, 'dossier toujours déroulé');
   if (shots) await page.screenshot({ path: path.join(shots, 'onboarding.png'), fullPage: false });
+  // Portefeuille : une modification ne ramène plus le tableau tout à gauche.
+  await page.evaluate(() => routePage('clients'));
+  await page.evaluate(() => { document.querySelector('.board27').scrollLeft = 700; });
+  await page.locator('.board27 select[onchange*="m_payroll"]').first().selectOption('Oui');
+  assert.equal(await page.evaluate(() => document.querySelector('.board27').scrollLeft), 700, 'défilement horizontal conservé');
   console.log('✓ Portefeuille et Onboarding : import Excel, 14 étapes, fiscalité et tableaux reliés, passage automatique en actif');
 
   // Prospect → client : missions et honoraires reportés automatiquement
