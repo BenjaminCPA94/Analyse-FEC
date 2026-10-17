@@ -331,18 +331,36 @@ function waitFor(proc, text) {
   console.log('✓ Équipe réelle, saisie des temps, rentabilité, charge équipe, fiche client, recherche ; prototypes IA retirés');
 
   // Prospect → client : missions et honoraires reportés automatiquement
-  await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'PROSPECT TEST', siren: '555666777', contact: 'Louis', email: 'l@x.fr', owner: 'YB', value: 0, stage: 'Négociation', source: '', appointment: '', next: '', notes: '' }); save(); routePage('prospects'); openProspect(id); window._pid = id; });
-  await page.fill('#p27_f_accounting', '24000'); await page.press('#p27_f_accounting', 'Tab');
-  await page.fill('#p27_f_annualAccounts', '3000'); await page.press('#p27_f_annualAccounts', 'Tab');
-  await page.check('#p27_m_annualAccounts'); await page.check('#p27_m_accounting');
-  assert.equal(await page.inputValue('#p_value'), '27000', 'valeur estimée calculée');
-  await page.evaluate(() => validateProspect(window._pid));
-  const pr = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); return { page: state.page, v: pfind(window._pid).value, fees: [fees27(c).accounting, fees27(c).annualAccounts], total: c.annualFees, st: c.status, bilan: c.missions.annualAccounts, onb: onbStep27(c, 4) }; });
-  assert.deepEqual(pr, { page: 'onboarding', v: 27000, fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'Fait' });
+  await page.evaluate(() => { routePage('prospects'); openNewProspect(); });
+  await page.fill('#np_name', 'PROSPECT TEST'); await page.fill('#np_contact', 'Louis'); await page.fill('#np_email', 'l@x.fr'); await page.fill('#np_owner', 'YB');
+  await page.check('.np_need[value="accounting"]'); await page.check('.np_need[value="annualAccounts"]');
+  await page.click('button:has-text("Créer le prospect")');
+  await page.waitForSelector('#pf_accounting');
+  await page.evaluate(() => { window._pid = state.prospects.find(p => p.name === 'PROSPECT TEST').id; });
+  await page.fill('#pf_accounting', '24000'); await page.press('#pf_accounting', 'Tab');
+  await page.fill('#pf_annualAccounts', '3000'); await page.press('#pf_annualAccounts', 'Tab');
+  assert.equal(await page.textContent('#pp_total'), await page.evaluate(() => euro(27000)), 'total calculé');
+  await page.fill('#pp_comment', 'Premier appel : besoin compta + bilan'); await page.press('#pp_comment', 'Enter');
+  await page.evaluate(() => prSetStage27(window._pid, 'Proposition envoyée'));
+  const ps = await page.evaluate(() => { const p = pfind(window._pid); return { st: p.stage, d: p.nextDate === iso(addDays(new Date(), 15)), j: p.journal27.length, t: (routePage('prospects'), document.body.innerText.includes('PROSPECT TEST')) }; });
+  assert.ok(ps.st === 'Proposition envoyée' && ps.d && ps.j === 2 && ps.t, 'proposition envoyée, relance à 15 jours ' + JSON.stringify(ps));
+  await page.evaluate(() => { const p = pfind(window._pid); p.sentAt = new Date(Date.now() - 20 * 864e5).toISOString(); p.nextDate = ''; });
+  assert.ok(await page.evaluate(() => prFollow27(pfind(window._pid))?.late), 'relance si proposition sans réponse');
+  await page.evaluate(() => prSetStage27(window._pid, 'Gagné'));
+  const pr = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); return { page: state.page, v: pfind(window._pid).value, st0: pfind(window._pid).stage, fees: [fees27(c).accounting, fees27(c).annualAccounts], total: c.annualFees, st: c.status, bilan: c.missions.annualAccounts, onb: onbStep27(c, 4) }; });
+  assert.deepEqual(pr, { page: 'onboarding', v: 27000, st0: 'Gagné', fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'Fait' });
+  // Société à créer : « Gagné » ouvre le dossier dans la Matrice création ; la fiche client reprend ensuite les honoraires.
+  const pc = await page.evaluate(() => { const id = uid('P'); state.prospects.push({ id, name: 'CREA PROSPECT', contact: 'Zoé', email: 'z@x.fr', stage: 'RDV', missions27: { creation: true, accounting: true }, fees27: { accounting: 6000, annualAccounts: 0, legalAnnual: 0, other: 0 }, creationFees: 800 }); prSetStage27(id, 'Gagné'); const it = crFind27(pfind(id).creation27); closeModal(); crClient27(it.id); const c = cfind(crFind27(it.id).client); const w = exc27().items.find(x => x.id === crFind27(it.id).exc); closeModal(); return { page: state.page, st: pfind(id).stage, email: it.contactEmail, fees: it.fees, acc: fees27(c).accounting, mission: c.missions.accounting, w: w && w.fees }; });
+  assert.deepEqual(pc, { page: 'creation', st: 'Gagné', email: 'z@x.fr', fees: 800, acc: 6000, mission: true, w: 800 }, 'prospect création → Matrice création → fiche client');
+  await page.evaluate(() => routePage('prospects'));
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'prospects_test.xlsx'));
+  await page.waitForFunction(() => state.prospects.some(p => p.name === 'PROSPECT IMPORT DEUX'));
+  const pi = await page.evaluate(() => { const a = state.prospects.find(p => p.name === 'PROSPECT IMPORT UN'), b = state.prospects.find(p => p.name === 'PROSPECT IMPORT DEUX'); return [a.stage, a.owner, a.source, Object.keys(a.missions27).filter(k => a.missions27[k]).sort().join(','), a.createdAt, b.stage, b.source || '', b.missions27.taxe3]; });
+  assert.deepEqual(pi, ['À contacter', 'Alice Test', 'Bouche à oreille', 'annualAccounts,legal,tax', '2026-06-15', 'À contacter', '', true], 'import Excel Prospects');
   // Client issu d'un prospect passé actif sans le bouton (ancienne version) : visible dans « Onboarding validé ».
   const legacy = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); c.status = 'Actif'; delete c.onbValidated27; routePage('onboarding'); return [onbDone27(c), [...document.querySelectorAll('.onb27')].some(e => e.textContent.includes('PROSPECT TEST') && e.textContent.includes('Validé'))]; });
   assert.deepEqual(legacy, [true, true], 'ancien dossier actif listé dans Onboarding validé');
-  console.log('✓ Prospect validé : missions et honoraires repris sur la fiche, arrivée en onboarding');
+  console.log('✓ Prospects : création simplifiée, proposition et relance, gagné → onboarding ou Matrice création, import Excel');
 
   // Matrice création : formulaire envoyé au client, réponses reçues, reprise dans le portefeuille
   await page.evaluate(() => routePage('creation'));

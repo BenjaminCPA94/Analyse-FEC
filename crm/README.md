@@ -6,7 +6,7 @@ La V27 fournit ce serveur. Le CRM **pilote** le cabinet ; la production comptabl
 
 | Écran | Ce qui est automatique |
 |---|---|
-| Prospects | La recherche par SIREN interroge l'annuaire officiel des entreprises (gratuit). Le capital social vient de Pappers si `PAPPERS_API_KEY` est configurée. Les missions et honoraires proposés sont saisis sur le prospect et enregistrés au fil de la saisie. À la validation, ils sont repris sur la fiche client et le client passe en onboarding. |
+| Prospects | Tableau par statut (À contacter → RDV → Proposition envoyée → Gagné / Perdu), import de l'export Monday « CRM ». Création en un écran (nom, contact, commercial, source, besoins). Fiche : prochaine action, besoins = missions proposées, honoraires, mode de facturation, journal des échanges, recherche SIREN. Relance automatique (action dépassée, proposition sans réponse depuis 15 jours). « Gagné » crée la fiche client en onboarding, ou le dossier dans la Matrice création pour une société à créer. |
 | Matrice création | Modèle du tableau Monday « Matrice création » (import Excel possible). « Nouvelle création » prépare un mail avec un lien sécurisé vers un formulaire (sans compte) où le client renseigne la société, les actionnaires, les dirigeants et dépose ses justificatifs (3 Mo max par fichier). Les réponses arrivent automatiquement dans le tableau ; « Créer la fiche client » les reverse dans le portefeuille (onboarding) et crée le travail exceptionnel « Création de société », qui passe en « À facturer » quand la société est créée. |
 | Onboarding | Liste des dossiers : un clic déroule les 14 étapes (LDM, lettre de reprise, Pennylane, prélèvement, impots.gouv, LAB…), dont certaines se cochent seules. La **lettre de reprise** au confrère précédent est pré-remplie, avec aperçu, Word et impression ; l'étape se coche quand elle est envoyée. C'est toi qui valides l'onboarding : le dossier passe alors dans « Onboarding validé » et le client devient actif. |
 | Fiscalité | « Tableau principal » des régimes par client (TVA et date, DEB/DES, taxe sur les salaires, acomptes d'IS, CFE, CVAE, TVS, IFU, CRL, taxe foncière), puis un onglet par mois et un onglet « Annuelle ». Les déclarations de chaque mois sont calculées à partir des régimes : il n'y a rien à recréer d'une année sur l'autre. L'export Excel s'importe tel quel. |
@@ -116,6 +116,7 @@ crm/
   src/v27_team.js         équipe, temps, rentabilité, charge, fiche client, recherche
   src/creation_fields.js  questions du formulaire de création (partagées CRM / formulaire)
   src/v27_creation.js     Matrice création (liens, réponses, fiche client)
+  src/v27_prospects.js    Prospects : pipeline, fiche, relances, import Excel
   src/creation_form.html  formulaire public envoyé au client (/creation/<lien>)
   src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout

@@ -204,7 +204,7 @@ billing=billingPage27;
 function dashboardPage27(){
  const y=new Date().getFullYear(),m=new Date().getMonth()+1,ex=boards27().year,t=today27();
  const act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres'].includes(c.status)),onb=state.clients.filter(isOnboarding27);
- const prosp=(state.prospects||[]).filter(p=>!['Validé','Refusé'].includes(p.stage));
+ const prosp=(state.prospects||[]).filter(p=>!['Gagné','Perdu'].includes(prStage27(p)));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  const plYear=(state.pennylaneInvoices||[]).filter(i=>String(i.date).startsWith(y)&&i.status!=='Annulée'),factured=state.invoices.filter(i=>i.status!=='Annulée'&&String(i.date).startsWith(y)).reduce((a,i)=>a+invHT27(i),0);
  const invY=state.invoices.filter(i=>i.status!=='Annulée'&&String(i.date).startsWith(y)),factMonth=invY.filter(i=>String(i.date).startsWith(t.slice(0,7))).reduce((a,i)=>a+invHT27(i),0);
@@ -219,7 +219,7 @@ function dashboardPage27(){
   ...(onbLate?[{lvl:'orange',txt:`${onbLate} onboarding(s) au-delà de la deadline`,sub:'Onboarding',page:'onboarding'}]:[]),
   ...excOpen.filter(w=>w.deadline&&w.deadline<t).map(w=>({lvl:'red',txt:`${cfind(w.client)?.name||''} — ${w.name} en retard`,sub:'Travaux exceptionnels · deadline '+datefr(w.deadline),page:'exceptional'})),
 ];
- const stages=['Nouveau','RDV à planifier','RDV réalisé','Proposition envoyée','Négociation'];
+ const stages=['À contacter','RDV','Proposition envoyée'];
  const card=(l,v,cls,sub,page)=>`<div class="card" ${page?`style="cursor:pointer" onclick="routePage('${page}')"`:''}><small>${l}</small><span class="big ${cls||''}">${v}</span>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
  const bar=(d,n,late)=>`<div class="bar27" style="margin:6px 0"><i style="width:${n?d/n*100:0}%;background:${C27.green}"></i></div><div class="sub">${d} / ${n} terminés${late?` · <span class="bad">${late} en retard</span>`:''}</div>`;
  return `<div class="titleRow"><div><h1>Tableau de bord cabinet</h1><div class="sub">Calculé en temps réel à partir des tableaux du CRM et des factures Pennylane — ${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}.</div></div>${state.pennylaneSync?.lastSync?`<span class="sub">Pennylane synchronisé le ${new Date(state.pennylaneSync.lastSync).toLocaleString('fr-FR')}</span>`:'<span class="badge orange">Pennylane non synchronisé</span>'}</div>
@@ -230,7 +230,7 @@ function dashboardPage27(){
   <div class="kpiLine" style="display:block;cursor:pointer" onclick="routePage('legal')"><b>Juridique annuel / AGO</b>${bar(A.done,A.n,A.late)}</div>
   <div class="kpiLine" style="display:block;cursor:pointer" onclick="routePage('fiscal')"><b>Déclarations fiscales du mois</b>${bar(fD,fT,fL)}</div>
   <div class="kpiLine" style="cursor:pointer" onclick="routePage('exceptional')"><b>Travaux exceptionnels en cours</b><span>${excOpen.length} · ${euro(excOpen.reduce((a,w)=>a+Number(w.fees||0),0))}</span></div></div></div>
- <div class="panel"><div class="panelHead"><h3>Pipeline prospects</h3><button class="btn small light" onclick="routePage('prospects')">Ouvrir</button></div><div class="panelBody">${stages.map(s=>{const l=prosp.filter(p=>p.stage===s);return `<div class="kpiLine"><span>${s}</span><b>${l.length} · ${euro(l.reduce((a,p)=>a+Number(p.value||0),0))}</b></div>`;}).join('')}</div></div></div>
+ <div class="panel"><div class="panelHead"><h3>Pipeline prospects</h3><button class="btn small light" onclick="routePage('prospects')">Ouvrir</button></div><div class="panelBody">${stages.map(s=>{const l=prosp.filter(p=>prStage27(p)===s);return `<div class="kpiLine"><span>${s}</span><b>${l.length} · ${euro(l.reduce((a,p)=>a+Number(p.value||0),0))}</b></div>`;}).join('')}</div></div></div>
  <div class="panel"><div class="panelHead"><h3>À traiter en priorité</h3><span class="sub">${alerts.length} point(s)</span></div><div class="panelBody">${alerts.slice(0,15).map(a=>`<div class="kpiLine" style="cursor:pointer" onclick="routePage('${a.page}')"><div><span class="badge ${a.lvl}">${a.lvl==='red'?'Retard':'À surveiller'}</span> <b>${esc(a.txt)}</b><div class="sub">${esc(a.sub||'')}</div></div><span class="sub">Ouvrir ›</span></div>`).join('')||'<div class="sub">Aucun retard : tout est à jour.</div>'}${alerts.length>15?`<div class="sub" style="margin-top:6px">… et ${alerts.length-15} autre(s)</div>`:''}</div></div>`;
 }
 cabinetDashboardV24=dashboardPage27;
