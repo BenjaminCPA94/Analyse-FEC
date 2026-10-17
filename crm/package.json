@@ -1,0 +1,13 @@
+{
+  "name": "rb-partners-crm",
+  "version": "27.0.0",
+  "private": true,
+  "description": "CRM RB Partners : serveur partagé et connexion Pennylane (lecture seule)",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "add-user": "node server.js add-user",
+    "test": "node test/e2e.js"
+  }
+}
