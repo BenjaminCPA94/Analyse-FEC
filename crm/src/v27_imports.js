@@ -19,7 +19,7 @@ function entityPaths27(a,b,path=[],out=[]){
   for(const id of new Set([...A.keys(),...B.keys()]))if(!same27(A.get(id),B.get(id)))out.push({path:path.concat('#'+id),before:A.get(id)??null,after:B.get(id)??null});
   return out;
  }
- if(isObj27(a)&&isObj27(b)&&path.length<3){for(const k of new Set([...Object.keys(a),...Object.keys(b)]))if(!(path.length===0&&PREF_KEYS27.includes(k)))entityPaths27(a[k],b[k],path.concat(k),out);return out;}
+ if(isObj27(a)&&isObj27(b)&&path.length<3){for(const k of new Set([...Object.keys(a),...Object.keys(b)]))if(!isPref27(path.concat(k)))entityPaths27(a[k],b[k],path.concat(k),out);return out;}
  out.push({path,before:a??null,after:b??null});return out;
 }
 function getPath27(root,path){let o=root;for(const k of path){if(o==null)return undefined;o=String(k).startsWith('#')&&Array.isArray(o)?o.find(x=>x.id===k.slice(1)):o[k];}return o;}

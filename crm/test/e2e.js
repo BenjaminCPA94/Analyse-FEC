@@ -206,7 +206,7 @@ function waitFor(proc, text) {
   // Navigation simplifiée
   const nav = await page.evaluate(() => [...document.querySelectorAll('.nav a')].map(a => a.dataset.page));
   for (const gone of ['dashboard', 'inbox', 'control', 'notifications']) assert.ok(!nav.includes(gone), 'onglet retiré : ' + gone);
-  assert.ok(nav.indexOf('onboarding') < nav.indexOf('clients') && nav.indexOf('prospects') < nav.indexOf('onboarding'), 'Prospects → Onboarding → Portefeuille');
+  assert.ok(nav.indexOf('work') === 0 && nav.indexOf('clients') < nav.indexOf('prospects') && nav.indexOf('prospects') < nav.indexOf('onboarding') && nav.indexOf('onboarding') < nav.indexOf('creation') && nav.indexOf('creation') < nav.indexOf('fiscal') && nav.indexOf('rules') === nav.length - 1, 'menu : Mon travail, Clients, Développement, Production, Honoraires, Pilotage, Paramètres');
   assert.equal(await page.evaluate(() => { routePage('control'); return state.page; }), 'cabinetdash');
   console.log('✓ Navigation : onglets inutiles retirés, Onboarding avant Portefeuille');
 
@@ -272,7 +272,7 @@ function waitFor(proc, text) {
   const fi = await page.evaluate(() => {
     const m = state.clients.find(x => x.name === 'FISC MENSUEL'), t = state.clients.find(x => x.name === 'FISC TRIMESTRIEL'), keys = c => obligations27(c, 2026).map(o => o.key);
     const r = { mStatus: m.status, tStatus: t.status, mVat: m.vatRegime, mKeys: keys(m).filter(k => !k.startsWith('TVA-')), mTva: keys(m).filter(k => k.startsWith('TVA-')).length,
-      tKeys: keys(t).filter(k => !k.startsWith('DEB-')), tDeb: obligations27(t, 2026).find(o => o.key === 'DEB-03').due, st: row27('fiscm', m.id, 2026)['TVA-01'], tf: obligations27(m, 2026).find(o => o.key === 'TF').def,
+      tKeys: keys(t).filter(k => !k.startsWith('DEB-')), tDeb: [obligations27(t, 2026).find(o => o.key === 'DEB-03').dueRule, obligations27(t, 2026).find(o => o.key === 'DEB-03').due], st: row27('fiscm', m.id, 2026)['TVA-01'], tf: obligations27(m, 2026).find(o => o.key === 'TF').def,
       tax: m.missions.tax, html: document.body.innerText.includes('Tableau principal') };
     setCell27({ value: 'Annuelle', style: {} }, 'fisc', m.id, 0, 'tva');
     const i = m.hist27.vatRegime.length - 1; histFrom27(m.id, 'vatRegime', i, '2026-01-01');
@@ -285,7 +285,7 @@ function waitFor(proc, text) {
   assert.deepEqual([fi.mStatus, fi.tStatus, fi.mVat], ['Actif', 'Compromis', 'Mensuelle'], 'clients importés actifs / compromis');
   assert.equal(fi.mTva, 12); assert.deepEqual(fi.mKeys, ['IS-T1', 'IS-T2', 'IS-T3', 'IS-T4', 'CFE-AC', 'CFE', 'TVS', 'TF']);
   assert.deepEqual(fi.tKeys, ['TVA-01', 'TVA-04', 'TVA-07', 'TVA-10', 'TS-01', 'TS-04', 'TS-07', 'TS-10', 'IFU', 'CRL']);
-  assert.equal(fi.tDeb, '2026-03-08'); assert.equal(fi.st, 'Déclarée', 'statut importé et harmonisé'); assert.equal(fi.tf, 'Payée');
+  assert.deepEqual(fi.tDeb, ['2026-03-08', '2026-03-09'], 'échéance du dimanche reportée au lundi'); assert.equal(fi.st, 'Déclarée', 'statut importé et harmonisé'); assert.equal(fi.tf, 'Payée');
   assert.deepEqual(fi.after.sort(), ['CA12', 'TVA-S1', 'TVA-S2'], 'passage en TVA annuelle au 1er janvier → CA12 et acomptes');
   assert.ok(fi.kept, 'TVA-01 déjà déclarée sous l’ancien régime : conservée');
   assert.ok(fi.march.includes('DES/DEB 03') && fi.marchRows >= 1, 'vue mensuelle calculée');
@@ -386,7 +386,7 @@ function waitFor(proc, text) {
 
   // Matrice création : formulaire envoyé au client, réponses reçues, reprise dans le portefeuille
   await page.evaluate(() => routePage('creation'));
-  assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('prospects') + 1; }), 'onglet Matrice création après Prospects');
+  assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('onboarding') + 1; }), 'Créations de société dans Production, après Onboarding');
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'creation_test.xlsx'));
   await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => creation27().items.length >= 2);

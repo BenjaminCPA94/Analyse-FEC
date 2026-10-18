@@ -7,7 +7,10 @@
  *    sauvegardes et restauration (administrateur). */
 const ROLE_LABELS27={admin:'Administrateur',associe:'Associé',manager:'Manager',collaborateur:'Collaborateur'};
 // Préférences d'affichage : propres à chaque poste, jamais imposées aux autres lors d'une fusion.
-const PREF_KEYS27=['page','selectedClient','clientTab27','reviewPeriod25','timeDraft27'];
+const PREF_KEYS27=['page','selectedClient','clientTab27','reviewPeriod25','timeDraft27','timeF27','profitY27','work27','reviewY27'];
+/* Préférences d'affichage propres à chaque utilisateur : jamais envoyées au serveur, conservées sur le poste. */
+const PREF_PATHS27=[...PREF_KEYS27.map(k=>[k]),['boards27','q'],['boards27','who'],['boards27','collapsed'],['boards27','onbOpen'],['boards27','fiscView'],['boards27','fiscYear'],['billing27','filter'],['exc27','q'],['exc27','year'],['creation27','q'],['creation27','collapsed']];
+function isPref27(p){return PREF_PATHS27.some(pp=>pp.length===p.length&&pp.every((x,i)=>x===p[i]));}
 const sync27={conflicts:[],audit:null,backups:null};
 function perm27(p){return !shared25.active||Boolean(shared25.user?.perms?.[p]);}
 
@@ -39,8 +42,8 @@ function merge27(base,mine,theirs,path,out){
 }
 function mergeStates27(base,mine,theirs){
  const out=[],merged=merge27(base,mine,theirs,[],out);
- for(const k of PREF_KEYS27)if(k in mine)merged[k]=mine[k];
- return {merged,conflicts:out.filter(c=>!PREF_KEYS27.includes(c.path[0]))};
+ for(const p of PREF_PATHS27){const v=p.reduce((o,k)=>o?.[k],mine);if(v!==undefined){let o=merged;for(const k of p.slice(0,-1))o=o[k]=isObj27(o[k])?o[k]:{};o[p[p.length-1]]=v;}}
+ return {merged,conflicts:out.filter(c=>!isPref27(c.path.slice(0,c.path.length>1&&isPref27(c.path.slice(0,2))?2:1)))};
 }
 /* Applique une valeur à un chemin (les éléments de liste sont désignés par « #id »). */
 function setPath27(root,path,value){

@@ -113,7 +113,7 @@ npm i -g playwright   # une seule fois
 npm test   # parcours complets (fichiers, Redis), acceptation lot 1 (fichiers, Redis réel, Redis sans scripts Lua), point d'entrée Vercel
 ```
 
-Si `redis-server` est installé, les tests « Redis » l'utilisent réellement (le script Lua d'enregistrement atomique est exécuté) ; sinon ils utilisent un faux Upstash, qui vérifie le repli sur verrou. `test/lot1.js` et `test/lot2.js` couvrent les tests d'acceptation des lots 1 et 2 (voir `docs/LOT1.md`, `docs/LOT2.md`).
+Si `redis-server` est installé, les tests « Redis » l'utilisent réellement (le script Lua d'enregistrement atomique est exécuté) ; sinon ils utilisent un faux Upstash, qui vérifie le repli sur verrou. `test/lot1.js`, `test/lot2.js` et `test/lot345.js` couvrent les tests d'acceptation des lots 1 à 5 (voir `docs/LOT1.md`, `docs/LOT2.md`, `docs/LIVRAISON.md`).
 
 ## Imports Excel
 
@@ -144,6 +144,9 @@ crm/
   src/v27_history.js      historique des paramètres (dates d'effet), échéances calculées mois par mois
   src/v27_sync.js         enregistrement par élément, fusion en cas de conflit, brouillon, comptes et rôles, journal, sauvegardes
   src/v27_imports.js      imports Excel : aperçu, rapprochements à trancher, rapport, retour arrière
+  src/v27_work.js         navigation par sections, Mon travail, onglets de la fiche client
+  src/v27_process.js      jours ouvrés, règles d'échéance, premier bilan, sortie de client, relances
+  src/v27_pilot.js        équipe (coûts datés), rentabilité, capacité, revue d'honoraires, qualité
   src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout
 ```
