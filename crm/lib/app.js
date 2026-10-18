@@ -13,9 +13,25 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const vm = require('node:vm');
+const guard = require('./guard');
 
 const ROOT = path.join(__dirname, '..');
 const HISTORY_SIZE = 30;
+const AUDIT_SIZE = 5000;
+// KEYS : révision, état, méta, historique — ARGV : révision attendue, état, méta, taille de l'historique.
+const SAVE_LUA = `local cur = tonumber(redis.call('GET', KEYS[1]) or '0')
+if cur ~= tonumber(ARGV[1]) then return {0, cur, redis.call('GET', KEYS[3]) or ''} end
+local old = redis.call('GET', KEYS[2])
+if old then
+  redis.call('LPUSH', KEYS[4], '{"revision":' .. cur .. ',"meta":' .. (redis.call('GET', KEYS[3]) or '{}') .. ',"state":' .. cjson.encode(old) .. '}')
+  redis.call('LTRIM', KEYS[4], 0, tonumber(ARGV[4]) - 1)
+end
+redis.call('SET', KEYS[2], ARGV[2])
+redis.call('SET', KEYS[3], ARGV[3])
+redis.call('SET', KEYS[1], tostring(cur + 1))
+return {1, cur + 1, ''}`;
+const UNLOCK_LUA = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end`;
 
 function config() {
   return {
@@ -61,8 +77,9 @@ class FileStore {
   async getUsers() { return this.read(this.files.users, []); }
   async setUsers(list) { this.write(this.files.users, list); }
   async getShared() { return this.read(this.files.state, { revision: 0, state: null, updatedAt: null, updatedBy: null }); }
+  // Lecture, contrôle de version et écriture sans aucune attente entre les deux : atomique dans le processus.
   async saveShared(expected, state, username) {
-    const cur = await this.getShared();
+    const cur = this.read(this.files.state, { revision: 0, state: null });
     if (cur.revision !== expected) return { conflict: true, updatedBy: cur.updatedBy };
     if (cur.state) {
       this.write(path.join(this.files.history, `state-r${String(cur.revision).padStart(6, '0')}.json`), cur);
@@ -73,6 +90,17 @@ class FileStore {
     this.write(this.files.state, next);
     return { revision: next.revision };
   }
+  async auditPush(entry) {
+    const f = path.join(this.dir, 'audit.jsonl');
+    fs.appendFileSync(f, JSON.stringify(entry) + '\n', { mode: 0o600 });
+    if (fs.statSync(f).size > 8 * 1024 * 1024) { const lines = fs.readFileSync(f, 'utf8').trim().split('\n'); this.write(f, lines.slice(-AUDIT_SIZE).join('\n') + '\n'); }
+  }
+  async auditList(limit = 200) {
+    try { return fs.readFileSync(path.join(this.dir, 'audit.jsonl'), 'utf8').trim().split('\n').filter(Boolean).slice(-limit).reverse().map(l => JSON.parse(l)); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }
+  }
+  // Un seul processus écrit dans data/ : les lectures-écritures synchrones sont déjà atomiques.
+  async withLock(name, fn) { return fn(); }
+  async incrWindow(key, seconds) { const now = Date.now(), f = this.failures.get('rl:' + key); if (!f || f.until < now) { this.failures.set('rl:' + key, { count: 1, until: now + seconds * 1000 }); return 1; } f.count++; return f.count; }
   kvFile(key) { const d = path.join(this.dir, 'kv'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return path.join(d, encodeURIComponent(key) + '.json'); }
   async kvGet(key) { return this.read(this.kvFile(key), null); }
   async kvSet(key, value) { this.write(this.kvFile(key), value); }
@@ -102,14 +130,21 @@ class RedisStore {
     const m = meta ? JSON.parse(meta) : {};
     return { revision: Number(rev || 0), state: state ? JSON.parse(state) : null, updatedAt: m.updatedAt || null, updatedBy: m.updatedBy || null };
   }
+  /* Contrôle de version et écriture en une seule opération atomique (script Lua exécuté par Redis) :
+   * aucun écrasement possible entre la lecture de la révision et l'écriture. Repli sur verrou si EVAL est refusé. */
   async saveShared(expected, state, username) {
-    const lock = crypto.randomBytes(8).toString('hex');
-    for (let i = 0; ; i++) {
-      if (await this.cmd('SET', 'rb:lock', lock, 'NX', 'PX', '10000')) break;
-      if (i >= 20) throw Object.assign(new Error('Enregistrement simultané en cours, réessaie.'), { status: 503 });
-      await new Promise(r => setTimeout(r, 150));
+    const meta = JSON.stringify({ updatedAt: new Date().toISOString(), updatedBy: username });
+    if (!this.noEval) {
+      try {
+        const [ok, rev, oldMeta] = await this.cmd('EVAL', SAVE_LUA, '4', 'rb:rev', 'rb:state', 'rb:meta', 'rb:history', String(expected), JSON.stringify(state), meta, String(HISTORY_SIZE));
+        if (Number(ok) !== 1) return { conflict: true, updatedBy: oldMeta ? JSON.parse(oldMeta).updatedBy : null };
+        return { revision: Number(rev) };
+      } catch (e) {
+        if (!/unknown command|not supported|NOSCRIPT|disabled|ERR unknown/i.test(e.message)) throw e;
+        this.noEval = true; console.error('EVAL indisponible, repli sur verrou :', e.message);
+      }
     }
-    try {
+    return this.withLock('state', async () => {
       const [rev, oldState, oldMeta] = await this.cmd('MGET', 'rb:rev', 'rb:state', 'rb:meta');
       const cur = Number(rev || 0);
       if (cur !== expected) return { conflict: true, updatedBy: oldMeta ? JSON.parse(oldMeta).updatedBy : null };
@@ -117,15 +152,28 @@ class RedisStore {
         await this.cmd('LPUSH', 'rb:history', JSON.stringify({ revision: cur, meta: oldMeta ? JSON.parse(oldMeta) : {}, state: oldState }));
         await this.cmd('LTRIM', 'rb:history', '0', String(HISTORY_SIZE - 1));
       }
-      await this.cmd('MSET', 'rb:state', JSON.stringify(state), 'rb:meta', JSON.stringify({ updatedAt: new Date().toISOString(), updatedBy: username }), 'rb:rev', String(cur + 1));
+      await this.cmd('MSET', 'rb:state', JSON.stringify(state), 'rb:meta', meta, 'rb:rev', String(cur + 1));
       return { revision: cur + 1 };
-    } finally {
-      if (await this.cmd('GET', 'rb:lock') === lock) await this.cmd('DEL', 'rb:lock');
+    });
+  }
+  /* Verrou court avec jeton : libéré seulement par son détenteur (comparaison et suppression atomiques). */
+  async withLock(name, fn) {
+    const key = 'rb:lock:' + name, lock = crypto.randomBytes(8).toString('hex');
+    for (let i = 0; ; i++) {
+      if (await this.cmd('SET', key, lock, 'NX', 'PX', '15000')) break;
+      if (i >= 40) throw Object.assign(new Error('Enregistrement simultané en cours, réessaie.'), { status: 503, public: true });
+      await new Promise(r => setTimeout(r, 120));
+    }
+    try { return await fn(); } finally {
+      try { await this.cmd('EVAL', UNLOCK_LUA, '1', key, lock); } catch { if (await this.cmd('GET', key) === lock) await this.cmd('DEL', key); }
     }
   }
   async kvGet(key) { const v = await this.cmd('GET', 'rb:kv:' + key); return v ? JSON.parse(v) : null; }
   async kvSet(key, value) { await this.cmd('SET', 'rb:kv:' + key, JSON.stringify(value)); }
   async kvDel(key) { await this.cmd('DEL', 'rb:kv:' + key); }
+  async auditPush(entry) { await this.cmd('LPUSH', 'rb:audit', JSON.stringify(entry)); await this.cmd('LTRIM', 'rb:audit', '0', String(AUDIT_SIZE - 1)); }
+  async auditList(limit = 200) { return ((await this.cmd('LRANGE', 'rb:audit', '0', String(limit - 1))) || []).map(x => JSON.parse(x)); }
+  async incrWindow(key, seconds) { const n = await this.cmd('INCR', 'rb:rl:' + key); if (n === 1) await this.cmd('EXPIRE', 'rb:rl:' + key, String(seconds)); return n; }
   async failCount(key) { return Number(await this.cmd('GET', 'rb:fail:' + key) || 0); }
   async addFailure(key) { if (await this.cmd('INCR', 'rb:fail:' + key) === 1) await this.cmd('EXPIRE', 'rb:fail:' + key, '900'); }
   async clearFailures(key) { await this.cmd('DEL', 'rb:fail:' + key); }
@@ -149,8 +197,19 @@ const USERNAME = /^[A-Za-z0-9._-]{2,40}$/;
 function newUser(username, password, role) {
   if (!USERNAME.test(username || '')) throw Object.assign(new Error('Identifiant invalide (2 à 40 caractères : lettres, chiffres, . _ -)'), { status: 400 });
   if (String(password || '').length < 12) throw Object.assign(new Error('Mot de passe trop court (12 caractères minimum).'), { status: 400 });
-  return { username, role: role === 'admin' ? 'admin' : 'user', ...hashPassword(String(password)), createdAt: new Date().toISOString() };
+  return { username, role: normRole(role), ...hashPassword(String(password)), createdAt: new Date().toISOString() };
 }
+/* Rôles et droits, appliqués par le serveur (l'interface ne fait que masquer).
+ * L'ancien rôle « user » correspond à « collaborateur » (le plus restreint) : l'administrateur ajuste ensuite. */
+const ROLES = ['admin', 'associe', 'manager', 'collaborateur'];
+function normRole(r) { return ROLES.includes(r) ? r : 'collaborateur'; }
+const PERMS = {
+  admin: { users: true, settings: true, costs: true, delete: true, import: true, fees: true, force: true, backup: true, audit: true },
+  associe: { users: false, settings: true, costs: true, delete: true, import: true, fees: true, force: true, backup: false, audit: true },
+  manager: { users: false, settings: false, costs: false, delete: false, import: true, fees: true, force: false, backup: false, audit: false },
+  collaborateur: { users: false, settings: false, costs: false, delete: false, import: false, fees: false, force: false, backup: false, audit: false },
+};
+function permsOf(role) { return PERMS[normRole(role)]; }
 
 /* ---------- Pennylane ---------- */
 class PennylaneError extends Error {
@@ -211,7 +270,7 @@ function normCustomer(x) {
 /* ---------- page du CRM ---------- */
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_team.js', 'creation_fields.js', 'v27_creation.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
+  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_billing.js', 'v27_team.js', 'creation_fields.js', 'v27_creation.js', 'v27_sync.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
   return base.slice(0, i) + modules + base.slice(i);
@@ -258,10 +317,35 @@ function validState(s) {
     && ['onboarding', 'fiscal', 'closing', 'legal'].every(k => Array.isArray(s[k]));
 }
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
-const MAX_FILE = 3 * 1024 * 1024;
-const SAFE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/webp'];
+const MAX_FILE = 3 * 1024 * 1024, MAX_FILES = 30, MAX_FILES_BYTES = 25 * 1024 * 1024;
+const LINK_DAYS = Number(process.env.CREATION_LINK_DAYS || 60);
+/* Type réel d'un fichier, d'après ses premiers octets (le type déclaré par le navigateur n'est pas fiable). */
+function sniff(buf) {
+  if (buf.length < 12) return null;
+  if (buf.slice(0, 5).toString('latin1') === '%PDF-') return 'application/pdf';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (buf.slice(4, 8).toString('latin1') === 'ftyp' && /^(heic|heix|hevc|mif1|msf1)$/.test(buf.slice(8, 12).toString('latin1'))) return 'image/heic';
+  return null;
+}
+function linkInfo(l) {
+  const state = l.revokedAt ? 'révoqué' : l.closedAt ? 'clôturé' : l.expiresAt && Date.parse(l.expiresAt) < Date.now() ? 'expiré' : 'actif';
+  return { state, expiresAt: l.expiresAt || null, revokedAt: l.revokedAt || null, closedAt: l.closedAt || null, createdAt: l.createdAt || null };
+}
+/* Champs obligatoires : la même liste que le formulaire (src/creation_fields.js), vérifiée côté serveur. */
+let CREATION_FIELDS_CACHE = null;
+function creationFields() {
+  if (!CREATION_FIELDS_CACHE) { const ctx = {}; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'src', 'creation_fields.js'), 'utf8') + ';this.F=CREATION_FIELDS;', ctx); CREATION_FIELDS_CACHE = ctx.F; }
+  return CREATION_FIELDS_CACHE;
+}
+function creationMissing(fields, files) {
+  return creationFields().filter(f => f.required && (f.type === 'file' ? !files.some(x => x.kind === f.key) : !String(fields[f.key] || '').trim())).map(f => f.label.split(',')[0]);
+}
 const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
-const httpError = (status, message) => Object.assign(new Error(message), { status });
+const httpError = (status, message) => Object.assign(new Error(message), { status, public: true });
+const BACKUP_KEEP = 14;
+const MAX_STATE = Number(process.env.MAX_STATE_KB || 3500) * 1024;
 
 function createApp({ store = createStore(), cfg = config() } = {}) {
   let INDEX = null, CREATION_FORM = null;
@@ -284,20 +368,71 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     // Le compte doit toujours exister et son mot de passe ne pas avoir changé.
     const user = (await store.getUsers()).find(u => u.username === p.u);
     if (!user || user.hash.slice(0, 16) !== p.v) return null;
-    return { username: user.username, role: user.role };
+    // Sessions révoquées par l'administrateur (déconnexion forcée de tous les appareils).
+    if (user.revokedAt && (!p.iat || p.iat < Date.parse(user.revokedAt))) return null;
+    const role = normRole(user.role);
+    return { username: user.username, role, perms: permsOf(role) };
   }
   async function openSession(req, res, user) {
-    const token = await sign({ u: user.username, v: user.hash.slice(0, 16), exp: Date.now() + cfg.sessionHours * 3600e3 });
-    send(res, 200, { username: user.username, role: user.role }, { 'Set-Cookie': cookie(req, token, cfg.sessionHours * 3600) });
+    const token = await sign({ u: user.username, v: user.hash.slice(0, 16), iat: Date.now(), exp: Date.now() + cfg.sessionHours * 3600e3 });
+    const role = normRole(user.role);
+    send(res, 200, { username: user.username, role, perms: permsOf(role) }, { 'Set-Cookie': cookie(req, token, cfg.sessionHours * 3600) });
   }
-  async function publicLink(req, token) {
+  async function publicLink(req, token, write) {
     const ip = 'pub:' + clientIp(req);
     if (await store.failCount(ip) >= 30) throw httpError(429, 'Trop de tentatives, réessaie plus tard.');
     const link = TOKEN_RE.test(String(token || '')) ? await store.kvGet('cr:link:' + token) : null;
     if (!link) { await store.addFailure(ip); throw httpError(404, 'Ce lien n’est plus valide. Contacte ton cabinet.'); }
+    const st = linkInfo(link).state;
+    if (st === 'révoqué') throw httpError(410, 'Ce lien a été désactivé par le cabinet. Contacte-le pour en obtenir un nouveau.');
+    if (st === 'expiré') throw httpError(410, 'Ce lien a expiré. Contacte ton cabinet pour le prolonger.');
+    if (st === 'clôturé' && write) throw httpError(410, 'Ce dossier est clôturé : il n’est plus modifiable. Contacte ton cabinet si besoin.');
+    if (write && await store.incrWindow('cr:' + token, 3600) > 600) throw httpError(429, 'Trop de modifications en peu de temps. Réessaie dans une heure.');
     return { token, link };
   }
+  // Fichiers : index séparé (nouveau format) + anciens fichiers listés dans la réponse (format précédent).
+  async function creationFiles(token, sub) { return [...(sub?.files || []), ...((await store.kvGet('cr:files:' + token)) || [])]; }
+  async function touchSub(token) { const sub = (await store.kvGet('cr:sub:' + token)) || { fields: {} }; sub.updatedAt = new Date().toISOString(); sub.rev = Number(sub.rev || 0) + 1; await store.kvSet('cr:sub:' + token, sub); }
+  /* Instantané : état partagé, comptes (empreintes de mot de passe), liens et réponses de création ;
+   * contenus des justificatifs seulement sur demande (taille). */
+  async function snapshot(withFiles) {
+    const shared = await store.getShared(), tokens = (shared.state?.creation27?.items || []).map(i => i.token).filter(t => TOKEN_RE.test(String(t || '')));
+    const creation = { links: [], subs: [], indexes: [], files: [] };
+    for (const token of tokens) {
+      const link = await store.kvGet('cr:link:' + token), sub = await store.kvGet('cr:sub:' + token), index = await store.kvGet('cr:files:' + token);
+      if (link) creation.links.push({ token, link });
+      if (sub) creation.subs.push({ token, sub });
+      if (index) creation.indexes.push({ token, files: index });
+      for (const f of await creationFiles(token, sub)) {
+        const item = { token, id: f.id, name: f.name, kind: f.kind, type: f.type, size: f.size };
+        if (withFiles) { const d = await store.kvGet(`cr:file:${token}:${f.id}`); if (d) item.data = d.data; }
+        creation.files.push(item);
+      }
+    }
+    return { format: 'RB27-backup', createdAt: new Date().toISOString(), shared, users: await store.getUsers(), creation };
+  }
+  /* Conservation : justificatifs des dossiers clôturés ou révoqués effacés après CREATION_RETENTION_DAYS jours (0 = conservés). */
+  async function purgeCreationFiles(b) {
+    const days = Number(process.env.CREATION_RETENTION_DAYS || 0);
+    if (!days) return 0;
+    let n = 0;
+    for (const { token, link } of b.creation.links) {
+      const end = link.closedAt || link.revokedAt;
+      if (!end || Date.parse(end) > Date.now() - days * 864e5) continue;
+      const sub = await store.kvGet('cr:sub:' + token);
+      for (const f of await creationFiles(token, sub)) { await store.kvDel(`cr:file:${token}:${f.id}`); n++; }
+      await store.kvDel('cr:files:' + token);
+      if (sub?.files) { sub.files = []; sub.filesPurgedAt = new Date().toISOString(); await store.kvSet('cr:sub:' + token, sub); }
+    }
+    return n;
+  }
   const admin = s => { if (s.role !== 'admin') throw httpError(403, 'Réservé aux administrateurs'); };
+  const need = (s, perm, label) => { if (!s.perms?.[perm]) throw httpError(403, label || 'Action non autorisée pour ton rôle.'); };
+  /* Journal serveur des opérations sensibles : auteur = session, jamais une valeur envoyée par le navigateur. */
+  const audit = async (s, action, detail = {}) => {
+    try { await store.auditPush({ at: new Date().toISOString(), user: s?.username || 'public', role: s?.role || '', action, ...detail }); }
+    catch (e) { console.error('journal', e.message); }
+  };
   const requireCabinet = () => { if (!cfg.pennylane.cabinetToken) throw new PennylaneError('PENNYLANE_CABINET_TOKEN non renseigné sur le serveur.', 400); };
 
   const routes = {
@@ -315,20 +450,42 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
       const user = list.find(u => u.username.toLowerCase() === String(username).toLowerCase());
       if (!user || !checkPassword(user, String(password))) {
         await store.addFailure(key);
+        await audit(null, 'connexion refusée', { target: String(username).slice(0, 40), ip: clientIp(req) });
         return send(res, 401, { error: 'Identifiants incorrects' });
       }
       await store.clearFailures(key);
+      await audit({ username: user.username, role: normRole(user.role) }, 'connexion', { ip: clientIp(req) });
       await openSession(req, res, user);
     },
     'POST /api/logout': async (req, res) => send(res, 200, { ok: true }, { 'Set-Cookie': cookie(req, '', 0) }),
     'GET /api/session': async (req, res, s) => send(res, 200, s),
-    'GET /api/state': async (req, res) => send(res, 200, await store.getShared()),
+    'GET /api/state': async (req, res, s) => {
+      const shared = await store.getShared();
+      send(res, 200, s.perms.costs ? shared : { ...shared, state: guard.hideCosts(shared.state) });
+    },
+    /* Enregistrement : structure, intégrité (aucune nouvelle anomalie), droits du rôle, puis écriture atomique et journal. */
     'PUT /api/state': async (req, res, s) => {
-      const body = await readBody(req);
-      if (!validState(body.state)) return send(res, 400, { error: 'Structure de données invalide' });
-      const r = await store.saveShared(Number(body.revision), body.state, s.username);
-      if (r.conflict) return send(res, 409, { error: `Les données ont été modifiées par ${r.updatedBy || 'un autre utilisateur'} : recharge avant de continuer.` });
-      send(res, 200, { revision: r.revision });
+      const body = await readBody(req), next = body.state, expected = Number(body.revision);
+      if (!validState(next)) return send(res, 400, { error: 'Structure de données invalide' });
+      const cur = await store.getShared();
+      if (cur.revision !== expected) return send(res, 409, { error: `Les données ont été modifiées par ${cur.updatedBy || 'un autre utilisateur'}.`, updatedBy: cur.updatedBy, revision: cur.revision });
+      if (!s.perms.costs) guard.restoreCosts(cur.state, next);
+      const bad = guard.newViolations(cur.state, next);
+      if (bad.length) return send(res, 422, { error: 'Données incohérentes refusées : ' + bad.slice(0, 5).join(' ; '), details: bad.slice(0, 50) });
+      const denied = guard.permissionErrors(cur.state, next, s.perms, s.username);
+      if (denied.length) { await audit(s, 'enregistrement refusé (droits)', { reasons: denied }); return send(res, 403, { error: denied.join(' '), details: denied }); }
+      guard.stampAuthors(cur.state, next, s.username);
+      const size = Buffer.byteLength(JSON.stringify(next));
+      if (size > MAX_STATE) return send(res, 413, { error: `Données trop volumineuses (${Math.round(size / 1024)} Ko, maximum ${Math.round(MAX_STATE / 1024)} Ko).` });
+      const r = await store.saveShared(expected, next, s.username);
+      if (r.conflict) return send(res, 409, { error: `Les données ont été modifiées par ${r.updatedBy || 'un autre utilisateur'}.`, updatedBy: r.updatedBy });
+      const ch = guard.changes(cur.state, next);
+      if (ch.length) await audit(s, 'enregistrement', { revision: r.revision, changes: ch.slice(0, 200), more: Math.max(0, ch.length - 200) });
+      send(res, 200, { revision: r.revision, size });
+    },
+    'GET /api/audit': async (req, res, s, url) => {
+      need(s, 'audit', 'Journal réservé aux associés et administrateurs.');
+      send(res, 200, { items: await store.auditList(Math.min(1000, Number(url.searchParams.get('limit')) || 200)) });
     },
     'GET /api/company': async (req, res, s, url) => {
       const siren = url.searchParams.get('siren') || '';
@@ -348,46 +505,81 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     },
 
     /* --- comptes --- */
-    'GET /api/users': async (req, res, s) => { admin(s); send(res, 200, { items: (await store.getUsers()).map(u => ({ username: u.username, role: u.role, createdAt: u.createdAt })) }); },
+    'GET /api/users': async (req, res, s) => { admin(s); send(res, 200, { roles: ROLES, items: (await store.getUsers()).map(u => ({ username: u.username, role: normRole(u.role), createdAt: u.createdAt, revokedAt: u.revokedAt || null })) }); },
     'POST /api/users': async (req, res, s) => {
       admin(s);
       const { username, password, role } = await readBody(req, 10_000);
-      const list = await store.getUsers();
-      if (list.some(u => u.username.toLowerCase() === String(username || '').toLowerCase())) throw httpError(409, 'Ce compte existe déjà.');
-      list.push(newUser(username, password, role));
-      await store.setUsers(list);
+      await store.withLock('users', async () => {
+        const list = await store.getUsers();
+        if (list.some(u => u.username.toLowerCase() === String(username || '').toLowerCase())) throw httpError(409, 'Ce compte existe déjà.');
+        list.push(newUser(username, password, role));
+        await store.setUsers(list);
+      });
+      await audit(s, 'compte créé', { target: username, newRole: normRole(role) });
       send(res, 200, { ok: true });
     },
     'POST /api/users/delete': async (req, res, s) => {
       admin(s);
       const { username } = await readBody(req, 10_000);
       if (username === s.username) throw httpError(400, 'Tu ne peux pas supprimer ton propre compte.');
-      await store.setUsers((await store.getUsers()).filter(u => u.username !== username));
+      await store.withLock('users', async () => store.setUsers((await store.getUsers()).filter(u => u.username !== username)));
+      await audit(s, 'compte supprimé', { target: username });
+      send(res, 200, { ok: true });
+    },
+    'POST /api/users/role': async (req, res, s) => {
+      admin(s);
+      const { username, role } = await readBody(req, 10_000);
+      if (!ROLES.includes(role)) throw httpError(400, 'Rôle inconnu.');
+      if (username === s.username && role !== 'admin') throw httpError(400, 'Tu ne peux pas retirer ton propre rôle administrateur.');
+      await store.withLock('users', async () => {
+        const list = await store.getUsers(), u = list.find(x => x.username === username);
+        if (!u) throw httpError(404, 'Compte introuvable.');
+        u.role = role; await store.setUsers(list);
+      });
+      await audit(s, 'rôle modifié', { target: username, newRole: role });
+      send(res, 200, { ok: true });
+    },
+    'POST /api/users/revoke': async (req, res, s) => {
+      admin(s);
+      const { username } = await readBody(req, 10_000);
+      await store.withLock('users', async () => {
+        const list = await store.getUsers(), u = list.find(x => x.username === username);
+        if (!u) throw httpError(404, 'Compte introuvable.');
+        u.revokedAt = new Date(Date.now() + 1).toISOString(); await store.setUsers(list);
+      });
+      await audit(s, 'sessions révoquées', { target: username });
       send(res, 200, { ok: true });
     },
     'POST /api/password': async (req, res, s) => {
       const { current, password } = await readBody(req, 10_000);
-      const list = await store.getUsers(), i = list.findIndex(u => u.username === s.username);
-      if (i < 0 || !checkPassword(list[i], String(current || ''))) throw httpError(400, 'Mot de passe actuel incorrect.');
-      list[i] = { ...newUser(s.username, password, list[i].role), createdAt: list[i].createdAt };
-      await store.setUsers(list);
-      await openSession(req, res, list[i]);
+      const user = await store.withLock('users', async () => {
+        const list = await store.getUsers(), i = list.findIndex(u => u.username === s.username);
+        if (i < 0 || !checkPassword(list[i], String(current || ''))) throw httpError(400, 'Mot de passe actuel incorrect.');
+        list[i] = { ...newUser(s.username, password, list[i].role), createdAt: list[i].createdAt };
+        await store.setUsers(list);
+        return list[i];
+      });
+      await audit(s, 'mot de passe modifié');
+      await openSession(req, res, user);
     },
 
     /* --- Pennylane --- */
-    /* Matrice création : liens envoyés aux futurs clients et réponses reçues (stockées à part de l'état partagé). */
-    'POST /api/creation/link': async (req, res) => {
-      const b = await readBody(req), token = crypto.randomBytes(18).toString('base64url');
-      const link = { name: String(b.name || '').slice(0, 200), legalForm: String(b.legalForm || '').slice(0, 40), cabinet: String(b.cabinet || '').slice(0, 200), createdAt: new Date().toISOString() };
+    /* Matrice création : liens envoyés aux futurs clients et réponses reçues (stockées à part de l'état partagé).
+     * Lien : expiration, révocation et clôture ; fichiers : type réel vérifié, taille et nombre limités ; réponses versionnées. */
+    'POST /api/creation/link': async (req, res, s) => {
+      const b = await readBody(req, 10_000), token = crypto.randomBytes(18).toString('base64url'), now = Date.now();
+      const link = { name: String(b.name || '').slice(0, 200), legalForm: String(b.legalForm || '').slice(0, 40), cabinet: String(b.cabinet || '').slice(0, 200), createdAt: new Date(now).toISOString(), createdBy: s.username, expiresAt: new Date(now + LINK_DAYS * 864e5).toISOString() };
       await store.kvSet('cr:link:' + token, link);
-      send(res, 200, { token });
+      await audit(s, 'lien de création créé', { target: link.name });
+      send(res, 200, { token, expiresAt: link.expiresAt });
     },
     // Le CRM envoie la liste de ses liens (elle fait partie de l'état partagé) et reçoit les réponses des clients.
     'POST /api/creation/list': async (req, res) => {
       const { tokens } = await readBody(req), items = [];
       for (const token of (Array.isArray(tokens) ? tokens : []).filter(t => TOKEN_RE.test(String(t))).slice(0, 500)) {
-        const sub = await store.kvGet('cr:sub:' + token);
-        if (sub) items.push({ token, fields: sub.fields || {}, files: (sub.files || []).map(({ id, name, kind, size, at }) => ({ id, name, kind, size, at })), submittedAt: sub.submittedAt || null, updatedAt: sub.updatedAt || null });
+        const [sub, link] = [await store.kvGet('cr:sub:' + token), await store.kvGet('cr:link:' + token)];
+        const files = await creationFiles(token, sub);
+        items.push({ token, link: link ? linkInfo(link) : { state: 'supprimé' }, fields: sub?.fields || {}, files: files.map(({ id, name, kind, size, at, type }) => ({ id, name, kind, size, at, type })), submittedAt: sub?.submittedAt || null, updatedAt: sub?.updatedAt || null, rev: sub?.rev || 0 });
       }
       send(res, 200, { items });
     },
@@ -396,50 +588,137 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
       if (!TOKEN_RE.test(token) || !/^[a-z0-9]{6,20}$/.test(id)) throw httpError(400, 'Paramètres invalides');
       const f = await store.kvGet(`cr:file:${token}:${id}`);
       if (!f) throw httpError(404, 'Fichier introuvable');
-      res.writeHead(200, { ...SECURITY_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': SAFE_TYPES.includes(f.type) ? f.type : 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}` });
+      const type = sniff(Buffer.from(f.data, 'base64')) || 'application/octet-stream';
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': type, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}` });
       res.end(Buffer.from(f.data, 'base64'));
     },
-    'POST /api/creation/delete': async (req, res) => {
-      const { token } = await readBody(req);
+    'POST /api/creation/state': async (req, res, s) => {
+      const { token, action, days } = await readBody(req, 10_000);
+      if (!TOKEN_RE.test(String(token || ''))) throw httpError(400, 'Lien invalide');
+      const link = await store.kvGet('cr:link:' + token);
+      if (!link) throw httpError(404, 'Lien introuvable');
+      const now = new Date().toISOString();
+      if (action === 'revoke') link.revokedAt = now;
+      else if (action === 'close') link.closedAt = now;
+      else if (action === 'reopen') { delete link.closedAt; delete link.revokedAt; link.expiresAt = new Date(Date.now() + LINK_DAYS * 864e5).toISOString(); }
+      else if (action === 'extend') link.expiresAt = new Date(Math.max(Date.now(), Date.parse(link.expiresAt || 0)) + Math.min(365, Math.max(1, Number(days) || LINK_DAYS)) * 864e5).toISOString();
+      else throw httpError(400, 'Action inconnue');
+      await store.kvSet('cr:link:' + token, link);
+      await audit(s, 'lien de création : ' + action, { target: link.name });
+      send(res, 200, { link: linkInfo(link) });
+    },
+    'POST /api/creation/delete': async (req, res, s) => {
+      need(s, 'delete', 'Suppression réservée aux associés et administrateurs.');
+      const { token } = await readBody(req, 10_000);
       if (!TOKEN_RE.test(String(token || ''))) throw httpError(400, 'Lien invalide');
       const sub = await store.kvGet('cr:sub:' + token);
-      for (const f of sub?.files || []) await store.kvDel(`cr:file:${token}:${f.id}`);
-      await store.kvDel('cr:sub:' + token); await store.kvDel('cr:link:' + token);
+      for (const f of await creationFiles(token, sub)) await store.kvDel(`cr:file:${token}:${f.id}`);
+      await store.kvDel('cr:sub:' + token); await store.kvDel('cr:files:' + token); await store.kvDel('cr:link:' + token);
+      await audit(s, 'dossier de création supprimé', { token: token.slice(0, 6) + '…' });
       send(res, 200, { ok: true });
     },
     /* Formulaire public (sans connexion) : l'accès se fait uniquement avec le lien secret envoyé au client. */
     'GET /api/public/creation': async (req, res, s, url) => {
-      const { token, link } = await publicLink(req, url.searchParams.get('t'));
-      const sub = await store.kvGet('cr:sub:' + token);
-      send(res, 200, { name: link.name, legalForm: link.legalForm, cabinet: link.cabinet, fields: sub?.fields || {}, files: (sub?.files || []).map(({ id, name, kind, size }) => ({ id, name, kind, size })), submittedAt: sub?.submittedAt || null });
+      const { token, link } = await publicLink(req, url.searchParams.get('t'), false);
+      const sub = await store.kvGet('cr:sub:' + token), files = await creationFiles(token, sub);
+      send(res, 200, { name: link.name, legalForm: link.legalForm, cabinet: link.cabinet, expiresAt: link.expiresAt || null, fields: sub?.fields || {}, files: files.map(({ id, name, kind, size }) => ({ id, name, kind, size })), submittedAt: sub?.submittedAt || null, rev: sub?.rev || 0 });
     },
     'POST /api/public/creation/file': async (req, res, s, url) => {
-      const { token } = await publicLink(req, url.searchParams.get('t'));
-      const b = await readBody(req, 6 * 1024 * 1024), data = String(b.data || ''), size = Math.floor(data.length * 3 / 4);
-      if (!data || size > MAX_FILE) throw httpError(413, 'Fichier trop volumineux (3 Mo maximum).');
-      if (!/^[A-Za-z0-9+/=]+$/.test(data)) throw httpError(400, 'Fichier illisible');
-      const sub = (await store.kvGet('cr:sub:' + token)) || { fields: {}, files: [] };
-      if (sub.files.length >= 30) throw httpError(400, 'Nombre maximum de fichiers atteint (30).');
-      const id = crypto.randomBytes(6).toString('hex'), meta = { id, name: String(b.name || 'document').replace(/[\/\r\n"]/g, '_').slice(0, 120), kind: String(b.kind || '').slice(0, 40), type: String(b.type || '').slice(0, 80), size, at: new Date().toISOString() };
-      await store.kvSet(`cr:file:${token}:${id}`, { name: meta.name, type: meta.type, data });
-      sub.files.push(meta); sub.updatedAt = meta.at;
-      await store.kvSet('cr:sub:' + token, sub);
-      send(res, 200, { id, name: meta.name, kind: meta.kind, size });
+      const { token } = await publicLink(req, url.searchParams.get('t'), true);
+      const b = await readBody(req, 6 * 1024 * 1024), data = String(b.data || '');
+      if (!data || !/^[A-Za-z0-9+/=]+$/.test(data)) throw httpError(400, 'Fichier illisible');
+      const buf = Buffer.from(data, 'base64');
+      if (buf.length > MAX_FILE) throw httpError(413, 'Fichier trop volumineux (3 Mo maximum).');
+      const type = sniff(buf);
+      if (!type) { await audit(null, 'fichier refusé (type)', { token: token.slice(0, 6) + '…', name: String(b.name || '').slice(0, 80) }); throw httpError(415, 'Format non accepté : envoie un PDF ou une photo (JPEG, PNG, HEIC, WEBP).'); }
+      const result = await store.withLock('cr:' + token, async () => {
+        const files = await creationFiles(token, await store.kvGet('cr:sub:' + token));
+        if (files.length >= MAX_FILES) throw httpError(400, `Nombre maximum de fichiers atteint (${MAX_FILES}).`);
+        const total = files.reduce((a, f) => a + Number(f.size || 0), 0);
+        if (total + buf.length > MAX_FILES_BYTES) throw httpError(413, 'Volume total des justificatifs atteint (25 Mo). Contacte le cabinet.');
+        const id = crypto.randomBytes(6).toString('hex'), meta = { id, name: String(b.name || 'document').replace(/[\\/\r\n"<>]/g, '_').slice(0, 120), kind: String(b.kind || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 40), type, size: buf.length, at: new Date().toISOString() };
+        await store.kvSet(`cr:file:${token}:${id}`, { name: meta.name, type, data });
+        const index = (await store.kvGet('cr:files:' + token)) || [];
+        await store.kvSet('cr:files:' + token, [...index, meta]);
+        await touchSub(token);
+        return meta;
+      });
+      send(res, 200, { id: result.id, name: result.name, kind: result.kind, size: result.size });
     },
     'POST /api/public/creation/file/delete': async (req, res, s, url) => {
-      const { token } = await publicLink(req, url.searchParams.get('t'));
-      const { id } = await readBody(req), sub = await store.kvGet('cr:sub:' + token);
-      if (sub && sub.files.some(f => f.id === id)) { await store.kvDel(`cr:file:${token}:${id}`); sub.files = sub.files.filter(f => f.id !== id); await store.kvSet('cr:sub:' + token, sub); }
+      const { token } = await publicLink(req, url.searchParams.get('t'), true);
+      const { id } = await readBody(req, 10_000);
+      await store.withLock('cr:' + token, async () => {
+        const index = (await store.kvGet('cr:files:' + token)) || [], sub = await store.kvGet('cr:sub:' + token);
+        if (index.some(f => f.id === id)) await store.kvSet('cr:files:' + token, index.filter(f => f.id !== id));
+        else if (sub?.files?.some(f => f.id === id)) { sub.files = sub.files.filter(f => f.id !== id); await store.kvSet('cr:sub:' + token, sub); }
+        else return;
+        await store.kvDel(`cr:file:${token}:${id}`);
+        await touchSub(token);
+      });
       send(res, 200, { ok: true });
     },
     'POST /api/public/creation': async (req, res, s, url) => {
-      const { token } = await publicLink(req, url.searchParams.get('t'));
+      const { token } = await publicLink(req, url.searchParams.get('t'), true);
       const b = await readBody(req, 200 * 1024), fields = {};
       for (const [k, v] of Object.entries(b.fields || {})) if (/^[a-zA-Z0-9]{1,30}$/.test(k) && Object.keys(fields).length < 60) fields[k] = String(v ?? '').slice(0, 5000);
-      const sub = (await store.kvGet('cr:sub:' + token)) || { files: [] };
-      const now = new Date().toISOString();
-      await store.kvSet('cr:sub:' + token, { ...sub, fields, submittedAt: b.final ? now : sub.submittedAt || null, updatedAt: now });
-      send(res, 200, { ok: true });
+      const out = await store.withLock('cr:' + token, async () => {
+        const sub = (await store.kvGet('cr:sub:' + token)) || {}, rev = Number(sub.rev || 0);
+        // Deux onglets ouverts : la version la plus ancienne ne peut pas écraser la plus récente.
+        if (b.rev != null && Number(b.rev) !== rev) throw Object.assign(httpError(409, 'Le formulaire a été modifié depuis un autre onglet ou appareil. Recharge la page pour reprendre la dernière version.'), { rev });
+        let submittedAt = sub.submittedAt || null;
+        if (b.final) {
+          const missing = creationMissing(fields, await creationFiles(token, sub));
+          if (missing.length) throw Object.assign(httpError(422, 'Informations obligatoires manquantes : ' + missing.join(' · ')), { missing });
+          submittedAt = new Date().toISOString();
+        }
+        const next = { ...sub, fields, files: sub.files, submittedAt, updatedAt: new Date().toISOString(), rev: rev + 1 };
+        await store.kvSet('cr:sub:' + token, next);
+        return next;
+      });
+      send(res, 200, { ok: true, rev: out.rev, submittedAt: out.submittedAt });
+    },
+    /* --- Sauvegardes indépendantes de l'historique des 30 versions --- */
+    'GET /api/backup': async (req, res, s, url) => {
+      need(s, 'backup', 'Sauvegarde complète réservée aux administrateurs.');
+      const b = await snapshot(url.searchParams.get('files') === '1');
+      await audit(s, 'sauvegarde téléchargée', { files: b.creation.files.length, withData: url.searchParams.get('files') === '1' });
+      send(res, 200, b, { 'Content-Disposition': `attachment; filename="RB_Partners_sauvegarde_${b.createdAt.slice(0, 10)}.json"` });
+    },
+    'GET /api/backups': async (req, res, s) => { need(s, 'backup'); send(res, 200, { items: (await store.kvGet('backup:index')) || [] }); },
+    'POST /api/restore': async (req, res, s) => {
+      need(s, 'backup', 'Restauration réservée aux administrateurs.');
+      const b = await readBody(req, 30 * 1024 * 1024);
+      const backup = b.date ? await store.kvGet('backup:' + String(b.date).replace(/[^0-9-]/g, '')) : b.backup;
+      if (!backup || backup.format !== 'RB27-backup' || !validState(backup.shared?.state)) throw httpError(400, 'Sauvegarde invalide ou introuvable.');
+      const cur = await store.getShared(), count = st => ({ clients: st?.clients?.length || 0, prospects: st?.prospects?.length || 0, factures: (st?.invoices || []).filter(i => i.source !== 'pennylane').length, temps: st?.time?.length || 0, creations: st?.creation27?.items?.length || 0 });
+      const preview = { backupDate: backup.createdAt, current: count(cur.state), backup: count(backup.shared.state), users: (backup.users || []).length, creationLinks: backup.creation?.links?.length || 0, files: backup.creation?.files?.length || 0, filesWithData: (backup.creation?.files || []).filter(f => f.data).length };
+      if (!b.apply) return send(res, 200, { preview });
+      // L'état actuel reste dans l'historique : la restauration est elle-même réversible.
+      const r = await store.saveShared(cur.revision, backup.shared.state, s.username);
+      if (r.conflict) throw httpError(409, 'Les données ont changé pendant la restauration : recommence.');
+      for (const l of backup.creation?.links || []) await store.kvSet('cr:link:' + l.token, l.link);
+      for (const x of backup.creation?.subs || []) await store.kvSet('cr:sub:' + x.token, x.sub);
+      for (const x of backup.creation?.indexes || []) await store.kvSet('cr:files:' + x.token, x.files);
+      let restoredFiles = 0;
+      for (const f of backup.creation?.files || []) if (f.data && TOKEN_RE.test(f.token) && /^[a-z0-9]{6,20}$/.test(f.id)) { await store.kvSet(`cr:file:${f.token}:${f.id}`, { name: f.name, type: f.type, data: f.data }); restoredFiles++; }
+      if (b.users && Array.isArray(backup.users) && backup.users.length) await store.withLock('users', () => store.setUsers(backup.users));
+      await audit(s, 'restauration', { from: backup.createdAt, revision: r.revision, restoredFiles, users: Boolean(b.users) });
+      send(res, 200, { ok: true, revision: r.revision, preview, restoredFiles });
+    },
+    // Sauvegarde quotidienne (tâche planifiée Vercel) : état, comptes et réponses de formulaires ; 14 jours conservés.
+    'GET /api/cron/backup': async (req, res) => {
+      const secret = process.env.CRON_SECRET || '';
+      if (!secret || req.headers.authorization !== 'Bearer ' + secret) throw httpError(401, 'Non autorisé');
+      const b = await snapshot(false), day = b.createdAt.slice(0, 10);
+      await store.kvSet('backup:' + day, b);
+      const index = ((await store.kvGet('backup:index')) || []).filter(x => x.date !== day);
+      index.unshift({ date: day, createdAt: b.createdAt, revision: b.shared.revision, clients: b.shared.state?.clients?.length || 0 });
+      for (const old of index.slice(BACKUP_KEEP)) await store.kvDel('backup:' + old.date);
+      await store.kvSet('backup:index', index.slice(0, BACKUP_KEEP));
+      const purged = await purgeCreationFiles(b);
+      await audit({ username: 'tâche planifiée', role: 'système' }, 'sauvegarde quotidienne', { date: day, purgedFiles: purged });
+      send(res, 200, { ok: true, date: day, purgedFiles: purged });
     },
     'GET /api/pennylane/status': async (req, res) => send(res, 200, { cabinet: Boolean(cfg.pennylane.cabinetToken), firm: Boolean(cfg.pennylane.firmToken), pappers: Boolean(process.env.PAPPERS_API_KEY), storage: store.kind.split(' (')[0] }),
     'POST /api/pennylane/test': async (req, res) => {
@@ -488,17 +767,19 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
         if (!sameOrigin(req)) return send(res, 403, { error: 'Origine refusée' });
         if (!String(req.headers['content-type'] || '').includes('application/json') && url.pathname !== '/api/logout') return send(res, 415, { error: 'JSON attendu' });
       }
-      const open = ['/api/login', '/api/logout'].includes(url.pathname) || url.pathname.startsWith('/api/public/');
+      const open = ['/api/login', '/api/logout', '/api/cron/backup'].includes(url.pathname) || url.pathname.startsWith('/api/public/');
       const s = open ? null : await sessionOf(req);
       if (!open && !s) return send(res, 401, { error: 'Session expirée' });
       await route(req, res, s, url);
     } catch (e) {
       const status = e.status && e.status >= 400 && e.status < 600 ? (e instanceof PennylaneError && e.status >= 500 ? 502 : e.status) : 500;
       if (status >= 500) console.error(new Date().toISOString(), req.method, url.pathname, e);
-      if (!res.headersSent) send(res, status, { error: e.name === 'TimeoutError' ? 'Le service distant n’a pas répondu à temps.' : e.message });
+      // Les erreurs internes ne sont pas détaillées au navigateur (journal serveur uniquement).
+      const message = e.name === 'TimeoutError' ? 'Le service distant n’a pas répondu à temps.' : status >= 500 && !(e instanceof PennylaneError) && !e.public ? 'Erreur interne du serveur. Réessaie ; si le problème persiste, contacte l’administrateur.' : e.message;
+      if (!res.headersSent) send(res, status, { error: message });
     }
   }
   return { handle, store, cfg };
 }
 
-module.exports = { createApp, createStore, config, newUser, buildIndex, buildCreationForm, normInvoice, normCustomer, plList, FileStore, RedisStore };
+module.exports = { sniff, creationMissing, createApp, createStore, config, newUser, buildIndex, buildCreationForm, normInvoice, normCustomer, plList, FileStore, RedisStore };

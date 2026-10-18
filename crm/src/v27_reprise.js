@@ -39,7 +39,7 @@ function repriseDialog27(cid){
   <div class="checks">${REPRISE_DOCS27.map((d,k)=>`<label class="check"><input type="checkbox" id="rp_doc_${k}" ${r.docs.includes(k)?'checked':''}> ${esc(d)}</label>`).join('')}</div>
   <div class="field" style="margin-top:10px"><label for="rp_extra">Précisions (facultatif)</label><textarea id="rp_extra" rows="2">${esc(r.extra||'')}</textarea></div>
  </div>
- <div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" onclick="previewReprise27('${cid}')">Aperçu</button><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Marquer comme envoyée</button></div></div></div>`;
+ <div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" onclick="previewReprise27('${cid}')">Aperçu</button><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Confirmer l’envoi</button></div></div></div>`;
 }
 function readReprise27(cid){
  const c=cfind(cid),g=k=>document.getElementById('rp_'+k);
@@ -86,12 +86,22 @@ function repriseHTML27(c,r){
 }
 function previewReprise27(cid){
  const c=cfind(cid),r=readReprise27(cid);
- document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(900px,96vw)"><div class="modalHead"><h3>Aperçu · lettre de reprise</h3><button class="btn secondary" onclick="repriseDialog27('${cid}')">← Modifier</button></div><div class="modalBody" style="background:#f2f4f7">${repriseHTML27(c,r)}</div><div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end"><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Marquer comme envoyée</button></div></div></div>`;
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(900px,96vw)"><div class="modalHead"><h3>Aperçu · lettre de reprise</h3><button class="btn secondary" onclick="repriseDialog27('${cid}')">← Modifier</button></div><div class="modalBody" style="background:#f2f4f7">${repriseHTML27(c,r)}</div><div class="modalFooter" style="display:flex;gap:8px;justify-content:flex-end"><button class="btn secondary" onclick="printReprise27('${cid}')">Imprimer / PDF</button><button class="btn" onclick="downloadReprise27('${cid}')">Télécharger Word</button><button class="btn green" onclick="sentReprise27('${cid}')">Confirmer l’envoi</button></div></div></div>`;
  markReprise27(c,'En cours');
 }
+/* Suivi de la reprise : préparée → envoi confirmé → réponse reçue → pièces récupérées.
+ * L'étape d'onboarding n'est terminée qu'à la récupération des pièces. */
 function markReprise27(c,status){
- const o=onb27(c);
- if(status==='Fait'||!o.s[1]||o.s[1]==='A faire'){o.s[1]=status;save();}
+ const o=onb27(c),r=c.reprise27||(c.reprise27={});
+ if(status==='En cours'&&!r.preparedAt){r.preparedAt=new Date().toISOString();r.preparedBy=shared25.user?.username||'';}
+ if(status==='Fait'||!o.s[1]||['A faire','NA'].includes(o.s[1])){o.s[1]=status;save();}
+}
+function repriseStage27(c){const r=c.reprise27||{};return r.piecesAt?'Pièces récupérées':r.answeredAt?'Réponse reçue':r.sentAt?'Envoyée':r.preparedAt?'Préparée':'';}
+function repriseStep27(cid,step){
+ const c=cfind(cid);if(!c)return;const r=c.reprise27||(c.reprise27={}),now=new Date().toISOString(),me=shared25.user?.username||'';
+ if(step==='answer'){r.answeredAt=now;r.answeredBy=me;log25('Lettre de reprise : réponse du confrère reçue',cid,r.firm||'');}
+ if(step==='pieces'){const note=prompt('Pièces récupérées (liste ou commentaire, conservé dans l’historique) :',r.piecesNote||'');if(note===null)return;r.piecesAt=now;r.piecesBy=me;r.piecesNote=note;onb27(c).s[1]='Fait';log25('Lettre de reprise : pièces récupérées',cid,note);}
+ persist25();
 }
 function printReprise27(cid){
  const c=cfind(cid),r=readReprise27(cid);
@@ -131,8 +141,12 @@ function downloadReprise27(cid){
  markReprise27(c,'En cours');log25('Lettre de reprise générée',cid,r.firm||'');toast('Lettre de reprise téléchargée (Word)');
 }
 function sentReprise27(cid){
- const c=cfind(cid);readReprise27(cid);c.reprise27.sentAt=new Date().toISOString();
- markReprise27(c,'Fait');log25('Lettre de reprise envoyée',cid,c.reprise27.firm||'');closeModal();persist25();toast('Lettre de reprise marquée comme envoyée : étape 2 de l’onboarding cochée');
+ const c=cfind(cid);readReprise27(cid);
+ const mode=c.reprise27.sendMode||'',date=prompt(`Confirme l’envoi de la lettre de reprise${mode?' ('+mode+')':''} : date d’envoi (AAAA-MM-JJ)`,today27());
+ if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return alert('Date invalide (format AAAA-MM-JJ).');
+ Object.assign(c.reprise27,{sentAt:date,sentBy:shared25.user?.username||'',sentConfirmedAt:new Date().toISOString()});
+ markReprise27(c,'En cours');log25('Lettre de reprise : envoi confirmé',cid,(c.reprise27.firm||'')+' · '+date);closeModal();persist25();
+ toast('Envoi confirmé. L’étape sera terminée à la récupération des pièces.');
 }
 (function(){const s=document.createElement('style');s.textContent=`
 .letter27{background:#fff;max-width:760px;margin:0 auto;padding:46px 54px;font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:13.5px;line-height:1.55;color:#222;box-shadow:0 1px 4px rgba(16,24,40,.08)}

@@ -4,10 +4,12 @@
   "private": true,
   "description": "CRM RB Partners : serveur partagé et connexion Pennylane (lecture seule)",
   "main": "server.js",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
     "add-user": "node server.js add-user",
-    "test": "node test/e2e.js && STORE=redis node test/e2e.js && node test/vercel-smoke.js"
+    "test": "node test/e2e.js && STORE=redis node test/e2e.js && node test/lot1.js && STORE=redis node test/lot1.js && STORE=redis MOCK_UPSTASH=1 node test/lot1.js && node test/vercel-smoke.js"
   }
 }

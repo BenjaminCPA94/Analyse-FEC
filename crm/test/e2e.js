@@ -8,6 +8,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const mock = require('./mock-pennylane');
 const upstash = require('./mock-upstash');
+const bridge = require('./redis-bridge');
 const REDIS = process.env.STORE === 'redis';
 
 let chromium;
@@ -41,7 +42,9 @@ function waitFor(proc, text) {
   let kv = null;
   if (REDIS) {
     // Mode Vercel : base Upstash, premier administrateur créé depuis les variables d'environnement.
-    kv = await upstash.start();
+    // Vrai Redis local si disponible (scripts Lua exécutés), sinon faux Upstash (repli sur verrou).
+    kv = bridge.available() && !process.env.MOCK_UPSTASH ? await bridge.start() : await upstash.start();
+    console.log(kv.real ? 'Redis réel (redis-server local) derrière une API façon Upstash' : 'Faux Upstash (sans EVAL)');
     Object.assign(env, { KV_REST_API_URL: kv.url, KV_REST_API_TOKEN: kv.token, ADMIN_USERNAME: 'benjamin', ADMIN_PASSWORD: PASSWORD });
     console.log('Stockage : Upstash Redis (simulé), compte initial via ADMIN_USERNAME / ADMIN_PASSWORD');
   } else {
@@ -158,7 +161,9 @@ function waitFor(proc, text) {
   assert.equal(bi.people, 'Alice Test', 'noms dédoublonnés'); assert.equal(bi.fees, 10800); assert.equal(bi.budget, 15000);
   assert.equal(bi.nClose, '06-30'); assert.equal(bi.nEch, '2026-01-15'); assert.equal(bi.nSiren, '123456789'); assert.equal(bi.nGroup, 'Groupe Test');
   assert.equal(bi.nLancer, 'Oui', 'bilan terminé → facturation à lancer'); assert.equal(bi.nLiasse, 'Télédéclaré');
-  assert.equal(bi.c1Inv, 'F-3', 'facture bilan Pennylane reconnue'); assert.equal(bi.group, 'Terminés'); assert.equal(bi.ac, 2000);
+  assert.equal(bi.c1Inv, undefined, 'aucun rapprochement automatique sur une fenêtre de dates');
+  const linked = await page.evaluate(() => { const i = state.pennylaneInvoices.find(x => x.number === 'F-3'); confirmLink27(i.id, 'B|C1|2025', i.amount); return ctx27('bilan', cfind('C1'), 2025).invB?.number; });
+  assert.equal(linked, 'F-3', 'facture bilan rattachée après confirmation'); assert.equal(bi.group, 'Terminés'); assert.equal(bi.ac, 2000);
   if (shots) await page.screenshot({ path: path.join(shots, 'bilan.png'), fullPage: false });
   console.log('✓ Tableau Bilan : import Excel (rapprochement SIREN, création), échéances, automatismes, facture Pennylane');
 
@@ -219,18 +224,18 @@ function waitFor(proc, text) {
   });
   assert.ok(pf.html); assert.equal(pf.st, 'Onboarding'); assert.equal(pf.siren, '222333444', 'SIRET ramené au SIREN'); assert.equal(pf.mgr, 'Bruno Test');
   assert.deepEqual(pf.m, [true, true, true, true]); assert.deepEqual(pf.f, [2400, 800, 453]);
-  assert.equal(pf.step, 'Bloqué'); assert.equal(pf.prog, '11/14');
+  assert.equal(pf.step, 'Bloqué'); assert.equal(pf.prog, '10/16', 'paramétrage à vérifier par un humain, étapes Pennylane distinctes');
   assert.deepEqual([pf.before, pf.after, pf.is], [12, 4, 4], 'échéances fiscales recalculées depuis le portefeuille');
   assert.deepEqual([pf.bilan, pf.ago, pf.closing], ['Oui', 'Oui', '12-31'], 'missions reprises dans Bilan et AGO');
-  const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's13'); return [b, c.status, group27(ctx27('onb', c, 0))]; });
-  assert.deepEqual(fin, ['13/14', 'Onboarding', 'Prêts à valider'], 'toutes les étapes faites : pas de bascule automatique');
+  const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; ONB_STEPS27.forEach((_, i) => { if (!['Fait', 'NA'].includes(onbStep27(c, i))) setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's' + i); }); return [b, c.status, group27(ctx27('onb', c, 0))]; });
+  assert.deepEqual(fin, ['12/16', 'Onboarding', 'Prêts à valider'], 'toutes les étapes faites : pas de bascule automatique');
   await page.click('.onb27:has-text("PRESQUE FINI") button:has-text("Valider l’onboarding")');
   const val = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); return [c.status, Boolean(c.onbValidated27), document.body.innerText.includes('Onboarding validé')]; });
   assert.deepEqual(val, ['Actif', true, true], 'validation manuelle → section Onboarding validé');
   // Onboarding : un clic sur le dossier déroule ses étapes, qui restent ouvertes après modification.
   await page.evaluate(() => routePage('onboarding'));
   await page.click('.onbHead27:has-text("ONBOARD TEST")');
-  await page.selectOption('.onbSteps27 tr:nth-child(4) select', 'Fait');
+  await page.selectOption('.onbSteps27 tr:nth-child(6) select', 'Fait');
   assert.equal(await page.evaluate(() => onbStep27(state.clients.find(x => x.name === 'ONBOARD TEST'), 3)), 'Fait');
   assert.equal(await page.locator('.onbBody27').count(), 1, 'dossier toujours déroulé');
   if (shots) await page.screenshot({ path: path.join(shots, 'onboarding.png'), fullPage: false });
@@ -249,9 +254,11 @@ function waitFor(proc, text) {
   const [wdl] = await Promise.all([page.waitForEvent('download'), page.click('.modal button:has-text("Télécharger Word")')]);
   const docx = fs.readFileSync(await wdl.path());
   assert.ok(docx.slice(0, 2).toString() === 'PK' && docx.includes(Buffer.from('word/document.xml')) && docx.includes(Buffer.from('CABINET PR')), 'fichier Word généré');
-  await page.click('.modal button:has-text("Marquer comme envoyée")');
-  assert.equal(await page.evaluate(id => onbStep27(cfind(id), 1), oid), 'Fait', 'étape lettre de reprise cochée');
-  console.log('✓ Lettre de reprise : pré-remplie, aperçu, Word, étape d’onboarding cochée ; validation manuelle de l’onboarding');
+  await page.evaluate(() => { window.prompt = () => '2026-01-05'; });
+  await page.click('.modal button:has-text("Confirmer l’envoi")');
+  const rp = await page.evaluate(id => { const c = cfind(id); const a = [onbStep27(c, 1), repriseStage27(c), c.reprise27.sentAt]; repriseStep27(id, 'answer'); window.prompt = () => 'Grand livre, balances 2024-2025'; repriseStep27(id, 'pieces'); return [...a, repriseStage27(c), onbStep27(c, 1), c.reprise27.piecesNote]; }, oid);
+  assert.deepEqual(rp, ['En cours', 'Envoyée', '2026-01-05', 'Pièces récupérées', 'Fait', 'Grand livre, balances 2024-2025'], 'reprise : envoi confirmé ≠ dossier récupéré ' + JSON.stringify(rp));
+  console.log('✓ Lettre de reprise : pré-remplie, aperçu, Word ; envoi confirmé, réponse et pièces suivies séparément');
 
   // Fiscalité : tableau principal des régimes et échéances mensuelles automatiques
   await page.evaluate(() => routePage('fiscal'));
@@ -291,26 +298,50 @@ function waitFor(proc, text) {
     return { n: it.length, stoik: it.filter(w => w.client === sto.id).length, nv: Boolean(nv && nv.status === 'Actif'), billed: excBilling27(it.find(w => w.name === 'STOIK - Evaluation'), inv.x).label, bill, bill2, lancer: tr.lancerFact, html: document.body.innerText.includes('Autres travaux Fr 2025') };
   });
   assert.ok(ex.html); assert.equal(ex.n, 3); assert.equal(ex.stoik, 2, 'travaux rattachés au client existant'); assert.ok(ex.nv, 'client absent créé');
-  assert.equal(ex.billed, 'Facturé'); assert.deepEqual(ex.bill, ['Création holding']);
+  assert.equal(ex.billed, 'Facturé (déclaré)', 'ancien statut « facturé » : déclaré, sans facture reconstituée'); assert.deepEqual(ex.bill, ['Création holding']);
   assert.deepEqual(ex.bill2, ['Création holding', 'Transfert de siège'], 'travail terminé → à facturer'); assert.equal(ex.lancer, 'Oui');
   await page.evaluate(() => routePage('billing'));
-  const bl = await page.evaluate(() => ({ html: document.body.innerText.includes('À facturer') && document.body.innerText.includes('Factures émises'), n: toBill27().length }));
+  const bl = await page.evaluate(() => ({ html: document.body.innerText.includes('Prestations à facturer') && document.body.innerText.includes('Factures émises'), n: toBill27().length }));
   assert.ok(bl.html && bl.n >= 2);
-  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });
-  await page.fill('#bf_num', 'F-99'); await page.fill('#bf_ht', '1500');
-  await page.click('button:has-text("Enregistrer la facture")');
-  const fb = await page.evaluate(() => { const inv = state.invoices.find(i => i.source === 'manual' && i.number === 'F-99'); return { gone: !toBill27().some(x => x.label === 'Création holding'), ref: exc27().items.find(w => w.name === 'Création holding').factRef, inv: inv && { ht: inv.ht, id: inv.id }, cash: /encaiss|Échu/i.test(document.querySelector('.panel:last-child')?.innerText || ''), shown: document.body.innerText.includes('F-99 · Création holding') }; });
-  assert.ok(fb.gone && fb.ref === 'F-99' && fb.inv && fb.inv.ht === 1500 && fb.shown && !fb.cash, 'marqué facturé → factures émises ' + JSON.stringify(fb));
-  await page.evaluate(id => delInvoice27(id), fb.inv.id);
-  assert.ok(await page.evaluate(() => toBill27().some(x => x.label === 'Création holding') && !state.invoices.some(i => i.number === 'F-99')), 'suppression → retour à facturer');
-  await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); markBilled27(x.key, x.exc); });
-  await page.fill('#bf_num', 'F-99'); await page.click('button:has-text("Enregistrer la facture")');
+  // Acompte puis solde du même montant : deux factures distinctes, la mission est partiellement puis totalement facturée.
+  const key = await page.evaluate(() => { const x = toBill27().find(x => x.label === 'Création holding'); x.exc && exc27().items.find(w => w.id === x.exc) && (exc27().items.find(w => w.id === x.exc).fees = 1500); save(); return x.key; });
+  const declare = async (type, num, ht) => {
+    await page.evaluate(k => markBilled27(k), key);
+    await page.selectOption('#bf_type', type); await page.fill('#bf_num', num);
+    await page.fill(`.bf_amt[data-key="${key}"]`, String(ht));
+    await page.click('button:has-text("Enregistrer la facture")');
+  };
+  await declare('Acompte', 'F-98', 750);
+  const part = await page.evaluate(k => { const s = billState27(k); return [s.label, s.billed, toBill27().find(x => x.key === k)?.amount]; }, key);
+  assert.deepEqual(part, ['Partiellement facturé', 750, 750], 'acompte : mission partiellement facturée');
+  await declare('Solde', 'F-99', 750);
+  const fb = await page.evaluate(k => { const l = state.invoices.filter(i => i.source === 'manual' && ['F-98', 'F-99'].includes(i.number)); return { st: billState27(k).label, gone: !toBill27().some(x => x.key === k), n: l.length, ids: new Set(l.map(i => i.id)).size, same: l.every(i => i.ht === 750), cash: /encaiss|Échu/i.test(document.querySelector('.panel:last-child')?.innerText || ''), shown: document.body.innerText.includes('F-99 · Solde · Création holding') }; }, key);
+  assert.deepEqual(fb, { st: 'Facturé', gone: true, n: 2, ids: 2, same: true, cash: false, shown: true }, 'deux factures de même montant restent distinctes');
+  // Facture Pennylane de même montant : proposée, jamais rapprochée sans validation ; même numéro : rapprochée (sans suppression).
+  const rec = await page.evaluate(k => {
+    const w = exc27().items.find(x => x.name === 'Création holding');
+    state.pennylaneInvoices.push({ id: 'PL_T1', source: 'pennylane', client: w.client, category: 'Travaux exceptionnels', status: 'Finalisée', number: 'PL-2026-7', date: today27(), amount: 750 });
+    allocCache27 = null;
+    const sug = suggestions27().filter(x => x.kind === 'manual' && x.inv.id === 'PL_T1').length, before = state.invoices.filter(i => i.reconciled).length;
+    state.pennylaneInvoices.push({ id: 'PL_T2', source: 'pennylane', client: w.client, category: 'Travaux exceptionnels', status: 'Finalisée', number: 'F 99', date: today27(), amount: 750 });
+    const n = reconcileByNumber27(); allocCache27 = null;
+    const m = state.invoices.find(i => i.number === 'F-99');
+    return { sug, before, n, kept: Boolean(m), pl: m?.reconciled?.pl, linked: (billingKey27().links.PL_T2 || []).map(l => l.key).includes(k), st: billState27(k).label };
+  }, key);
+  assert.deepEqual(rec, { sug: 2, before: 0, n: 1, kept: true, pl: 'PL_T2', linked: true, st: 'Facturé' }, 'rapprochement approximatif à valider, numéro identique rapproché sans suppression ' + JSON.stringify(rec));
+  // Un travail ancien non facturé reste visible.
+  const old = await page.evaluate(() => { const c = state.clients[0]; exc27().items.push({ id: uid('EX'), client: c.id, name: 'Rattrapage 2019', date: '2019-03-01', statut: 'Terminé', fees: 400 }); save(); return toBill27().some(x => x.label === 'Rattrapage 2019' && x.amount === 400); });
+  assert.ok(old, 'travail de 2019 non facturé toujours à facturer');
+  const fid = await page.evaluate(() => state.invoices.find(i => i.number === 'F-98').id);
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.evaluate(id => delInvoice27(id), fid);
+  assert.ok(await page.evaluate(k => billState27(k).label === 'Partiellement facturé' && toBill27().some(x => x.key === k), key), 'suppression d’une facture déclarée → reste à facturer');
   await page.evaluate(() => routePage('cabinetdash'));
   const db = await page.evaluate(() => ({ t: document.body.innerText, demo: (state.pennylaneInvoices || []).every(i => i.source === 'pennylane') }));
   assert.ok(db.t.includes('Calculé en temps réel') && db.t.includes('Production') && db.t.includes('À traiter en priorité') && db.demo, 'tableau de bord réel');
   assert.ok(!(await page.evaluate(() => [...document.querySelectorAll('.nav a')].some(a => a.dataset.page === 'docs'))), 'Boîte documents retirée');
   if (shots) await page.screenshot({ path: path.join(shots, 'dashboard.png'), fullPage: false });
-  console.log('✓ Travaux exceptionnels (import, facturation automatique), Facturation, Tableau de bord en temps réel, Boîte documents retirée');
+  console.log('✓ Facturation : acompte/solde, factures distinctes, rapprochements à valider, numéro identique, travaux anciens, tableau de bord');
 
   // Équipe réelle, temps, rentabilité, charge, fiche client, recherche, prototypes retirés
   const navNow = await page.evaluate(() => [...document.querySelectorAll('.nav a')].map(a => a.dataset.page));
@@ -338,7 +369,7 @@ function waitFor(proc, text) {
   assert.equal(await page.inputValue('#p_value'), '27000', 'valeur estimée calculée');
   await page.evaluate(() => validateProspect(window._pid));
   const pr = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); return { page: state.page, v: pfind(window._pid).value, fees: [fees27(c).accounting, fees27(c).annualAccounts], total: c.annualFees, st: c.status, bilan: c.missions.annualAccounts, onb: onbStep27(c, 4) }; });
-  assert.deepEqual(pr, { page: 'onboarding', v: 27000, fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'Fait' });
+  assert.deepEqual(pr, { page: 'onboarding', v: 27000, fees: [24000, 3000], total: 27000, st: 'Onboarding', bilan: true, onb: 'En cours' }, 'honoraires sans budget de temps : étape en cours');
   // Client issu d'un prospect passé actif sans le bouton (ancienne version) : visible dans « Onboarding validé ».
   const legacy = await page.evaluate(() => { const c = state.clients.find(x => x.prospectId === window._pid); c.status = 'Actif'; delete c.onbValidated27; routePage('onboarding'); return [onbDone27(c), [...document.querySelectorAll('.onb27')].some(e => e.textContent.includes('PROSPECT TEST') && e.textContent.includes('Validé'))]; });
   assert.deepEqual(legacy, [true, true], 'ancien dossier actif listé dans Onboarding validé');
@@ -357,7 +388,9 @@ function waitFor(proc, text) {
   const crId = await page.evaluate(() => creation27().items.find(x => x.name === 'Holding Test Création').id);
   assert.equal(await page.evaluate(id => crStatus27(crFind27(id)), crId), 'À envoyer');
   const mail = await page.evaluate(async id => { let href = ''; crMail27 = h => { href = h; }; await crSend27(id); return { href, url: crUrl27(crFind27(id)), st: crStatus27(crFind27(id)) }; }, crId);
-  assert.ok(mail.url.includes('/creation/') && mail.href.startsWith('mailto:client%40example.com') && decodeURIComponent(mail.href).includes(mail.url) && mail.st === 'En attente du client', 'mail préparé avec le lien');
+  assert.ok(mail.url.includes('/creation/') && mail.href.startsWith('mailto:client%40example.com') && decodeURIComponent(mail.href).includes(mail.url) && mail.st === 'Mail préparé', 'mail seulement préparé : pas marqué envoyé ' + JSON.stringify(mail));
+  const sent = await page.evaluate(id => { window.prompt = () => '2026-02-01'; crConfirmSent27(id); const it = crFind27(id); return [crStatus27(it), it.sentAt, Boolean(it.sentBy)]; }, crId);
+  assert.deepEqual(sent, ['En attente du client', '2026-02-01', true], 'envoi confirmé manuellement');
   // Le client ouvre le lien sans compte, remplit le formulaire et dépose une pièce d'identité.
   const ctx2 = await browser.newContext(), pub = await ctx2.newPage();
   pub.on('pageerror', e => errors.push('public: ' + e.message));
@@ -410,10 +443,10 @@ function waitFor(proc, text) {
   r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'benjamin', password: PASSWORD }) });
   const sid = r.headers.get('set-cookie').split(';')[0];
   const st = await (await fetch(base + '/api/state', { headers: { Cookie: sid } })).json();
-  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 7); assert.equal(Object.values(st.state.boards27.bilan).filter(r => r.etat === '9. Bilan télédéclaré').length, 2);
-  assert.ok(REDIS ? kv.run(['LLEN', 'rb:history']) >= 1 : fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
+  assert.equal(st.revision, rev); assert.equal(st.state.pennylaneInvoices.length, 9); assert.equal(Object.values(st.state.boards27.bilan).filter(r => r.etat === '9. Bilan télédéclaré').length, 2);
+  assert.ok(REDIS ? (await kv.run(['LLEN', 'rb:history'])) >= 1 : fs.readdirSync(path.join(dataDir, 'history')).length >= 1, 'historique des versions');
   console.log(`✓ Données conservées après redémarrage (révision ${rev}, historique présent)`);
 
-  srv.kill(); m.server.close(); kv?.server.close(); fs.rmSync(dataDir, { recursive: true, force: true });
+  srv.kill(); m.server.close(); if (kv?.stop) kv.stop(); else kv?.server.close(); fs.rmSync(dataDir, { recursive: true, force: true });
   console.log('\nTous les tests sont passés.');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

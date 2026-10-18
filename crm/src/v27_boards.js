@@ -15,6 +15,8 @@ function color27(v){
  v=String(v??'');
  if(!v||v==='-')return C27.empty;
  if(/^(NA|N\.A|Non concerné)$/i.test(v))return C27.grey;
+ if(/– à (déposer|payer)$/.test(v))return C27.orange;
+ if(/^Déposée|^Accusé/.test(v))return C27.green;
  if(/^9\.|^7\. Validé|Validé client|Télédéclaré|^Oui|^Actif$|^Validé|^Envoy|^Déclar|^Declar|^Payée|^Fait|^Terminé|^Facturé/.test(v))return C27.green;
  if(/A revoir|vérifier|Bloqué|ompromis/.test(v))return C27.red;
  if(/^1\.|^A faire$/i.test(v))return C27.blue;

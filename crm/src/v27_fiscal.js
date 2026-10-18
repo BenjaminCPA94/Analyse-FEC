@@ -1,8 +1,22 @@
 /* RB Partners V27 — Fiscalité Fr : « Tableau principal » des régimes par client, puis une vue par mois et une vue annuelle.
  * Les échéances de chaque mois sont déduites automatiquement des régimes (TVA, DEB/DES, taxe sur les salaires,
  * acomptes d'IS, CFE, CVAE, TVS, IFU, taxe foncière, CRL) : rien n'est à recréer d'une année sur l'autre. */
-const FISC_ST27=['À faire','En cours','En attente client','Validation client','Validé','Envoyée','Déclarée','Bloqué','N.A'];
-const FISC_DONE27=/^(Validé|Envoyée|Déclarée|Declarée|Télédéclaré|Payée|Fait|N\.A|NA|N\/A|Pas obligatoire|Pas de CFE|Neant|Néant|Fait en interne)$/;
+/* Statuts distincts selon la nature de l'obligation : une déclaration n'est terminée qu'une fois déposée,
+ * un paiement qu'une fois payé. « Validée » ou « Envoyée » ne valent pas dépôt. */
+const FISC_DECL_ST27=['À faire','En préparation','En attente client','En revue','Validée – à déposer','Déposée','Accusé de réception','Bloqué','N.A'];
+const FISC_PAY_ST27=['À faire','En préparation','En attente client','Montant validé – à payer','Payée','Bloqué','N.A'];
+const FISC_PAY_TYPES27=['IS','CFE','CVAE','TF'];
+const FISC_ST27=FISC_DECL_ST27;
+const FISC_NA27=/^(N\.A|NA|N\/A|Pas obligatoire|Pas de CFE|Neant|Néant|Fait en interne)$/;
+const FISC_DONE_DECL27=/^(Déposée|Accusé de réception|Déclarée|Declarée|Télédéclaré|Télédéclarée|Payée)$/;
+const FISC_DONE_PAY27=/^(Payée)$/;
+/* Anciens statuts ambigus (repris des imports ou de la version précédente) : jamais comptés comme déposés. */
+const FISC_CHECK27=/^(Validé|Validée|Envoyée|Envoyé|Fait|Validation client)$/;
+function fiscOpts27(o){return FISC_PAY_TYPES27.includes(o.type)?FISC_PAY_ST27:FISC_DECL_ST27;}
+function fiscDone27(o,st){st=String(st||'');return FISC_NA27.test(st)||(FISC_PAY_TYPES27.includes(o.type)?FISC_DONE_PAY27:FISC_DONE_DECL27).test(st);}
+function fiscCheck27(o,st){st=String(st||'');return !fiscDone27(o,st)&&(FISC_CHECK27.test(st)||(FISC_PAY_TYPES27.includes(o.type)&&/^(Déclarée|Declarée|Télédéclaré)$/.test(st)));}
+// Compatibilité : test « terminé » sans connaître l'obligation (déclaration).
+const FISC_DONE27={test:st=>fiscDone27({type:'TVA'},st)};
 const MONTHS27=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 function fisc27(c){if(!c.fisc27)c.fisc27={};return c.fisc27;}
 const pad27=n=>String(n).padStart(2,'0');
@@ -27,7 +41,7 @@ function obligations27(c,y){
  if(f.cvae==='Oui'){add('CVAE-AC1','Acompte CVAE 1',6,15,'CVAE');add('CVAE-AC2','Acompte CVAE 2',9,15,'CVAE');}
  if(f.tvs==='Oui')add('TVS','TVS annuelle',1,f.tvsDay??tvaDay,'TVS');
  if(f.ifu==='Oui')add('IFU','IFU annuelle',2,15,'IFU');
- if(f.tf&&!['Non','A définir'].includes(f.tf))add('TF','Taxe foncière',10,15,'TF',['Payée','Validé','En interne'].includes(f.tf)?(f.tf==='En interne'?'Fait en interne':f.tf):'À faire');
+ if(f.tf&&!['Non','A définir'].includes(f.tf))add('TF','Taxe foncière',10,15,'TF',f.tf==='Payée'?'Payée':f.tf==='En interne'?'Fait en interne':f.tf==='Validé'?'Validé':'À faire');
  if(f.crl==='Oui')add('CRL','CRL',5,15,'CRL');
  return out;
 }
@@ -76,13 +90,14 @@ function fiscMonthCols27(view,clients,y){
  return [
   ...PEOPLE27.slice(1),
   {k:'regTVA',label:'Régime TVA',t:'auto',w:110,render:x=>x.c.vatRegime&&x.c.vatRegime!=='À confirmer'?autoPill27(x.c.vatRegime,C27.blue):'<span class="sub">—</span>'},
-  ...obls.map(o=>({k:o.key,label:o.label,full:`${o.label} — échéance le ${String(o.due).slice(8)}/${String(o.due).slice(5,7)} (selon le client)`,t:'status',opts:FISC_ST27,w:125,
+  ...obls.map(o=>({k:o.key,label:o.label,full:`${o.label} — échéance le ${String(o.due).slice(8)}/${String(o.due).slice(5,7)} (selon le client)`,t:'status',opts:fiscOpts27(o),w:135,
    na:x=>!obligations27(x.c,y).some(z=>z.key===o.key),get:x=>x.r[o.key]||obligations27(x.c,y).find(z=>z.key===o.key)?.def||'À faire',set:(x,v)=>{x.row(true)[o.key]=v;}})),
  ];
 }
+function fiscTodo27(x,v){return obligations27(x.c,x.y).filter(o=>inView27(o,v)).map(o=>({o,st:x.r[o.key]||o.def})).filter(z=>!fiscDone27(z.o,z.st));}
 KINDS27.fiscm={label:'Fiscalité',
- group:x=>{const v=fiscView27().fiscView,todo=obligations27(x.c,x.y).filter(o=>inView27(o,v)&&!FISC_DONE27.test(x.r[o.key]||o.def));return todo.length?'À traiter':'Terminé';},
- due:x=>{const v=fiscView27().fiscView,todo=obligations27(x.c,x.y).filter(o=>inView27(o,v)&&!FISC_DONE27.test(x.r[o.key]||o.def)).sort((a,b)=>a.due.localeCompare(b.due));return todo[0]?{due:todo[0].due,label:todo[0].label}:null;},
+ group:x=>{const todo=fiscTodo27(x,fiscView27().fiscView);return !todo.length?'Terminé':todo.every(z=>fiscCheck27(z.o,z.st))?'À vérifier':'À traiter';},
+ due:x=>{const todo=fiscTodo27(x,fiscView27().fiscView).filter(z=>!fiscCheck27(z.o,z.st)).sort((a,b)=>a.o.due.localeCompare(b.o.due));return todo[0]?{due:todo[0].o.due,label:todo[0].o.label}:null;},
  rerender:[]};
 function setFiscView27(v){const b=fiscView27();b.fiscView=v;save();render();}
 function fiscalPage27(){
@@ -102,11 +117,11 @@ function fiscalPage27(){
  const concerned=clients.filter(c=>c.status!=='Inactif'&&obligations27(c,y).some(o=>inView27(o,view)));
  COLS27.fiscm=fiscMonthCols27(view,concerned,y);
  const ctxs=concerned.map(c=>ctx27('fiscm',c,y));
- let total=0,done=0,late=0;
- for(const x of ctxs)for(const o of obligations27(x.c,y).filter(o=>inView27(o,view))){total++;const st=x.r[o.key]||o.def;if(FISC_DONE27.test(st))done++;else if(o.due<today27())late++;}
- return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients concernés</small><span class="big">${concerned.length}</span></div><div class="card"><small>Déclarations</small><span class="big">${total}</span></div><div class="card"><small>Faites</small><span class="big good">${done} / ${total}</span></div><div class="card"><small>En retard</small><span class="big ${late?'bad':'good'}">${late}</span></div></div>
+ let total=0,done=0,late=0,check=0;
+ for(const x of ctxs)for(const o of obligations27(x.c,y).filter(o=>inView27(o,view))){total++;const st=x.r[o.key]||o.def;if(fiscDone27(o,st))done++;else if(fiscCheck27(o,st))check++;else if(o.due<today27())late++;}
+ return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients concernés</small><span class="big">${concerned.length}</span></div><div class="card"><small>Déclarations</small><span class="big">${total}</span></div><div class="card"><small>Déposées / payées</small><span class="big good">${done} / ${total}</span></div><div class="card"><small>En retard</small><span class="big ${late?'bad':'good'}">${late}</span>${check?`<div class="sub">+ ${check} à vérifier (ancien statut « validé / envoyé »)</div>`:''}</div></div>
  ${filtersHtml27('<span class="sub">Les colonnes du mois sont calculées à partir des régimes du tableau principal.</span>')}
- ${groupsHtml27('fiscm',filterCtx27(ctxs),y,{order:['À traiter','Terminé'],colors:{'À traiter':C27.blue,'Terminé':C27.green},nameExtra:()=>'',empty:'Aucune échéance ce mois-ci pour les clients suivis.'})}`;
+ ${groupsHtml27('fiscm',filterCtx27(ctxs),y,{order:['À traiter','À vérifier','Terminé'],colors:{'À traiter':C27.blue,'À vérifier':C27.orange,'Terminé':C27.green},nameExtra:()=>'',empty:'Aucune échéance ce mois-ci pour les clients suivis.'})}`;
 }
 fiscalV15=fiscalPage27;
 
@@ -120,6 +135,7 @@ function fiscStatusKey27(n){
  if((m=n.match(/^is t([1-4])$/)))return 'IS-T'+m[1];
  return {'tvs annuelle':'TVS','ifu annuelle':'IFU','acompte cfe':'CFE-AC','cfe annuelle':'CFE','acompte cvae':'CVAE-AC2','acompte tva s1':'TVA-S1','acompte tva s2':'TVA-S2','solde ca12':'CA12'}[n]||null;
 }
+// Les statuts importés sont repris tels quels (sauf orthographe) : « Validé » ou « Envoyée » restent « à vérifier ».
 function normStatus27(v){return /^a faire$/i.test(v)?'À faire':/^(NA|N\/A)$/.test(v)?'N.A':/^Declarée$/.test(v)?'Déclarée':v;}
 function importFiscal27(rows,hi,file){
  const heads=rows[hi].map(normHead27),year=Number((String(rows[0]?.[0]||'')+' '+(file?.name||'')).match(/\b(20\d\d)\b/)?.[1])||fiscView27().fiscYear;

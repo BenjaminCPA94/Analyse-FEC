@@ -8,10 +8,10 @@ const MISSIONS27=[['accounting','Tenue comptable'],['tax','Fiscalité FR'],['ann
 const ONB_STEPS27=[
  ['Envoyer la LDM comptabilité','LDM comptabilité'],
  ['Envoyer la lettre de reprise, le cas échéant','Lettre de reprise'],
- ['Création de la fiche client et abonnement dans Pennylane','Fiche + abonnement Pennylane'],
+ ['Création de la fiche client (facturation) dans Pennylane','Fiche facturation Pennylane'],
  ['Mettre en place le prélèvement automatique','Prélèvement automatique'],
  ['Renseigner le montant des honoraires + temps prévu','Honoraires + temps prévu'],
- ['Renseigner tous les tableaux du CRM','Tableaux CRM renseignés'],
+ ['Vérifier le paramétrage du dossier','Paramétrage vérifié'],
  ['Création du dossier sur Sharepoint','Dossier SharePoint'],
  ['Activation du compte impôt.gouv','Compte impots.gouv'],
  ['Envoyer le mandat bancaire aux impôts','Mandat bancaire impôts'],
@@ -20,16 +20,30 @@ const ONB_STEPS27=[
  ['Présentation environnement Pennylane','Présentation Pennylane'],
  ['Compléter le dossier permanent','Dossier permanent'],
  ['Catégoriser le client','Catégoriser le client'],
+ ['Création du dossier de production dans Pennylane','Dossier production Pennylane'],
+ ['Abonnement Pennylane actif','Abonnement Pennylane'],
 ];
-const ONB_OPTS27=['A faire','En cours','Fait','Bloqué','NA'];
+/* Ordre d'affichage (les étapes 15 et 16 ont été ajoutées après coup : leur numéro de stockage ne change pas). */
+const ONB_ORDER27=[0,1,2,14,15,3,4,5,6,7,8,9,10,11,12,13];
+/* Prérequis bloquants : sans eux, l'onboarding ne se valide que par un associé ou un administrateur, avec justification. */
+const ONB_BLOCKING27=[0,2,4,5,10];
+const ONB_OPTS27=['A faire','En cours','Fait','Bloqué','À vérifier','NA'];
+const LDM_OPTS27=['Non','Préparée','Envoyée','Signée'];
 function onb27(c){if(!c.onb27)c.onb27={s:{},p:{}};return c.onb27;}
-function ldm27(c){return c.ldm27||(c.lm26?.validated?'Oui':c.lm26?.generated?'En cours':'Non');}
+/* Lettre de mission : préparée, envoyée, signée. Les anciennes valeurs ambiguës ne valent pas signature. */
+function ldm27(c){const v=c.ldm27;if(LDM_OPTS27.includes(v))return v;if(v==='Oui')return 'Signée';if(v==='En cours')return 'Préparée';return c.lm26?.generated||c.lm26?.validated?'Préparée':'Non';}
 /* Étapes cochées automatiquement à partir des données déjà saisies (une valeur saisie à la main reste prioritaire). */
+function onbParamMissing27(c){const m=[];if(!c.siren)m.push('SIREN');if(!c.closing)m.push('clôture');if(!['IS','IR'].includes(c.taxRegime))m.push('régime fiscal');if(!MISSIONS27.some(([k])=>c.missions?.[k]))m.push('missions');if(c.missions?.tax&&!['Mensuelle','Trimestrielle','Annuelle','Non soumis','Franchise'].includes(c.vatRegime))m.push('régime TVA');if(!people27(c,'manager'))m.push('manager');return m;}
 function onbAuto27(c,i){
- if(i===0)return ldm27(c)==='Oui'?'Fait':ldm27(c)==='En cours'?'En cours':'A faire';
+ if(i===0){const l=ldm27(c);return l==='Signée'?'Fait':l==='Non'?'A faire':'En cours';}
+ // Un identifiant client Pennylane prouve seulement la fiche de facturation, pas le dossier de production ni l'abonnement.
  if(i===2)return c.pl27?.customerId?'Fait':'A faire';
- if(i===4)return feeTotalClient(c)>0?'Fait':'A faire';
- if(i===5)return c.siren&&c.closing&&['IS','IR'].includes(c.taxRegime)&&MISSIONS27.some(([k])=>c.missions?.[k])?'Fait':'A faire';
+ if(i===14){if(c.pl27?.companyId)return 'Fait';return onb27(c).s[2]==='Fait'?'À vérifier':'A faire';}
+ if(i===15)return onb27(c).s[2]==='Fait'?'À vérifier':'A faire';
+ // Des honoraires sans budget de temps ne terminent pas l'étape.
+ if(i===4)return feeTotalClient(c)>0&&Number(c.budgetHours||0)>0?'Fait':feeTotalClient(c)>0||Number(c.budgetHours||0)>0?'En cours':'A faire';
+ // Le paramétrage complet est un indice, la vérification reste humaine.
+ if(i===5)return onbParamMissing27(c).length?'A faire':'À vérifier';
  if(i===13)return c.group27||c.typologie27?'Fait':'A faire';
  return 'A faire';
 }
@@ -56,7 +70,7 @@ const PF_COLS27=[
  clientCol27('regimeFiscal','Régime fiscal','status',c=>['IS','IR'].includes(c.taxRegime)?c.taxRegime:'A définir',(c,v)=>{c.taxRegime=v==='A définir'?'À confirmer':v;},['IS','IR','A définir']),
  clientCol27('tva','Régime TVA','status',c=>TVA27.includes(c.vatRegime)?c.vatRegime:'',(c,v)=>{c.vatRegime=v;},TVA27),
  ...MISSIONS27.map(missionCol27),
- {k:'ldm',label:'LDM signée',t:'status',opts:['Oui','En cours','Non'],get:x=>ldm27(x.c),set:(x,v)=>{x.c.ldm27=v;}},
+ {k:'ldm',label:'Lettre de mission',t:'status',opts:LDM_OPTS27,get:x=>ldm27(x.c),set:(x,v)=>{x.c.ldm27=v;(x.c.ldmLog27=x.c.ldmLog27||[]).push({v,at:new Date().toISOString(),by:shared25.user?.username||''});}},
  clientCol27('honoCourants','Honoraires courants','num',c=>fees27(c).accounting||0,(c,v)=>{fees27(c).accounting=Number(v||0);syncFees27(c);}),
  clientCol27('honoBilan','Honoraires bilan','num',c=>fees27(c).annualAccounts||0,(c,v)=>{fees27(c).annualAccounts=Number(v||0);syncFees27(c);}),
  clientCol27('honoAgo','Honoraires AGO','num',c=>fees27(c).legalAnnual||0,(c,v)=>{fees27(c).legalAnnual=Number(v||0);syncFees27(c);}),
@@ -73,7 +87,7 @@ const ONB_COLS27=[
  {k:'deadline',label:'Deadline onboarding',t:'date',get:x=>x.c.onbDeadline27||(x.c.entry?iso(addDays(new Date(x.c.entry+'T12:00:00'),30)):''),set:(x,v)=>{x.c.onbDeadline27=v;}},
  {k:'progress',label:'Avancement',t:'auto',w:95,render:x=>{const p=onbProgress27(x.c);return autoPill27(p.label,p.color);}},
  ...PEOPLE27,
- {k:'ldm',label:'LDM signée',t:'status',opts:['Oui','En cours','Non'],get:x=>ldm27(x.c),set:(x,v)=>{x.c.ldm27=v;}},
+ {k:'ldm',label:'Lettre de mission',t:'status',opts:LDM_OPTS27,get:x=>ldm27(x.c),set:(x,v)=>{x.c.ldm27=v;(x.c.ldmLog27=x.c.ldmLog27||[]).push({v,at:new Date().toISOString(),by:shared25.user?.username||''});}},
  ...ONB_STEPS27.map(([full,short],i)=>({k:'s'+i,label:short,full,t:'status',opts:ONB_OPTS27,w:120,get:x=>onbStep27(x.c,i),set:(x,v)=>{onb27(x.c).s[i]=v;}})),
 ];
 COLS27.portfolio=PF_COLS27;COLS27.onb=ONB_COLS27;
@@ -111,19 +125,35 @@ function portfolioPage27(){
 /* Onboarding : liste des dossiers ; un clic déroule les 14 étapes (présentation d'origine du CRM). */
 const ONB_ACTIONS27={
  0:c=>`<button class="btn small light" onclick="letterDialog26('${c.id}')">Préparer la LDM</button>`,
- 1:c=>`<button class="btn small light" onclick="repriseDialog27('${c.id}')">Lettre de reprise</button>`,
+ 1:c=>{const st=typeof repriseStage27==='function'?repriseStage27(c):'',r=c.reprise27||{};return `${st?`<span class="sub" title="${esc([r.preparedAt&&'Préparée le '+datefr(String(r.preparedAt).slice(0,10)),r.sentAt&&'Envoyée le '+datefr(String(r.sentAt).slice(0,10))+(r.sentBy?' par '+r.sentBy:''),r.answeredAt&&'Réponse le '+datefr(String(r.answeredAt).slice(0,10)),r.piecesAt&&'Pièces le '+datefr(String(r.piecesAt).slice(0,10))].filter(Boolean).join(' · '))}">${esc(st)}</span> `:''}${st==='Envoyée'?`<button class="btn small light" onclick="repriseStep27('${c.id}','answer')">Réponse reçue</button> `:''}${['Envoyée','Réponse reçue'].includes(st)?`<button class="btn small light" onclick="repriseStep27('${c.id}','pieces')">Pièces récupérées</button>`:`<button class="btn small light" onclick="repriseDialog27('${c.id}')">Lettre de reprise</button>`}`;},
  2:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
+ 14:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
  4:c=>`<button class="btn small light" onclick="routePage('clients')">Saisir les honoraires</button>`,
  5:c=>`<button class="btn small light" onclick="identityDialog26('client','${c.id}')">Compléter la fiche</button>`,
  7:()=>`<a class="btn small light" href="https://www.impots.gouv.fr/professionnel" target="_blank" rel="noopener">impots.gouv</a>`,
  11:c=>`<a class="btn small light" href="${esc(c.links?.pennylane||'https://app.pennylane.com/')}" target="_blank" rel="noopener">Pennylane</a>`,
 };
 /* Validation manuelle de l'onboarding : le dossier passe dans « Onboarding validé » et le client devient actif. */
+function onbMissing27(c){const st=i=>onbStep27(c,i),ok=v=>v==='Fait'||v==='NA';return {blocking:ONB_BLOCKING27.filter(i=>!ok(st(i))),other:ONB_ORDER27.filter(i=>!ONB_BLOCKING27.includes(i)&&!ok(st(i)))};}
+function canForce27(){return ['admin','associe'].includes(shared25.user?.role||'')||!shared25.active;}
 function validateOnb27(cid){
- const c=cfind(cid);if(!c)return;const p=onbProgress27(c);
- if(p.done<p.total&&!confirm(`${p.total-p.done} étape(s) ne sont pas terminées pour ${c.name}. Valider l’onboarding quand même ?`))return;
- c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||state.currentUser||''};
+ const c=cfind(cid);if(!c)return;const p=onbProgress27(c),m=onbMissing27(c),lbl=i=>ONB_STEPS27[i][1];
+ if(m.blocking.length){
+  if(!canForce27())return alert(`Onboarding non validable : prérequis bloquants non terminés (${m.blocking.map(lbl).join(', ')}).\nSeul un associé ou un administrateur peut valider par exception, avec une justification.`);
+  document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(560px,96vw)"><div class="modalHead"><h3>Validation exceptionnelle · ${esc(c.name)}</h3><button class="btn secondary" onclick="closeModal()">Fermer</button></div><div class="modalBody"><div class="note" style="margin-bottom:10px">Prérequis bloquants non terminés : <b>${m.blocking.map(lbl).map(esc).join(', ')}</b>.</div><div class="field"><label>Justification (obligatoire, conservée dans l’historique)</label><textarea id="onb_reason" rows="3"></textarea></div></div><div class="modalFooter" style="display:flex;justify-content:flex-end"><button class="btn" style="background:#c4320a;border-color:#c4320a" onclick="forceOnb27('${cid}')">Valider par exception</button></div></div></div>`;
+  return;
+ }
+ if(m.other.length&&!confirm(`${m.other.length} étape(s) complémentaire(s) non terminée(s) pour ${c.name} (${m.other.map(lbl).join(', ')}). Valider l’onboarding ?`))return;
+ c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||state.currentUser||'',pending:m.other.map(lbl)};
  log25('Onboarding validé',cid,p.label);persist25();toast(c.name+' : onboarding validé, le client est actif');
+}
+function forceOnb27(cid){
+ const c=cfind(cid),reason=document.getElementById('onb_reason')?.value.trim();if(!c)return;
+ if(!canForce27())return alert('Réservé aux associés et administrateurs.');
+ if(!reason||reason.length<10)return toast('Indique une justification (10 caractères minimum).');
+ const m=onbMissing27(c);
+ c.status='Actif';c.onbValidated27={date:new Date().toISOString(),user:shared25.user?.username||'',forced:true,reason,missing:m.blocking.map(i=>ONB_STEPS27[i][1])};
+ log25('Onboarding validé par exception',cid,reason);closeModal();persist25();toast(c.name+' : validé par exception (justification conservée)');
 }
 /* Dossier sorti de l'onboarding : validé avec le bouton, ou passé actif avant son ajout (prospect validé, étapes renseignées). */
 function onbDone27(c){return !isOnboarding27(c)&&!['Inactif','Compromis'].includes(c.status)&&Boolean(c.onbValidated27||c.prospectId||Object.keys(c.onb27?.s||{}).length);}
@@ -132,10 +162,10 @@ function toggleOnb27(cid){const b=boards27();b.onbOpen=b.onbOpen||{};b.onbOpen[c
 function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v;save();}
 function onbRow27(x){
  const c=x.c,p=onbProgress27(c),open=boards27().onbOpen?.[c.id],u=urgency27(x),dl=val27(x,'deadline');
- const steps=ONB_STEPS27.map(([full],i)=>{const st=onbStep27(c,i),auto=!onb27(c).s[i]&&st!=='A faire';
-  return `<tr><td class="onbNum27">${i+1}</td><td>${esc(full)}${auto?' <span class="sub">· automatique</span>':''}</td>
+ const steps=ONB_ORDER27.map((i,n)=>{const [full]=ONB_STEPS27[i],st=onbStep27(c,i),auto=!onb27(c).s[i]&&st!=='A faire';
+  return `<tr><td class="onbNum27">${n+1}</td><td>${esc(full)}${ONB_BLOCKING27.includes(i)?' <span class="badge orange" title="Prérequis bloquant">bloquant</span>':''}${auto?` <span class="sub">· ${st==='À vérifier'?'à vérifier':'automatique'}</span>`:''}${i===5&&onbParamMissing27(c).length?` <span class="sub">· manque : ${esc(onbParamMissing27(c).join(', '))}</span>`:''}</td>
    <td><input class="cell27 onbPerson27" value="${esc(onb27(c).p[i]||'')}" placeholder="${esc(people27(c,'collab').split(',')[0]||'Responsable')}" onchange="setOnbPerson27('${c.id}',${i},this.value)"></td>
-   <td style="width:150px"><select class="pill27 onbPill27" style="background:${color27(st==='Fait'?'Oui':st==='Bloqué'?'Bloqué':st==='En cours'?'2.':st==='NA'?'NA':'1.')}" onchange="setCell27(this,'onb','${c.id}',0,'s${i}')">${ONB_OPTS27.map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td style="width:150px"><select class="pill27 onbPill27" style="background:${st==='À vérifier'?C27.orange:color27(st==='Fait'?'Oui':st==='Bloqué'?'Bloqué':st==='En cours'?'2.':st==='NA'?'NA':'1.')}" onchange="setCell27(this,'onb','${c.id}',0,'s${i}')">${ONB_OPTS27.map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}</select></td>
    <td style="width:150px;text-align:right">${ONB_ACTIONS27[i]?ONB_ACTIONS27[i](c):''}</td></tr>`;}).join('');
  return `<div class="onb27 ${open?'open':''}"><div class="onbHead27" onclick="toggleOnb27('${c.id}')">
    <span class="chev27">${open?'▾':'▸'}</span>
@@ -145,9 +175,9 @@ function onbRow27(x){
    <div class="onbProg27"><div class="bar27"><i style="width:${p.done/p.total*100}%;background:${p.color}"></i></div><span>${p.label}</span>${p.blocked?'<span class="badge red">Bloqué</span>':''}</div>
    <div class="onbMeta27"><span class="sub">Équipe</span>${esc(people27(c,'manager')||'—')}${people27(c,'collab')?' / '+esc(people27(c,'collab')):''}</div>
    <div class="onbMeta27"><span class="sub">LDM</span>${esc(ldm27(c))}</div>
-   ${onbDone27(c)?`<div class="onbAct27"><span class="badge green">${c.onbValidated27?'Validé le '+new Date(c.onbValidated27.date).toLocaleDateString('fr-FR'):'Validé'}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
+   ${onbDone27(c)?`<div class="onbAct27"><span class="badge green">${c.onbValidated27?(c.onbValidated27.forced?'Validé par exception le ':'Validé le ')+new Date(c.onbValidated27.date).toLocaleDateString('fr-FR'):'Validé'}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
   </div>
-  ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">LDM signée <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${['Oui','En cours','Non'].map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
+  ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">Lettre de mission <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${LDM_OPTS27.map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
    <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
 }
 function onboardingPage27(){
@@ -156,7 +186,7 @@ function onboardingPage27(){
  const showDone=boards27().collapsed['onb|validated']!==true;
  const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
  const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
- return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses 14 étapes. Certaines se cochent seules ; c’est toi qui valides l’onboarding, le dossier passe alors dans « Onboarding validé ».</div></div>
+ return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses étapes. Certaines se cochent seules ; c’est toi qui valides l’onboarding, le dossier passe alors dans « Onboarding validé ».</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}

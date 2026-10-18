@@ -4,9 +4,9 @@
  * Ses réponses arrivent automatiquement dans le tableau (colonnes du Monday « Matrice création ») ;
  * « Créer la fiche client » les reverse dans le portefeuille (onboarding) et crée le travail exceptionnel
  * « Création de société », qui passe en « À facturer » quand la société est créée. */
-const CR_STAGES27=['Statuts en cours','Dépôt au greffe','Société créée','Abandonné'];
-const CR_GROUPS27=['À envoyer','En attente du client','Réponse partielle','Informations reçues','Statuts en cours','Dépôt au greffe','Société créée','Abandonné'];
-const CR_COLORS27={'À envoyer':'#c4c4c4','En attente du client':'#fdab3d','Réponse partielle':'#ffcb00','Informations reçues':'#579bfc','Statuts en cours':'#a25ddc','Dépôt au greffe':'#784bd1','Société créée':'#00c875','Abandonné':'#808080'};
+const CR_STAGES27=['Contrôlé','Statuts en cours','Dépôt au greffe','Société créée','Abandonné'];
+const CR_GROUPS27=['À envoyer','Mail préparé','En attente du client','Réponse partielle','Informations reçues','Contrôlé','Statuts en cours','Dépôt au greffe','Société créée','Abandonné'];
+const CR_COLORS27={'Mail préparé':'#e2a03f','Contrôlé':'#0086c0','À envoyer':'#c4c4c4','En attente du client':'#fdab3d','Réponse partielle':'#ffcb00','Informations reçues':'#579bfc','Statuts en cours':'#a25ddc','Dépôt au greffe':'#784bd1','Société créée':'#00c875','Abandonné':'#808080'};
 const CR_TEXT27=CREATION_FIELDS.filter(f=>f.key&&f.type!=='file'),CR_FILES27=CREATION_FIELDS.filter(f=>f.type==='file');
 const cr27={lastPull:0,pulling:false};
 function creation27(){if(!state.creation27)state.creation27={items:[]};return state.creation27;}
@@ -15,7 +15,8 @@ function crStatus27(it){
  if(it.stage)return it.stage;
  if(it.submittedAt||it.imported)return 'Informations reçues';
  if(it.updatedAt)return 'Réponse partielle';
- return it.sentAt?'En attente du client':'À envoyer';
+ // Un lien mailto ouvert ne prouve pas l'envoi : « Mail préparé » tant que l'envoi n'est pas confirmé.
+ return it.sentAt?'En attente du client':it.preparedAt?'Mail préparé':'À envoyer';
 }
 function crUrl27(it){return it.token?location.origin+'/creation/'+it.token:'';}
 function crDocs27(it,kind){return [...(it.files||[]).filter(f=>f.kind===kind),...(it.links?.[kind]?String(it.links[kind]).split(/[\s,]+/).filter(u=>/^https?:/.test(u)).map(u=>({url:u,name:decodeURIComponent(u.split('/').pop()||'lien')})):[])];}
@@ -29,19 +30,26 @@ async function pullCreation27(silent=true){
  try{
   const r=await api27('/api/creation/list',{method:'POST',body:JSON.stringify({tokens:items.map(x=>x.token)})});let changed=false;
   for(const sub of r.items||[]){
-   const it=items.find(x=>x.token===sub.token);if(!it)continue;
+   const it=creation27().items.find(x=>x.token===sub.token);if(!it)continue;
    const files=JSON.stringify(sub.files||[]);
    if(sub.updatedAt&&sub.updatedAt!==it.updatedAt||files!==JSON.stringify(it.files||[])){
-    // La réponse du client complète la fiche ; une valeur déjà corrigée dans le CRM n'est remplacée que si le client l'a modifiée depuis.
-    const prev=it.clientFields||{};it.fields=it.fields||{};
-    for(const [k,v] of Object.entries(sub.fields||{}))if(v&&(v!==prev[k]||!it.fields[k]))it.fields[k]=v;
+    // Une valeur corrigée par le cabinet, ou un dossier déjà contrôlé, n'est jamais écrasée : la modification du client part en « à arbitrer ».
+    const prev=it.clientFields||{},locked=crLocked27(it);it.fields=it.fields||{};it.clientChanges=it.clientChanges||{};
+    for(const [k,v] of Object.entries(sub.fields||{})){
+     if(v===prev[k]||v===it.fields[k])continue;
+     const cabinetEdited=it.fields[k]&&it.fields[k]!==(prev[k]||'');
+     if(locked||cabinetEdited)it.clientChanges[k]={value:v,cabinet:it.fields[k]||'',at:sub.updatedAt};
+     else if(v)it.fields[k]=v;
+    }
+    if(locked&&Object.keys(it.clientChanges).length)log25('Matrice création : modification du client après contrôle',it.client||'',it.name);
     it.clientFields=sub.fields||{};it.files=sub.files||[];
     if(sub.submittedAt&&sub.submittedAt!==it.submittedAt)log25('Matrice création : informations reçues',it.client||'',it.name);
-    it.submittedAt=sub.submittedAt||it.submittedAt||null;it.updatedAt=sub.updatedAt;
+    it.submittedAt=sub.submittedAt||it.submittedAt||null;it.updatedAt=sub.updatedAt;it.link=sub.link||it.link;
     if(sub.fields?.legalForm&&!it.legalForm)it.legalForm=sub.fields.legalForm;
     changed=true;
    }
   }
+  for(const sub of r.items||[]){const it=creation27().items.find(x=>x.token===sub.token);if(it&&sub.link&&JSON.stringify(sub.link)!==JSON.stringify(it.link)){it.link=sub.link;changed=true;}}
   if(changed){save();render();if(!silent)toast('Réponses des clients mises à jour');}
   else if(!silent)toast('Aucune nouvelle réponse');
   return changed;
@@ -51,7 +59,27 @@ async function pullCreation27(silent=true){
 async function crLink27(it){
  if(it.token)return it.token;
  const r=await api27('/api/creation/link',{method:'POST',body:JSON.stringify({name:it.name,legalForm:it.legalForm||'',cabinet:cabinet26().name||'RB Partners'})});
- it.token=r.token;save();return it.token;
+ // L'état a pu être remplacé pendant l'appel (fusion après un enregistrement simultané) : on relit l'élément.
+ const cur=crFind27(it.id)||it;cur.token=r.token;cur.link={state:'actif',expiresAt:r.expiresAt};it.token=r.token;save();return r.token;
+}
+function crLocked27(it){return ['Contrôlé','Statuts en cours','Dépôt au greffe','Société créée','Abandonné'].includes(it.stage);}
+async function crLinkState27(id,action,silent){
+ const it=crFind27(id);if(!it?.token)return;
+ try{const r=await api27('/api/creation/state',{method:'POST',body:JSON.stringify({token:it.token,action,days:60})});it.link=r.link;log25('Matrice création : lien '+({revoke:'révoqué',close:'clôturé',reopen:'rouvert',extend:'prolongé'})[action],it.client||'',it.name);save();if(!silent){render();crOpen27(id);}}
+ catch(e){if(!silent)alert('Action impossible : '+e.message);}
+}
+function crConfirmSent27(id){
+ const it=crFind27(id);if(!it)return;
+ const d=prompt('Confirme l’envoi du formulaire au client : date d’envoi (AAAA-MM-JJ)',today27());if(d===null)return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return alert('Date invalide (format AAAA-MM-JJ).');
+ it.sentAt=d;it.sentBy=shared25.user?.username||'';it.sentConfirmedAt=new Date().toISOString();
+ log25('Matrice création : envoi du formulaire confirmé',it.client||'',it.name+' · '+d);persist25();if(document.getElementById('cri_name'))crOpen27(id);
+}
+function crResolve27(id,k,keep){
+ const it=crFind27(id),c=it?.clientChanges?.[k];if(!c)return;
+ if(keep==='client')it.fields[k]=c.value;
+ delete it.clientChanges[k];log25('Matrice création : modification du client '+(keep==='client'?'acceptée':'écartée'),it.client||'',k);
+ if(it.client)crToClient27(it);persist25();crOpen27(id);
 }
 
 /* ---------- page ---------- */
@@ -79,6 +107,9 @@ function crToggle27(g){const b=creation27();b.collapsed=b.collapsed||{};b.collap
 function crSet27(id,k,v){const it=crFind27(id);if(!it)return;it[k]=v;persist25();}
 function crStage27(id,v){
  const it=crFind27(id);if(!it)return;it.stage=CR_STAGES27.includes(v)?v:'';
+ if(v==='Contrôlé'){it.controlledAt=new Date().toISOString();it.controlledBy=shared25.user?.username||'';}
+ // Dossier finalisé : le formulaire n'est plus modifiable par le client.
+ if(['Société créée','Abandonné'].includes(v)&&it.token&&it.link?.state!=='clôturé')crLinkState27(id,'close',true);
  // La société créée termine le travail exceptionnel lié : il passe automatiquement dans « À facturer ».
  const w=it.exc&&exc27().items.find(x=>x.id===it.exc);
  if(w){if(v==='Société créée'){w.statut='Terminé';w.doneAt=w.doneAt||today27();}else if(v==='Abandonné'){w.statut='A revoir';}else if(['Statuts en cours','Dépôt au greffe'].includes(v)&&w.statut==='A faire')w.statut='En cours';}
@@ -110,10 +141,10 @@ async function crSend27(id){
  const url=crUrl27(it),cab=cabinet26().name||'RB Partners',me=(typeof me27==='function'&&me27())||shared25.user?.username||'';
  const subject=`Création de ${it.name} : informations à nous transmettre`;
  const body=`Bonjour${it.contactName?' '+it.contactName.split(' ')[0]:''},\n\nPour préparer la création de ${it.name}, merci de compléter le formulaire sécurisé ci-dessous. Il réunit toutes les informations et pièces nécessaires à la rédaction des statuts et au dépôt du dossier d’immatriculation :\n\n${url}\n\nVos réponses sont enregistrées au fur et à mesure : vous pouvez revenir à tout moment avec le même lien. Comptez une quinzaine de minutes, en ayant à portée de main les pièces d’identité des dirigeants et actionnaires et le justificatif d’adresse du siège.\n\nJe reste à votre disposition pour toute question.\n\nBien cordialement,\n${me}\n${cab}`;
- it.sentAt=new Date().toISOString();log25('Matrice création : formulaire envoyé',it.client||'',it.name+(it.contactEmail?' → '+it.contactEmail:''));persist25();
+ it.preparedAt=new Date().toISOString();it.preparedBy=shared25.user?.username||'';log25('Matrice création : mail préparé (envoi à confirmer)',it.client||'',it.name+(it.contactEmail?' → '+it.contactEmail:''));persist25();
  try{await navigator.clipboard?.writeText(url);}catch(e){}
  crMail27(`mailto:${encodeURIComponent(it.contactEmail||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
- toast('Mail préparé dans ta messagerie ; le lien est aussi copié.');
+ toast('Mail préparé dans ta messagerie (lien copié). Une fois envoyé, clique sur « Confirmer l’envoi ».');
 }
 function crMail27(href){location.href=href;}
 async function crCopy27(id){const it=crFind27(id);if(!it)return;try{await crLink27(it);}catch(e){return alert('Lien impossible à créer : '+e.message);}const url=crUrl27(it);try{await navigator.clipboard.writeText(url);toast('Lien copié');}catch(e){prompt('Lien du formulaire :',url);}render();crOpen27(id);}
@@ -129,7 +160,11 @@ function crOpen27(id){
  document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(980px,96vw)"><div class="modalHead"><div><h3>${esc(it.name)}</h3><div class="sub"><span class="badge" style="background:${CR_COLORS27[st]};color:#fff">${esc(st)}</span>${it.sentAt?' · formulaire envoyé le '+datefr(it.sentAt.slice(0,10)):''}${it.submittedAt?' · réponse reçue le '+new Date(it.submittedAt).toLocaleString('fr-FR'):it.updatedAt?' · client en cours de saisie':''}</div></div><button class="btn secondary" onclick="closeModal()">Fermer</button></div>
  <div class="modalBody">
   <div class="v25actions" style="margin-bottom:12px;flex-wrap:wrap"><button class="btn small" onclick="crSend27('${it.id}')">✉ ${it.sentAt?'Renvoyer':'Envoyer'} le formulaire par mail</button><button class="btn small secondary" onclick="crCopy27('${it.id}')">Copier le lien</button>${it.token?`<a class="btn small light" href="${esc(crUrl27(it))}" target="_blank" rel="noopener">Voir le formulaire</a>`:''}${c?`<button class="btn small light" onclick="closeModal();openClient('${c.id}')">Fiche client : ${esc(c.name)}</button>`:`<button class="btn small green" onclick="crSaveFields27('${it.id}',true);crClient27('${it.id}')">Créer la fiche client</button>`}</div>
-  ${it.token?`<div class="sub" style="margin-bottom:10px">Lien du client : <code>${esc(crUrl27(it))}</code></div>`:''}
+  ${it.preparedAt&&!it.sentAt?`<div class="note" style="margin-bottom:10px">Mail préparé le ${datefr(String(it.preparedAt).slice(0,10))} : il n’est pas marqué envoyé tant que tu ne l’as pas confirmé. <button class="btn small green" onclick="crConfirmSent27('${it.id}')">Confirmer l’envoi</button></div>`:''}
+  ${it.sentAt?`<div class="sub" style="margin-bottom:6px">Envoi confirmé le ${datefr(String(it.sentAt).slice(0,10))}${it.sentBy?' par '+esc(it.sentBy):''}${it.controlledAt?` · contrôlé le ${datefr(String(it.controlledAt).slice(0,10))}${it.controlledBy?' par '+esc(it.controlledBy):''}`:''}</div>`:''}
+  ${it.token?`<div class="sub" style="margin-bottom:10px">Lien du client : <code>${esc(crUrl27(it))}</code> · <b>${esc(it.link?.state||'actif')}</b>${it.link?.expiresAt?' · valable jusqu’au '+datefr(String(it.link.expiresAt).slice(0,10)):''}
+   ${it.link?.state==='actif'?`<button class="btn small secondary" onclick="crLinkState27('${it.id}','extend')">Prolonger de 60 j</button> <button class="btn small secondary" onclick="if(confirm('Désactiver le lien ? Le client ne pourra plus ouvrir le formulaire.'))crLinkState27('${it.id}','revoke')">Révoquer</button>`:`<button class="btn small secondary" onclick="crLinkState27('${it.id}','reopen')">Réactiver le lien</button>`}</div>`:''}
+  ${Object.keys(it.clientChanges||{}).length?`<div class="panel" style="border-color:#f79009"><div class="panelHead"><h3>Modifications du client à arbitrer</h3><span class="sub">Le client a changé ces réponses après une correction ou un contrôle du cabinet</span></div><table><thead><tr><th>Champ</th><th>Version cabinet</th><th>Nouvelle réponse du client</th><th></th></tr></thead><tbody>${Object.entries(it.clientChanges).map(([k,c])=>`<tr><td>${esc(CREATION_FIELDS.find(f=>f.key===k)?.label||k)}</td><td>${esc(c.cabinet)}</td><td>${esc(c.value)}</td><td style="white-space:nowrap"><button class="btn small green" onclick="crResolve27('${it.id}','${esc(k)}','client')">Prendre la réponse du client</button> <button class="btn small secondary" onclick="crResolve27('${it.id}','${esc(k)}','cabinet')">Garder la version cabinet</button></td></tr>`).join('')}</tbody></table></div>`:''}
   <div class="formGrid"><div class="field"><label>Nom du dossier</label><input id="cri_name" value="${esc(it.name)}"></div><div class="field"><label>Contact</label><input id="cri_contactName" value="${esc(it.contactName||'')}"></div><div class="field"><label>E-mail</label><input id="cri_contactEmail" value="${esc(it.contactEmail||'')}"></div><div class="field"><label>Deadline</label><input id="cri_deadline" type="date" value="${esc(it.deadline||'')}"></div><div class="field"><label>Honoraires de création (HT)</label><input id="cri_fees" type="number" value="${esc(it.fees||'')}"></div></div>
   ${sections}
   <h4 style="margin:16px 0 6px">Justificatifs</h4><div class="panel"><div class="panelBody">${docs}</div></div>

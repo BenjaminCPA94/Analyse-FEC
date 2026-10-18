@@ -50,10 +50,13 @@ ul.files button{border:0;background:none;color:var(--muted);cursor:pointer;font-
 <script>/*CREATION_FIELDS*/</script>
 <script>
 const token=location.pathname.split('/').pop(),api=p=>'/api/public/creation'+p+'?t='+encodeURIComponent(token);
-let data={fields:{},files:[]},saveTimer=null,queue=Promise.resolve();
+let data={fields:{},files:[]},saveTimer=null,queue=Promise.resolve(),rev=0,dirty=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const $=id=>document.getElementById(id);
-async function call(path,body){const r=await fetch(api(path),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const x=await r.json().catch(()=>({}));if(!r.ok)throw Error(x.error||'Erreur '+r.status);return x;}
+async function call(path,body){let r;try{r=await fetch(api(path),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});}catch(e){throw Object.assign(Error('connexion impossible (vérifie ta connexion internet)'),{network:true});}const x=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(x.error||'Erreur '+r.status),{status:r.status});return x;}
+/* File d'attente : chaque envoi part après le précédent, qu'il ait réussi ou échoué (une erreur ne bloque plus les suivants). */
+function enqueue(fn){const p=queue.catch(()=>{}).then(fn);queue=p.catch(()=>{});return p;}
+function backupLocal(){try{localStorage.setItem('crea_'+token,JSON.stringify({at:Date.now(),fields:collect()}));}catch(e){}}
 function input(f){
  const v=data.fields[f.key]??(f.key==='denomination'?data.name:f.key==='legalForm'?data.legalForm:'')??'',id='f_'+f.key;
  if(f.type==='file')return `<div class="drop"><span>Ajoute un ou plusieurs fichiers</span><label class="btn light" style="margin:0">Choisir un fichier<input hidden type="file" multiple accept=".pdf,image/*" onchange="upload('${f.key}',this.files);this.value=''"></label></div><ul class="files" id="files_${f.key}"></ul>`;
@@ -76,28 +79,40 @@ function files(){for(const f of CREATION_FIELDS.filter(f=>f.type==='file')){cons
 function collect(){const out={};for(const f of CREATION_FIELDS)if(f.key&&f.type!=='file'){const el=$('f_'+f.key);if(el)out[f.key]=el.value.trim();}return out;}
 function missing(){const v=collect();return CREATION_FIELDS.filter(f=>f.required&&(f.type==='file'?!data.files.some(x=>x.kind===f.key):!v[f.key]));}
 function progress(){const req=CREATION_FIELDS.filter(f=>f.required),m=missing().length,pct=Math.round((req.length-m)/req.length*100);$('progress').textContent=`${pct} % des informations obligatoires`;$('bar').style.width=pct+'%';}
-function changed(){progress();$('saved').textContent='Modifications en cours…';clearTimeout(saveTimer);saveTimer=setTimeout(()=>save(false),1200);}
-function save(final){data.fields=collect();return queue=queue.then(()=>call('',{fields:data.fields,final})).then(()=>{$('saved').textContent='Enregistré à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});},e=>{$('saved').textContent='Enregistrement impossible : '+e.message;throw e;});}
+function changed(){progress();dirty=true;backupLocal();$('saved').textContent='Modifications non enregistrées…';clearTimeout(saveTimer);saveTimer=setTimeout(()=>save(false).catch(()=>{}),1200);}
+/* « Enregistré » ne s'affiche qu'après la réponse du serveur ; en cas d'échec, les réponses restent dans ce navigateur et un nouvel essai est programmé. */
+function save(final){
+ const fields=collect();data.fields=fields;
+ return enqueue(()=>call('',{fields,final,rev})).then(x=>{rev=x.rev;if(JSON.stringify(collect())===JSON.stringify(fields)){dirty=false;try{localStorage.removeItem('crea_'+token);}catch(e){}}$('saved').textContent='Enregistré à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});return x;},e=>{
+  if(e.status===409){$('saved').textContent='';$('msg').innerHTML=`<div class="notice bad">${esc(e.message)} <button class="btn light" onclick="location.reload()">Recharger</button></div>`;}
+  else if(e.status===410){$('saved').textContent=e.message;document.querySelectorAll('input,select,textarea,button').forEach(x=>x.disabled=true);}
+  else if(e.status!==422){$('saved').textContent='Non enregistré : '+e.message+'. Tes réponses sont gardées sur cet appareil ; nouvel essai dans 15 s.';clearTimeout(saveTimer);saveTimer=setTimeout(()=>{if(dirty)save(false).catch(()=>{});},15000);}
+  throw e;});
+}
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 function readB64(file){return new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>ko(Error('Lecture du fichier impossible'));r.readAsDataURL(file);});}
 async function upload(kind,list){
  for(const file of list){
   if(file.size>3*1024*1024){alert(`« ${file.name} » dépasse 3 Mo. Réduis sa taille (scan en qualité standard ou photo) puis réessaie.`);continue;}
   $('saved').textContent=`Envoi de « ${file.name} »…`;
-  try{const d=await readB64(file);const x=await (queue=queue.then(()=>call('/file',{kind,name:file.name,type:file.type,data:d})));data.files.push(x);files();progress();$('saved').textContent=`« ${file.name} » ajouté`;}
+  try{const d=await readB64(file);const x=await enqueue(()=>call('/file',{kind,name:file.name,type:file.type,data:d}));data.files.push(x);rev++;files();progress();$('saved').textContent=`« ${file.name} » ajouté`;}
   catch(e){alert(`« ${file.name} » n’a pas pu être envoyé : ${e.message}`);}
  }
 }
-async function removeFile(id){try{await (queue=queue.then(()=>call('/file/delete',{id})));data.files=data.files.filter(x=>x.id!==id);files();progress();}catch(e){alert(e.message);}}
+async function removeFile(id){try{await enqueue(()=>call('/file/delete',{id}));data.files=data.files.filter(x=>x.id!==id);rev++;files();progress();}catch(e){alert(e.message);}}
 async function submitForm(){
  document.querySelectorAll('.invalid').forEach(e=>e.classList.remove('invalid'));
  const m=missing();
  if(m.length){m.forEach(f=>{const el=$('f_'+f.key)||$('files_'+f.key)?.previousElementSibling;el?.classList.add('invalid');});$('msg').innerHTML=`<div class="notice bad">Il manque encore : ${m.map(f=>esc(f.label.split(',')[0])).join(' · ')}.</div>`;($('f_'+m[0].key)||$('files_'+m[0].key))?.scrollIntoView({behavior:'smooth',block:'center'});return;}
  $('send').disabled=true;
- try{clearTimeout(saveTimer);await save(true);data.submittedAt=new Date().toISOString();$('msg').innerHTML='<div class="notice ok"><b>Merci !</b> Vos informations ont été transmises au cabinet. Nous revenons vers vous rapidement avec le projet de statuts.</div>';$('msg').scrollIntoView({behavior:'smooth'});}
+ try{clearTimeout(saveTimer);const x=await save(true);data.submittedAt=x.submittedAt||new Date().toISOString();$('msg').innerHTML='<div class="notice ok"><b>Merci !</b> Vos informations ont été transmises au cabinet. Nous revenons vers vous rapidement avec le projet de statuts.</div>';$('msg').scrollIntoView({behavior:'smooth'});}
  catch(e){$('msg').innerHTML=`<div class="notice bad">Envoi impossible : ${esc(e.message)}</div>`;}
  finally{$('send').disabled=false;}
 }
-call('').then(x=>{data=x;if(x.cabinet)$('brand').textContent=x.cabinet;page();}).catch(e=>{$('app').innerHTML=`<div class="center">${esc(e.message)}</div>`;});
+call('').then(x=>{data=x;rev=x.rev||0;
+ // Réponses saisies hors connexion sur cet appareil et plus récentes que le serveur : proposées à la reprise.
+ try{const l=JSON.parse(localStorage.getItem('crea_'+token)||'null');if(l&&JSON.stringify(l.fields)!==JSON.stringify(x.fields)&&Object.values(l.fields).some(Boolean)&&confirm('Des réponses non envoyées ont été trouvées sur cet appareil. Les reprendre ?'))data.fields={...x.fields,...Object.fromEntries(Object.entries(l.fields).filter(([,v])=>v))};}catch(e){}
+ if(x.cabinet)$('brand').textContent=x.cabinet;page();if(x.expiresAt)$('saved').textContent='Lien valable jusqu’au '+new Date(x.expiresAt).toLocaleDateString('fr-FR');}).catch(e=>{$('app').innerHTML=`<div class="center">${esc(e.message)}</div>`;});
 </script>
 </body>
 </html>
