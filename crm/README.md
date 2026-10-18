@@ -117,7 +117,7 @@ Si `redis-server` est installé, les tests « Redis » l'utilisent réellement (
 
 ## Imports Excel
 
-Tout import (Portefeuille, Bilan, AGO, Fiscalité, Autres travaux, Matrice création, Prospects) affiche d'abord un **aperçu** : clients créés et modifiés, valeurs remplacées, erreurs, rapprochements ambigus à trancher. Rien n'est modifié avant « Appliquer l'import ». Les clients sont rapprochés par SIREN contrôlé, puis par nom exact ; deux SIREN différents ne sont jamais fusionnés ; un client créé par import est « À qualifier ». Une cellule vide n'efface rien. Chaque import est listé dans *Automatisations cabinet › Imports* et peut être annulé.
+Tout import (Portefeuille, Bilan, AGO, Fiscalité, Autres travaux, Matrice création) affiche d'abord un **aperçu** : clients créés et modifiés, valeurs remplacées, erreurs, rapprochements ambigus à trancher. Rien n'est modifié avant « Appliquer l'import ». Les clients sont rapprochés par SIREN contrôlé, puis par nom exact ; deux SIREN différents ne sont jamais fusionnés ; un client créé par import est « À qualifier ». Une cellule vide n'efface rien. Chaque import est listé dans *Automatisations cabinet › Imports* et peut être annulé.
 
 Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, les tableaux Bilan et AGO (import Excel avec des fichiers fictifs, échéances, retards, facturation, saisie directe, export), les conflits de version et la persistance après redémarrage.
 
