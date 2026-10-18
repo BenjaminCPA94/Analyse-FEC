@@ -287,7 +287,7 @@ function normCustomer(x) {
 /* ---------- page du CRM ---------- */
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_billing.js', 'v27_team.js', 'v27_history.js', 'creation_fields.js', 'v27_creation.js', 'v27_sync.js', 'v27_imports.js', 'v27_work.js', 'v27_process.js', 'v27_pilot.js', 'v27_prospect.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
+  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_billing.js', 'v27_team.js', 'v27_history.js', 'creation_fields.js', 'v27_creation.js', 'v27_sync.js', 'v27_imports.js', 'v27_work.js', 'v27_process.js', 'v27_pilot.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
   return base.slice(0, i) + modules + base.slice(i);
@@ -550,15 +550,6 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     },
     'GET /api/company': async (req, res, s, url) => {
       const siren = url.searchParams.get('siren') || '';
-      // Recherche par nom (fiche prospect) : quelques résultats, sans enrichissement Pappers.
-      const q = String(url.searchParams.get('q') || '').trim().slice(0, 80);
-      if (!siren && q) {
-        if (q.length < 3) return send(res, 400, { error: 'Recherche trop courte' });
-        if (await store.incrWindow('company:' + s.username, 60) > 60) return send(res, 429, { error: 'Trop de recherches, patiente une minute.' });
-        const r = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&per_page=6`, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
-        if (!r.ok) return send(res, r.status === 429 ? 429 : 502, { error: 'Service de recherche indisponible' });
-        return send(res, 200, await r.json());
-      }
       if (!/^\d{9}$/.test(siren)) return send(res, 400, { error: 'SIREN invalide' });
       const r = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${siren}&per_page=1`, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
       if (!r.ok) return send(res, r.status === 429 ? 429 : 502, { error: 'Service de recherche indisponible' });
