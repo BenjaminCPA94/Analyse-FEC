@@ -1,5 +1,5 @@
 /* RB Partners V27 — Lot 3 : navigation, « Mon travail », fiche client, préférences personnelles.
- *  - Menu : Mon travail · Clients · Développement · Production · Honoraires · Pilotage · Paramètres.
+ *  - Menu : Pilotage · Clients · Production · Honoraires · Mon travail · Organisation · Paramètres.
  *  - Mon travail : les tâches sont déduites des tableaux existants (bilans, AGO, fiscalité, onboarding, travaux,
  *    créations, facturation, pièces attendues) : aucune double saisie. Chaque tâche indique client, action, période,
  *    date cible interne, échéance officielle, responsable, blocage, prochaine action, et ouvre le dossier.
@@ -22,12 +22,12 @@ save=function(){prefsSave27();return previousSaveWork27.apply(this,arguments);};
 
 /* ---------- Menu ---------- */
 const NAV27=[
- ['Mon travail',[['work','◎ Mon travail'],['time','◷ Saisie des temps']]],
- ['Clients',[['clients','▣ Portefeuille clients']]],
- ['Développement',[['prospects','↗ Prospects']]],
- ['Production',[['onboarding','◎ Onboarding'],['creation','✎ Créations de société'],['fiscal','◫ Fiscalité'],['closing','◩ Clôture & Bilan'],['legal','⌘ Juridique annuel / AGO'],['exceptional','✦ Travaux exceptionnels']]],
+ ['Pilotage',[['cabinetdash','▦ Tableau de bord']]],
+ ['Clients',[['prospects','↗ Prospects'],['creation','✎ Créations de société'],['onboarding','◎ Onboarding'],['clients','▣ Portefeuille clients']]],
+ ['Production',[['fiscal','◫ Fiscalité'],['closing','◩ Clôture & Bilan'],['legal','⌘ Juridique annuel / AGO'],['exceptional','✦ Travaux exceptionnels']]],
  ['Honoraires',[['billing','$ Facturation'],['fees','€ Contrôle honoraires'],['feereview','€ Revue des honoraires']]],
- ['Pilotage',[['cabinetdash','▦ Tableau de bord'],['capacity','◉ Charge équipe'],['profit','€ Rentabilité'],['quality','✓ Qualité du portefeuille']]],
+ ['Mon travail',[['work','◎ Mon travail'],['time','◷ Saisie des temps']]],
+ ['Organisation',[['capacity','◉ Charge équipe'],['quality','✓ Qualité du portefeuille'],['profit','€ Rentabilité']]],
  ['Paramètres',[['rules','⚙ Comptes, imports et connexions']]],
 ];
 function buildNav27(){

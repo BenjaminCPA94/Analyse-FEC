@@ -11,7 +11,7 @@ Branche : `claude/confident-knuth-ly7txl`. **La production (`main`, Vercel) n'a 
 - La fiche client n'avait ni langue, ni contact opérationnel, ni signataire, ni destinataire de facturation, ni dates de mission.
 
 **Changements**
-- **Menu** : Mon travail · Clients · Développement · Production (onboarding, créations, fiscalité, bilans, juridique, travaux) · Honoraires (facturation, contrôle, revue) · Pilotage (tableau de bord, charge, rentabilité, qualité) · Paramètres (comptes, imports, connexions, calendrier fiscal, sauvegardes, journal).
+- **Menu** : Pilotage (tableau de bord) · Clients (prospects, créations, onboarding, portefeuille) · Production (fiscalité, bilans, juridique, travaux) · Honoraires (facturation, contrôle, revue) · Mon travail (tâches, temps) · Organisation (charge, qualité, rentabilité) · Paramètres (comptes, imports, connexions, calendrier fiscal, sauvegardes, journal).
 - **Mon travail** (page d'accueil) :
   - **Origine des tâches** : elles sont déduites des données existantes, sans double saisie : bilans, AGO, déclarations fiscales des 4 prochains mois ou des 4 derniers, onboarding, travaux exceptionnels, créations, prestations à facturer, pièces attendues.
   - **Colonnes** : client, action, type, période, date cible interne, échéance officielle, priorité expliquée (« échéance dépassée de 12 j »), responsable et relecteur, blocage, prochaine action, bouton pour ouvrir le dossier.

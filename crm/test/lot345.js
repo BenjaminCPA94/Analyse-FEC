@@ -74,7 +74,7 @@ function waitFor(proc, text) {
 
   /* ---------- Lot 3 : navigation et Mon travail ---------- */
   const nav = await page.evaluate(() => [...document.querySelectorAll('.nav .navsec')].map(e => e.textContent));
-  assert.deepEqual(nav, ['Mon travail', 'Clients', 'Développement', 'Production', 'Honoraires', 'Pilotage', 'Paramètres'], 'menu en six rubriques et paramètres');
+  assert.deepEqual(nav, ['Pilotage', 'Clients', 'Production', 'Honoraires', 'Mon travail', 'Organisation', 'Paramètres'], 'menu dans l’ordre choisi');
   await page.evaluate(() => { workPrefs27().view = 'all'; workPrefs27().who = null; routePage('work'); });
   const work = await page.evaluate(() => { const l = tasks27().filter(x => mine27(x, me27())); return { me: me27(), n: l.length, src: [...new Set(l.map(x => x.src))].sort(), first: document.querySelector('.board27 tbody tr td:nth-child(2)')?.textContent, html: /échéance officielle/i.test(document.body.innerText) }; });
   assert.equal(work.me, 'Alice Test', 'compte relié explicitement à un collaborateur');

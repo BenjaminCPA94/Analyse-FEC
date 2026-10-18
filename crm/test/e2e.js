@@ -206,7 +206,7 @@ function waitFor(proc, text) {
   // Navigation simplifiée
   const nav = await page.evaluate(() => [...document.querySelectorAll('.nav a')].map(a => a.dataset.page));
   for (const gone of ['dashboard', 'inbox', 'control', 'notifications']) assert.ok(!nav.includes(gone), 'onglet retiré : ' + gone);
-  assert.ok(nav.indexOf('work') === 0 && nav.indexOf('clients') < nav.indexOf('prospects') && nav.indexOf('prospects') < nav.indexOf('onboarding') && nav.indexOf('onboarding') < nav.indexOf('creation') && nav.indexOf('creation') < nav.indexOf('fiscal') && nav.indexOf('rules') === nav.length - 1, 'menu : Mon travail, Clients, Développement, Production, Honoraires, Pilotage, Paramètres');
+  assert.deepEqual(nav, ['cabinetdash', 'prospects', 'creation', 'onboarding', 'clients', 'fiscal', 'closing', 'legal', 'exceptional', 'billing', 'fees', 'feereview', 'work', 'time', 'capacity', 'quality', 'profit', 'rules'], 'menu : Pilotage, Clients, Production, Honoraires, Mon travail, Organisation, Paramètres');
   assert.equal(await page.evaluate(() => { routePage('control'); return state.page; }), 'cabinetdash');
   console.log('✓ Navigation : onglets inutiles retirés, Onboarding avant Portefeuille');
 
@@ -386,7 +386,7 @@ function waitFor(proc, text) {
 
   // Matrice création : formulaire envoyé au client, réponses reçues, reprise dans le portefeuille
   await page.evaluate(() => routePage('creation'));
-  assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('onboarding') + 1; }), 'Créations de société dans Production, après Onboarding');
+  assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('prospects') + 1; }), 'Créations de société dans Clients, après Prospects');
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'creation_test.xlsx'));
   await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => creation27().items.length >= 2);
