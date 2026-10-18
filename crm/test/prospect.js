@@ -104,7 +104,45 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   assert.deepEqual(c, { name: 'BOULANGERIE DU TEST', siren: '732829320', closing: '06-30', legalForm: 'SAS', contact: { name: 'Mme Julie MARTIN', email: 'julie@test.fr', phone: '06 11 22 33 44' }, capital: '10000', address: '12 rue DE LA PAIX, 75002 PARIS', home: 'Vincennes', status: 'Onboarding', fees: 5400 }, 'fiche client reprise du prospect');
   assert.equal(await page.evaluate(() => tasks27().some(x => x.src === 'prospect')), false, 'plus de relance après validation');
 
+  // Suppression : prospect validé (fiche client et données des autres onglets) et prospect simple.
+  const ids = await page.evaluate(pid => {
+    const c = state.clients.find(x => x.prospectId === pid), y = new Date().getFullYear();
+    const keep = newClient26({ name: 'CLIENT À GARDER', siren: '552100554', legalForm: 'SAS', contact: '', email: '' }); state.clients.push(keep); regenerateAll(state, keep.id);
+    for (const cid of [c.id, keep.id]) {
+      row27('bilan', cid, y, true).etat = '2. En cours'; row27('ago', cid, y, true).statut = 'En cours';
+      exc27().items.push({ id: 'EX_' + cid, client: cid, name: 'Travail ' + cid, statut: 'En cours', fees: 500 });
+      state.time.unshift({ id: 'T_' + cid, date: '2026-01-05', user: 'Ruben HAZIZA', client: cid, mission: 'Bilan', hours: 2 });
+      state.invoices.push({ id: 'I_' + cid, client: cid, label: 'Facture test', amount: 1000, date: '2026-01-10' });
+      setTaskMeta27('B|' + cid + '|' + y, 'next', 'Relancer');
+    }
+    state.prospects.push({ id: 'P_TEST2', name: 'PROSPECT TEST', stage: 'Nouveau', owner: 'Ruben HAZIZA', value: 0, relance27: '2020-01-01' });
+    persist25(); return { cid: c.id, keep: keep.id };
+  }, p.id);
+  await settle();
+  const count = cid => page.evaluate(id => JSON.stringify(state).split(id).length - 1, cid);
+  assert.ok(await count(ids.cid) > 8, 'données rattachées au client avant suppression');
+  await page.evaluate(() => nav('prospects'));
+  assert.equal(await page.locator('button.pf27del').count(), 2, 'bouton Supprimer sur chaque prospect');
+  let dialog = '';
+  page.once('dialog', d => { dialog = d.message(); d.dismiss(); });
+  await page.click(`tr:has-text("BOULANGERIE DU TEST") button.pf27del`);
+  assert.ok(/fiche client « BOULANGERIE DU TEST » sera aussi supprimée/.test(dialog), 'confirmation détaillée : ' + dialog);
+  assert.ok(await page.evaluate(id => Boolean(pfind(id)), p.id), 'rien supprimé si on annule');
+  page.once('dialog', d => d.accept());
+  await page.click(`tr:has-text("BOULANGERIE DU TEST") button.pf27del`);
+  await settle();
+  page.once('dialog', d => d.accept());
+  await page.evaluate(() => openProspect('P_TEST2'));
+  await page.click('.modalFooter button:has-text("Supprimer le prospect")');
+  await settle();
+  const left = await page.evaluate(([pid, cid, keep]) => ({ prospects: state.prospects.length, client: state.clients.some(c => c.id === cid), refs: JSON.stringify(state).split(cid).length - 1, pref: JSON.stringify(state).split(pid).length - 1, keep: JSON.stringify(state).split(keep).length - 1, relance: tasks27().some(x => x.src === 'prospect') }), [p.id, ids.cid, ids.keep]);
+  assert.deepEqual([left.prospects, left.client, left.refs, left.pref, left.relance], [0, false, 0, 0, false], 'prospects, client et données rattachées supprimés partout ' + JSON.stringify(left));
+  assert.ok(left.keep > 8, 'les autres clients gardent toutes leurs données');
+  const server = await page.evaluate(async () => (await (await fetch('/api/state')).json()).state);
+  assert.ok(!JSON.stringify(server).includes(ids.cid) && JSON.stringify(server).includes(ids.keep) && server.prospects.length === 0, 'suppression enregistrée sur le serveur');
+  for (const pg of ['onboarding', 'clients', 'fiscal', 'closing', 'legal', 'exceptional', 'billing', 'work', 'time']) await page.evaluate(x => routePage(x), pg);
+
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

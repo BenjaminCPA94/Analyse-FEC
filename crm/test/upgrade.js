@@ -1,7 +1,7 @@
 /* Test de mise à jour : données créées par la version en production (branche main), puis reprises par cette version.
  * Vérifie : comptes conservés (admin reste admin, ancien « user » devient collaborateur), données intactes,
  * sauvegarde « avant mise à jour » prise avant toute écriture et restaurable, ouverture sans erreur JavaScript.
- *   node test/upgrade.js   STORE=redis node test/upgrade.js   (OLD_REF=<commit> pour choisir la version de départ, main par défaut) */
+ *   node test/upgrade.js   STORE=redis node test/upgrade.js   (OLD_REF=<commit> pour choisir la version de départ) */
 'use strict';
 const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -15,7 +15,8 @@ let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'))); }
 const ROOT = path.join(__dirname, '..');
 const PASSWORD = 'motdepasse-test-123';
-const REF = process.env.OLD_REF || (() => { try { execSync('git rev-parse --verify -q origin/main', { cwd: ROOT }); return 'origin/main'; } catch { return 'main'; } })();
+// Version en production avant la mise à jour V27 (déployée le 18/10/2026).
+const REF = process.env.OLD_REF || 'c412d3e';
 
 function run(dir, args, env) { return spawn(process.execPath, [path.join(dir, 'server.js'), ...args], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); }
 function waitFor(proc, text) {

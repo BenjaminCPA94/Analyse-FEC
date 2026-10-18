@@ -6805,7 +6805,7 @@ function backupPanel27(){
  if(!sync27.backups)setTimeout(loadBackups27,0);
  return `<div class="panel"><div class="panelHead"><h2>Sauvegardes serveur</h2><div class="v25actions"><a class="btn small" href="/api/backup">Télécharger une sauvegarde</a><a class="btn small secondary" href="/api/backup?files=1" title="Peut échouer au-delà de 4 Mo sur Vercel">… avec les justificatifs</a><label class="btn small secondary">Restaurer un fichier<input hidden type="file" accept=".json" onchange="restoreFile27(this.files[0]);this.value=''"></label></div></div>
  <div class="panelBody sub">Indépendantes de l’historique des 30 versions : données, comptes, liens et réponses des formulaires de création. Une sauvegarde automatique est faite chaque nuit (14 jours conservés) si la tâche planifiée Vercel et CRON_SECRET sont configurés. Toute restauration affiche d’abord un aperçu ; l’état actuel reste dans l’historique.</div>
- <table><thead><tr><th>Sauvegarde automatique</th><th>Révision</th><th>Clients</th><th></th></tr></thead><tbody>${(sync27.backups||[]).map(b=>`<tr><td>${new Date(b.createdAt).toLocaleString('fr-FR')}</td><td>${b.revision}</td><td>${b.clients}</td><td><button class="btn small secondary" onclick="restore27({date:'${esc(b.date)}'})">Restaurer…</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Aucune sauvegarde automatique pour l’instant.</td></tr>'}</tbody></table></div>`;
+ <table><thead><tr><th>Sauvegarde automatique</th><th>Révision</th><th>Clients</th><th></th></tr></thead><tbody>${(sync27.backups||[]).map(b=>`<tr><td>${new Date(b.createdAt).toLocaleString('fr-FR')}${b.label?` <b>· ${esc(b.label)}</b>`:''}</td><td>${b.revision}</td><td>${b.clients}</td><td><button class="btn small secondary" onclick="restore27({date:'${esc(b.date)}'})">Restaurer…</button></td></tr>`).join('')||'<tr><td colspan="4" class="sub">Aucune sauvegarde automatique pour l’instant.</td></tr>'}</tbody></table></div>`;
 }
 async function restoreFile27(file){if(!file)return;try{const backup=JSON.parse(await file.text());await restore27({backup});}catch(e){alert('Fichier illisible : '+e.message);}}
 async function restore27(src){
@@ -7581,8 +7581,42 @@ prospects=function(){
   row.children[0].insertAdjacentHTML('afterend',`<td>${tempBadge27(p)}</td>`);
   row.children[5].insertAdjacentHTML('afterend',`<td class="${p.relance27&&p.relance27<=today27()&&!['Validé','Refusé'].includes(p.stage)?'bad':''}">${p.relance27?datefr(p.relance27):'—'}</td>`);
   if(p.phone)row.children[3].insertAdjacentHTML('beforeend',`<div class="sub">${esc(p.phone)}</div>`);
-  if(p.form27?.struct)row.children[0].querySelector('.sub').textContent=p.form27.struct;});
+  if(p.form27?.struct)row.children[0].querySelector('.sub').textContent=p.form27.struct;
+  if(perm27('delete'))row.lastElementChild.insertAdjacentHTML('beforeend',` <button class="btn small light pf27del" title="Supprimer le prospect" onclick="event.stopPropagation();deleteProspect27('${id}')">Supprimer</button>`);});
  return box.innerHTML;
+};
+
+/* ---------- Suppression d'un prospect (dossiers de test) ----------
+ * Si le prospect a été validé, la fiche client créée et tout ce qui s'y rattache dans les autres onglets sont retirés :
+ * lignes Bilan / AGO / fiscalité, onboarding, factures, temps, travaux exceptionnels, suivis de tâches, historique… */
+const REF_FIELDS27=['id','client','clientId','cid','prospectId','pid'];
+function scrubIds27(node,ids,dry){
+ let n=0;const hit=v=>typeof v==='string'&&ids.has(v),keyHit=k=>ids.has(k)||k.split('|').some(x=>ids.has(x));
+ const walk=o=>{
+  if(Array.isArray(o)){for(let i=o.length-1;i>=0;i--){const x=o[i];if(hit(x)||(x&&typeof x==='object'&&!Array.isArray(x)&&REF_FIELDS27.some(f=>hit(x[f])))){n++;if(!dry)o.splice(i,1);}else walk(x);}}
+  else if(o&&typeof o==='object'){for(const k of Object.keys(o)){if(keyHit(k)){n++;if(!dry)delete o[k];}else walk(o[k]);}}
+ };
+ walk(node);return n;
+}
+function deleteProspect27(id){
+ const p=pfind(id);if(!p)return;
+ if(!perm27('delete'))return toast('Suppression réservée aux associés et administrateurs.');
+ const c=state.clients.find(x=>x.prospectId===id),ids=new Set([id,'R|'+id].concat(c?[c.id]:[]));
+ const linked=scrubIds27(state,ids,true)-1-(c?1:0);
+ const msg=`Supprimer définitivement le prospect « ${p.name} » ?`+(c?`\n\nIl a été validé : la fiche client « ${c.name} » sera aussi supprimée, avec ${linked} élément(s) rattaché(s) dans les autres onglets (onboarding, fiscalité, Bilan, AGO, factures, temps, travaux…).`:'')+'\n\nUn administrateur peut revenir en arrière depuis les sauvegardes.';
+ if(!confirm(msg))return;
+ if(state.selectedProspect===id)state.selectedProspect='';
+ if(c&&state.selectedClient===c.id)state.selectedClient='';
+ scrubIds27(state,ids,false);
+ log25(c?'Prospect et client supprimés':'Prospect supprimé','',p.name);
+ closeModal();state.page='prospects';persist25();
+ toast(c?`« ${p.name} » supprimé, ainsi que sa fiche client et ses données rattachées`:`Prospect « ${p.name} » supprimé`);
+}
+const previousOpenProspect27c=openProspect;
+openProspect=function(id){
+ previousOpenProspect27c(id);
+ const foot=document.querySelector('.modalFooter');if(!foot||!pfind(id)||!perm27('delete'))return;
+ foot.insertAdjacentHTML('afterbegin',`<button class="btn secondary pf27del" onclick="deleteProspect27('${id}')">Supprimer le prospect</button>`);
 };
 
 /* ---------- Mon travail : relances des prospects ---------- */
@@ -7612,6 +7646,7 @@ if(typeof tasks27==='function'){
 .pf27opt{padding:8px 10px;border-radius:7px;cursor:pointer;display:flex;align-items:center}.pf27opt:hover,.pf27opt.on{background:#eef1fa}.pf27chk{width:18px;font-size:12px}
 .pf27ac{position:relative}.pf27hits{position:absolute;z-index:6;left:0;right:0;top:64px;background:#fff;border:1px solid #e3e7ee;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.12);max-height:260px;overflow:auto}
 .pf27hit{padding:9px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px}.pf27hit:hover{background:#eef1fa}
+.pf27del{color:#b42318}.pf27del:hover{background:#fdecea}
 .pf27head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.pf27head a.badge{text-decoration:none}
 @media(max-width:560px){.pf27 .formGrid{grid-template-columns:1fr}}`;document.head.append(st);})();
 
@@ -7622,7 +7657,7 @@ if(typeof tasks27==='function'){
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px;color:#2b3445;-webkit-font-smoothing:antialiased;background:#f7f8fa}
 h1{font-size:20px;font-weight:650;letter-spacing:-.01em}h2{font-size:15px;font-weight:650}h3{font-size:13.5px;font-weight:650}
 .sub{font-size:11.5px}.titleRow{margin-bottom:14px}
-.brand{font-size:16px;font-weight:700}.navsec{font-size:9.5px;font-weight:700}
+.toast{pointer-events:none}.brand{font-size:16px;font-weight:700}.navsec{font-size:9.5px;font-weight:700}
 .nav a{font-size:12.5px;padding:7px 10px}.nav a:hover,.nav a.active{font-weight:600}
 .btn{font-weight:600;font-size:11.5px;padding:7px 11px;border-radius:6px}.btn.small{padding:5px 8px;font-size:11px}
 .card{padding:11px 14px;border-radius:9px;box-shadow:none}.card small{font-weight:600;font-size:11px}

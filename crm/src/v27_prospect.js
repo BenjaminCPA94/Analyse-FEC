@@ -138,8 +138,42 @@ prospects=function(){
   row.children[0].insertAdjacentHTML('afterend',`<td>${tempBadge27(p)}</td>`);
   row.children[5].insertAdjacentHTML('afterend',`<td class="${p.relance27&&p.relance27<=today27()&&!['Validé','Refusé'].includes(p.stage)?'bad':''}">${p.relance27?datefr(p.relance27):'—'}</td>`);
   if(p.phone)row.children[3].insertAdjacentHTML('beforeend',`<div class="sub">${esc(p.phone)}</div>`);
-  if(p.form27?.struct)row.children[0].querySelector('.sub').textContent=p.form27.struct;});
+  if(p.form27?.struct)row.children[0].querySelector('.sub').textContent=p.form27.struct;
+  if(perm27('delete'))row.lastElementChild.insertAdjacentHTML('beforeend',` <button class="btn small light pf27del" title="Supprimer le prospect" onclick="event.stopPropagation();deleteProspect27('${id}')">Supprimer</button>`);});
  return box.innerHTML;
+};
+
+/* ---------- Suppression d'un prospect (dossiers de test) ----------
+ * Si le prospect a été validé, la fiche client créée et tout ce qui s'y rattache dans les autres onglets sont retirés :
+ * lignes Bilan / AGO / fiscalité, onboarding, factures, temps, travaux exceptionnels, suivis de tâches, historique… */
+const REF_FIELDS27=['id','client','clientId','cid','prospectId','pid'];
+function scrubIds27(node,ids,dry){
+ let n=0;const hit=v=>typeof v==='string'&&ids.has(v),keyHit=k=>ids.has(k)||k.split('|').some(x=>ids.has(x));
+ const walk=o=>{
+  if(Array.isArray(o)){for(let i=o.length-1;i>=0;i--){const x=o[i];if(hit(x)||(x&&typeof x==='object'&&!Array.isArray(x)&&REF_FIELDS27.some(f=>hit(x[f])))){n++;if(!dry)o.splice(i,1);}else walk(x);}}
+  else if(o&&typeof o==='object'){for(const k of Object.keys(o)){if(keyHit(k)){n++;if(!dry)delete o[k];}else walk(o[k]);}}
+ };
+ walk(node);return n;
+}
+function deleteProspect27(id){
+ const p=pfind(id);if(!p)return;
+ if(!perm27('delete'))return toast('Suppression réservée aux associés et administrateurs.');
+ const c=state.clients.find(x=>x.prospectId===id),ids=new Set([id,'R|'+id].concat(c?[c.id]:[]));
+ const linked=scrubIds27(state,ids,true)-1-(c?1:0);
+ const msg=`Supprimer définitivement le prospect « ${p.name} » ?`+(c?`\n\nIl a été validé : la fiche client « ${c.name} » sera aussi supprimée, avec ${linked} élément(s) rattaché(s) dans les autres onglets (onboarding, fiscalité, Bilan, AGO, factures, temps, travaux…).`:'')+'\n\nUn administrateur peut revenir en arrière depuis les sauvegardes.';
+ if(!confirm(msg))return;
+ if(state.selectedProspect===id)state.selectedProspect='';
+ if(c&&state.selectedClient===c.id)state.selectedClient='';
+ scrubIds27(state,ids,false);
+ log25(c?'Prospect et client supprimés':'Prospect supprimé','',p.name);
+ closeModal();state.page='prospects';persist25();
+ toast(c?`« ${p.name} » supprimé, ainsi que sa fiche client et ses données rattachées`:`Prospect « ${p.name} » supprimé`);
+}
+const previousOpenProspect27c=openProspect;
+openProspect=function(id){
+ previousOpenProspect27c(id);
+ const foot=document.querySelector('.modalFooter');if(!foot||!pfind(id)||!perm27('delete'))return;
+ foot.insertAdjacentHTML('afterbegin',`<button class="btn secondary pf27del" onclick="deleteProspect27('${id}')">Supprimer le prospect</button>`);
 };
 
 /* ---------- Mon travail : relances des prospects ---------- */
@@ -169,5 +203,6 @@ if(typeof tasks27==='function'){
 .pf27opt{padding:8px 10px;border-radius:7px;cursor:pointer;display:flex;align-items:center}.pf27opt:hover,.pf27opt.on{background:#eef1fa}.pf27chk{width:18px;font-size:12px}
 .pf27ac{position:relative}.pf27hits{position:absolute;z-index:6;left:0;right:0;top:64px;background:#fff;border:1px solid #e3e7ee;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.12);max-height:260px;overflow:auto}
 .pf27hit{padding:9px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px}.pf27hit:hover{background:#eef1fa}
+.pf27del{color:#b42318}.pf27del:hover{background:#fdecea}
 .pf27head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.pf27head a.badge{text-decoration:none}
 @media(max-width:560px){.pf27 .formGrid{grid-template-columns:1fr}}`;document.head.append(st);})();

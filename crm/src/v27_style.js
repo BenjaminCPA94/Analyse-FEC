@@ -3,7 +3,7 @@
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px;color:#2b3445;-webkit-font-smoothing:antialiased;background:#f7f8fa}
 h1{font-size:20px;font-weight:650;letter-spacing:-.01em}h2{font-size:15px;font-weight:650}h3{font-size:13.5px;font-weight:650}
 .sub{font-size:11.5px}.titleRow{margin-bottom:14px}
-.brand{font-size:16px;font-weight:700}.navsec{font-size:9.5px;font-weight:700}
+.toast{pointer-events:none}.brand{font-size:16px;font-weight:700}.navsec{font-size:9.5px;font-weight:700}
 .nav a{font-size:12.5px;padding:7px 10px}.nav a:hover,.nav a.active{font-weight:600}
 .btn{font-weight:600;font-size:11.5px;padding:7px 11px;border-radius:6px}.btn.small{padding:5px 8px;font-size:11px}
 .card{padding:11px 14px;border-radius:9px;box-shadow:none}.card small{font-weight:600;font-size:11px}
