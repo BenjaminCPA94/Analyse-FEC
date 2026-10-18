@@ -445,6 +445,24 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
   }
   /* Instantané : état partagé, comptes (empreintes de mot de passe), liens et réponses de création ;
    * contenus des justificatifs seulement sur demande (taille). */
+  /* Sauvegarde « avant mise à jour » : prise une seule fois, avant la première lecture ou écriture des données
+   * par cette version (les écrans peuvent ajuster d'anciens statuts à l'ouverture). Jamais supprimée par la rotation. */
+  const PRE_KEY = 'backup:avant-v27';
+  let preDone = null;
+  async function preUpdateBackup() {
+    if (!preDone) preDone = (async () => {
+      if (await store.kvGet(PRE_KEY + ':fait')) return;
+      const cur = await store.getShared();
+      if (cur.state) {
+        const b = await snapshot(false);
+        b.label = 'Avant la mise à jour V27';
+        await store.kvSet(PRE_KEY, b);
+        await audit({ username: 'mise à jour', role: 'système' }, 'sauvegarde avant mise à jour', { revision: b.shared.revision, clients: b.shared.state?.clients?.length || 0 });
+      }
+      await store.kvSet(PRE_KEY + ':fait', { at: new Date().toISOString() });
+    })().catch(e => { preDone = null; throw e; });
+    return preDone;
+  }
   async function snapshot(withFiles) {
     const shared = await store.getShared(), tokens = (shared.state?.creation27?.items || []).map(i => i.token).filter(t => TOKEN_RE.test(String(t || '')));
     const creation = { links: [], subs: [], indexes: [], files: [] };
@@ -510,11 +528,13 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
     'POST /api/logout': async (req, res) => send(res, 200, { ok: true }, { 'Set-Cookie': cookie(req, '', 0) }),
     'GET /api/session': async (req, res, s) => send(res, 200, s),
     'GET /api/state': async (req, res, s) => {
+      await preUpdateBackup();
       const shared = await store.getShared();
       send(res, 200, s.perms.costs ? shared : { ...shared, state: guard.hideCosts(shared.state) });
     },
     /* Enregistrement complet (ancien mode, toujours accepté). */
     'PUT /api/state': async (req, res, s) => {
+      await preUpdateBackup();
       const body = await readBody(req), expected = Number(body.revision);
       const cur = await store.getShared();
       if (cur.revision !== expected) return send(res, 409, { error: `Les données ont été modifiées par ${cur.updatedBy || 'un autre utilisateur'}.`, updatedBy: cur.updatedBy, revision: cur.revision });
@@ -525,6 +545,7 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
      * Si quelqu'un a enregistré entre-temps, les modifications sont appliquées sur sa version à condition qu'il n'ait
      * pas touché aux mêmes éléments ; sinon, conflit (le navigateur fusionne et affiche les écarts). */
     'PATCH /api/state': async (req, res, s) => {
+      await preUpdateBackup();
       const body = await readBody(req), base = Number(body.baseRevision), ops = body.ops;
       if (!Array.isArray(ops) || ops.length > 20000 || !ops.every(validOp)) return send(res, 400, { error: 'Modifications invalides' });
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -776,11 +797,16 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
       await audit(s, 'sauvegarde téléchargée', { files: b.creation.files.length, withData: url.searchParams.get('files') === '1' });
       send(res, 200, b, { 'Content-Disposition': `attachment; filename="RB_Partners_sauvegarde_${b.createdAt.slice(0, 10)}.json"` });
     },
-    'GET /api/backups': async (req, res, s) => { need(s, 'backup'); send(res, 200, { items: (await store.kvGet('backup:index')) || [] }); },
+    'GET /api/backups': async (req, res, s) => {
+      need(s, 'backup');
+      const items = (await store.kvGet('backup:index')) || [], pre = await store.kvGet(PRE_KEY);
+      if (pre) items.push({ date: 'avant-v27', label: pre.label, createdAt: pre.createdAt, revision: pre.shared.revision, clients: pre.shared.state?.clients?.length || 0 });
+      send(res, 200, { items });
+    },
     'POST /api/restore': async (req, res, s) => {
       need(s, 'backup', 'Restauration réservée aux administrateurs.');
       const b = await readBody(req, 30 * 1024 * 1024);
-      const backup = b.date ? await store.kvGet('backup:' + String(b.date).replace(/[^0-9-]/g, '')) : b.backup;
+      const backup = b.date ? await store.kvGet('backup:' + String(b.date).replace(/[^0-9a-z-]/g, '')) : b.backup;
       if (!backup || backup.format !== 'RB27-backup' || !validState(backup.shared?.state)) throw httpError(400, 'Sauvegarde invalide ou introuvable.');
       const cur = await store.getShared(), count = st => ({ clients: st?.clients?.length || 0, prospects: st?.prospects?.length || 0, factures: (st?.invoices || []).filter(i => i.source !== 'pennylane').length, temps: st?.time?.length || 0, creations: st?.creation27?.items?.length || 0 });
       const preview = { backupDate: backup.createdAt, current: count(cur.state), backup: count(backup.shared.state), users: (backup.users || []).length, creationLinks: backup.creation?.links?.length || 0, files: backup.creation?.files?.length || 0, filesWithData: (backup.creation?.files || []).filter(f => f.data).length };
