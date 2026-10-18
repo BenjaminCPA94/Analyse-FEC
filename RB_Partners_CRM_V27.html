@@ -7598,19 +7598,52 @@ function scrubIds27(node,ids,dry){
  };
  walk(node);return n;
 }
-function deleteProspect27(id){
- const p=pfind(id);if(!p)return;
+function deleteProspect27(id,cid){
+ const p=id?pfind(id):null,c=p?state.clients.find(x=>x.prospectId===id):cfind(cid);if(!p&&!c)return;
  if(!perm27('delete'))return toast('Suppression réservée aux associés et administrateurs.');
- const c=state.clients.find(x=>x.prospectId===id),ids=new Set([id,'R|'+id].concat(c?[c.id]:[]));
- const linked=scrubIds27(state,ids,true)-1-(c?1:0);
- const msg=`Supprimer définitivement le prospect « ${p.name} » ?`+(c?`\n\nIl a été validé : la fiche client « ${c.name} » sera aussi supprimée, avec ${linked} élément(s) rattaché(s) dans les autres onglets (onboarding, fiscalité, Bilan, AGO, factures, temps, travaux…).`:'')+'\n\nUn administrateur peut revenir en arrière depuis les sauvegardes.';
+ const ids=new Set(p?[id,'R|'+id]:[]);if(c)ids.add(c.id);
+ // Dossier de la matrice création rattaché au client : supprimé avec lui.
+ const cr=c&&(state.creation27?.items||[]).filter(it=>it.client===c.id);
+ const linked=scrubIds27(state,ids,true)-(p?1:0)-(c?1:0);
+ const name=p?.name||c.name;
+ const msg=(p?`Supprimer définitivement le prospect « ${name} » ?`:`Supprimer définitivement le dossier « ${name} » ?`)+(c?`\n\n${p?'Il a été validé : l':'L'}a fiche client « ${c.name} » sera ${p?'aussi ':''}supprimée, avec ${linked} élément(s) rattaché(s) dans les autres onglets (onboarding, fiscalité, Bilan, AGO, factures, temps, travaux${cr?.length?', matrice création':''}…).`:'')+'\n\nUn administrateur peut revenir en arrière depuis les sauvegardes.';
  if(!confirm(msg))return;
- if(state.selectedProspect===id)state.selectedProspect='';
+ if(p&&state.selectedProspect===id)state.selectedProspect='';
  if(c&&state.selectedClient===c.id)state.selectedClient='';
  scrubIds27(state,ids,false);
- log25(c?'Prospect et client supprimés':'Prospect supprimé','',p.name);
+ log25(p&&c?'Prospect et client supprimés':p?'Prospect supprimé':'Dossier client supprimé','',name);
  closeModal();state.page='prospects';persist25();
- toast(c?`« ${p.name} » supprimé, ainsi que sa fiche client et ses données rattachées`:`Prospect « ${p.name} » supprimé`);
+ toast(c?`« ${name} » supprimé, ainsi que sa fiche client et ses données rattachées`:`Prospect « ${name} » supprimé`);
+}
+function deleteClient27(cid){deleteProspect27(cfind(cid)?.prospectId&&pfind(cfind(cid).prospectId)?cfind(cid).prospectId:'',cid);}
+
+/* Dossiers en onboarding ajoutés directement (SIREN, import, Pennylane) : visibles dans Prospects comme « Validé »,
+ * sans créer de prospect (aucune écriture à l'affichage). */
+function directOnb27(){return state.clients.filter(c=>isOnboarding27(c)&&!(c.prospectId&&pfind(c.prospectId)));}
+const previousProspectsPage27b=prospects;
+prospects=function(){
+ const html=previousProspectsPage27b(),f=state.prospectFilter||'Tous',list=directOnb27();
+ if(!list.length||!['Tous','Validé'].includes(f))return html;
+ const box=document.createElement('div');box.innerHTML=html;const body=box.querySelector('tbody');if(!body)return html;
+ box.querySelectorAll('.panelBody.sub').forEach(e=>{if(/Aucun prospect/.test(e.textContent))e.remove();});
+ body.insertAdjacentHTML('beforeend',list.map(c=>`<tr class="clickable pf27direct" onclick="openClient('${c.id}')"><td><b>${esc(c.name)}</b><div class="sub">Ajouté directement en onboarding</div></td><td><span class="sub">—</span></td><td><span class="badge green">Validé</span></td><td>${esc(c.contact?.name||'—')}<div class="sub">${esc(c.contact?.email||'')}</div></td><td>${euro(c.annualFees||0)}</td><td>—</td><td>—</td><td>Onboarding</td><td>${esc(people27(c,'manager')||c.manager||'')}</td><td><button class="btn small light" onclick="event.stopPropagation();openClient('${c.id}')">Ouvrir</button>${perm27('delete')?` <button class="btn small light pf27del" title="Supprimer le dossier" onclick="event.stopPropagation();deleteClient27('${c.id}')">Supprimer</button>`:''}</td></tr>`).join(''));
+ return box.innerHTML;
+};
+
+/* Matrice création : dossiers en onboarding sans SIREN (société probablement en cours de création) à rattacher. */
+function crCandidates27(){const linked=new Set((state.creation27?.items||[]).map(it=>it.client).filter(Boolean));return state.clients.filter(c=>isOnboarding27(c)&&!String(c.siren||'').trim()&&!linked.has(c.id));}
+function crFromClient27(cid){
+ const c=cfind(cid);if(!c)return;const lf=c.legalForm&&c.legalForm!=='À confirmer'?c.legalForm:'';
+ const it={id:uid('CR'),name:c.name,legalForm:lf,contactName:c.contact?.name||'',contactEmail:c.contact?.email||'',deadline:'',fees:0,fields:{denomination:c.name,...(lf?{legalForm:lf}:{})},files:[],createdAt:new Date().toISOString(),owner:state.currentUser||'',client:c.id};
+ creation27().items.push(it);c.creation27=it.id;log25('Matrice création : dossier ajouté depuis l’onboarding',c.id,c.name);persist25();
+ toast(`« ${c.name} » ajouté à la matrice création. Tu peux maintenant envoyer le formulaire au client.`);
+}
+if(typeof creationPage27==='function'){
+ const previousCreationPage27=creationPage27;
+ creationPage27=function(){
+  const html=previousCreationPage27(),list=crCandidates27();if(!list.length)return html;
+  return `<div class="panel panelBody pf27cand"><h3 style="margin:0 0 4px">Dossiers en onboarding sans SIREN · ${list.length}</h3><div class="sub" style="margin-bottom:8px">Ces dossiers ont été ajoutés directement en onboarding. S’il s’agit de créations de société, ajoute-les à la matrice pour suivre la création et envoyer le formulaire au client.</div>${list.map(c=>`<div class="kpiLine"><span><b>${esc(c.name)}</b> <span class="sub">${esc(c.contact?.name||'')}</span></span><span><button class="btn small" onclick="crFromClient27('${c.id}')">Ajouter à la matrice</button> <button class="btn small light" onclick="openClient('${c.id}')">Ouvrir</button></span></div>`).join('')}</div>`+html;
+ };
 }
 const previousOpenProspect27c=openProspect;
 openProspect=function(id){

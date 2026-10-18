@@ -107,7 +107,7 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   // Suppression : prospect validé (fiche client et données des autres onglets) et prospect simple.
   const ids = await page.evaluate(pid => {
     const c = state.clients.find(x => x.prospectId === pid), y = new Date().getFullYear();
-    const keep = newClient26({ name: 'CLIENT À GARDER', siren: '552100554', legalForm: 'SAS', contact: '', email: '' }); state.clients.push(keep); regenerateAll(state, keep.id);
+    const keep = newClient26({ name: 'CLIENT À GARDER', siren: '552100554', legalForm: 'SAS', contact: '', email: '' }); keep.status = 'Actif'; state.clients.push(keep); regenerateAll(state, keep.id);
     for (const cid of [c.id, keep.id]) {
       row27('bilan', cid, y, true).etat = '2. En cours'; row27('ago', cid, y, true).statut = 'En cours';
       exc27().items.push({ id: 'EX_' + cid, client: cid, name: 'Travail ' + cid, statut: 'En cours', fees: 500 });
@@ -142,7 +142,32 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   assert.ok(!JSON.stringify(server).includes(ids.cid) && JSON.stringify(server).includes(ids.keep) && server.prospects.length === 0, 'suppression enregistrée sur le serveur');
   for (const pg of ['onboarding', 'clients', 'fiscal', 'closing', 'legal', 'exceptional', 'billing', 'work', 'time']) await page.evaluate(x => routePage(x), pg);
 
+  // Dossiers ajoutés directement en onboarding : visibles dans Prospects et proposés à la matrice création.
+  const direct = await page.evaluate(() => {
+    const a = newClient26({ name: 'ONBOARDING DIRECT', siren: '', legalForm: 'SAS', contact: 'Paul Test', email: 'p@test.fr' });
+    const b = newClient26({ name: 'ONBOARDING AVEC SIREN', siren: '732829320', legalForm: 'SAS', contact: '', email: '' });
+    state.clients.push(a, b); regenerateAll(state, a.id); regenerateAll(state, b.id); persist25(); nav('prospects');
+    const rows = [...document.querySelectorAll('tr.pf27direct')].map(r => r.children[0].textContent);
+    setProspectFilter('Nouveau'); const hidden = document.querySelectorAll('tr.pf27direct').length; setProspectFilter('Tous');
+    return { a: a.id, b: b.id, rows, hidden };
+  });
+  await settle();
+  assert.deepEqual([direct.rows.length, direct.hidden], [2, 0], 'dossiers d’onboarding visibles dans Prospects (Validé) ' + JSON.stringify(direct.rows));
+  assert.ok(direct.rows[0].includes('Ajouté directement en onboarding'));
+  await page.evaluate(() => routePage('creation'));
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.pf27cand .kpiLine b')].map(b => b.textContent)), ['ONBOARDING DIRECT'], 'seul le dossier sans SIREN est proposé à la matrice');
+  await page.click('.pf27cand button:has-text("Ajouter à la matrice")');
+  await settle();
+  const cr = await page.evaluate(cid => { const it = creation27().items.find(x => x.client === cid); return it && [it.name, it.contactEmail, cfind(cid).creation27 === it.id, document.querySelectorAll('.pf27cand').length]; }, direct.a);
+  assert.deepEqual(cr, ['ONBOARDING DIRECT', 'p@test.fr', true, 0], 'dossier ajouté à la matrice et relié au client');
+  await page.evaluate(() => nav('prospects'));
+  page.once('dialog', d => d.accept());
+  await page.click('tr.pf27direct:has-text("ONBOARDING DIRECT") button.pf27del');
+  await settle();
+  const gone = await page.evaluate(([a, b]) => [Boolean(cfind(a)), creation27().items.some(x => x.client === a), JSON.stringify(state).includes(a), Boolean(cfind(b))], [direct.a, direct.b]);
+  assert.deepEqual(gone, [false, false, false, true], 'dossier direct supprimé partout, y compris dans la matrice ; l’autre reste');
+
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });
