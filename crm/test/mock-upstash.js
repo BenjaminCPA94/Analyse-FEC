@@ -23,6 +23,7 @@ function start(token = 'upstash-token') {
       case 'EXPIRE': if (!alive(a[0])) return 0; exp.set(a[0], Date.now() + Number(a[1]) * 1000); return 1;
       case 'LPUSH': { const l = get(a[0]) || []; l.unshift(...a.slice(1).reverse()); kv.set(a[0], l); return l.length; }
       case 'LTRIM': { const l = get(a[0]) || []; kv.set(a[0], l.slice(Number(a[1]), Number(a[2]) + 1)); return 'OK'; }
+      case 'LINDEX': { const l = get(a[0]) || []; return l[Number(a[1])] ?? null; }
       case 'LLEN': return (get(a[0]) || []).length;
       case 'LRANGE': { const l = get(a[0]) || [], e = Number(a[2]); return l.slice(Number(a[1]), e < 0 ? l.length + e + 1 : e + 1); }
       default: throw new Error('ERR unknown command ' + cmd);

@@ -4616,7 +4616,7 @@ const BILAN_ETATS27=['1. A faire','2. En cours','3. A revoir par Manager','4. A 
 const AGO_STATUTS27=['1. A faire','2. A revoir par Manager','3. A revoir par Associés','4. A envoyer au client','5. Déposé au Greffe','6. En attente client','7. Validé par le greffe','En attente Greffe','En attente validation greffe','A définir','N.A'];
 const OUINON27=['Oui','Non'];
 const TVA27=['Mensuelle','Trimestrielle','Annuelle','Non assujetti','Exonéré','Franchise en base'];
-const STATUT_CLIENT27=['Actif',"En cours d'onboarding",'Dossier compromis','Inactif','Autres dossiers'];
+const STATUT_CLIENT27=['À qualifier','Actif',"En cours d'onboarding",'Dossier compromis','Inactif','Autres dossiers'];
 
 function color27(v){
  v=String(v??'');
@@ -4713,7 +4713,7 @@ const AGO_COLS27=[
  rowCol27('annexe',"Type d'annexe",'status','Annexe simplifiée',['Annexe simplifiée','Annexe abrégée','Annexe complète','Dispense (micro)']),
  rowCol27('lancerFact','Lancer facturation','status','-',['Oui','Non','-']),
  clientCol27('honoAgo','Honoraires','num',c=>fees27(c).legalAnnual||0,(c,v)=>{fees27(c).legalAnnual=Number(v||0);syncFees27(c);}),
- clientCol27('statutClient','Statut client','status',c=>({Actif:'Actif',Onboarding:"En cours d'onboarding",Compromis:'Dossier compromis','Dossier compromis':'Dossier compromis',Inactif:'Inactif',Autres:'Autres dossiers'})[c.status]||'',(c,v)=>{c.status={"En cours d'onboarding":'Onboarding','Dossier compromis':'Compromis','Autres dossiers':'Autres'}[v]||v;},STATUT_CLIENT27,150),
+ clientCol27('statutClient','Statut client','status',c=>({'À qualifier':'À qualifier',Actif:'Actif',Onboarding:"En cours d'onboarding",Compromis:'Dossier compromis','Dossier compromis':'Dossier compromis',Inactif:'Inactif',Autres:'Autres dossiers'})[c.status]||'',(c,v)=>{c.status={"En cours d'onboarding":'Onboarding','Dossier compromis':'Compromis','Autres dossiers':'Autres'}[v]||v;},STATUT_CLIENT27,150),
  {k:'factPL',label:'Facturation (Pennylane)',t:'auto',w:150,get:x=>x.invJ?x.invJ.number||'Facturé':''},
 ];
 const COLS27={bilan:BILAN_COLS27,ago:AGO_COLS27};
@@ -4862,6 +4862,39 @@ async function readXlsx27(file){
  return Array.from(rows,r=>r||[]);
 }
 const HEAD27={'name':'name','associe':'associe','manager':'manager','collaborateur':'collab','collaborateurs':'collab','groupe':'groupe','groupe#2':'statutClient','cloture':'cloture','date de cloture':'cloture','echeance':'echeance','siren':'siren','etat dossier':'etat','regime fiscal':'regimeFiscal','regime tva':'tva','solde is':'soldeIS','solde cvae':'cvae','solde ca12':'ca12','das 2':'das2','liasse fiscale':'liasse','decloyer':'decloyer','lancer facturation':'lancerFact','honoraires annuels':'honoAnnuels','honoraires bilans':'honoBilan','forme juridique':'forme','miroir':'miroir','is/crl':'isCrl','acompte 1':'ac1','acompte 2':'ac2','acompte 3':'ac3','acompte 4':'ac4','formule':'formule','rl 10 %':'rl','dividendes ou ran':'affectation','statut ago':'statut','facturation':'factLink',"type d'annexe":'annexe','honoraires':'honoAgo'};
+/* ---------- Identité client : règles communes à tous les imports ---------- */
+/* SIREN : 9 chiffres (un SIRET de 14 chiffres est ramené à son SIREN) et clé de contrôle (Luhn) valide. */
+function sirenOf27(v){const d=String(v??'').replace(/\D/g,'');return d.length===14?d.slice(0,9):d.length===9?d:'';}
+function sirenValid27(s){if(!/^\d{9}$/.test(s))return false;let t=0;for(let i=0;i<9;i++){let n=Number(s[8-i]);if(i%2){n*=2;if(n>9)n-=9;}t+=n;}return t%10===0;}
+/* Nom strict : casse, accents et ponctuation ignorés, mais forme juridique et mots conservés (« SCI DUPONT » ≠ « DUPONT SAS »). */
+function nameKey27(n){return String(n||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' ET ').replace(/[^A-Z0-9]/g,'');}
+const importRun27={on:false,issues:[],decisions:{}};
+function importIssue27(type,row,msg,extra){if(importRun27.on)importRun27.issues.push({type,row,msg,...(extra||{})});}
+/* Rapprochement d'une ligne importée avec un client existant.
+ *  - SIREN valide connu : ce client ;
+ *  - sinon, même nom strict : uniquement s'il n'y a pas deux SIREN renseignés différents, et un seul candidat ;
+ *  - nom voisin (forme juridique retirée) ou plusieurs candidats : rapprochement ambigu, ligne mise de côté
+ *    tant qu'aucune décision n'est prise dans l'aperçu (rattacher, créer ou ignorer).
+ * Renvoie {c} (client trouvé ou null = à créer) ou {skip:true}. */
+function matchClient27(name,sirenRaw){
+ const raw=String(sirenRaw??'').trim(),s=sirenOf27(raw),key=nameKey27(name)+'|'+s,dec=importRun27.decisions[key];
+ if(raw&&!s)importIssue27('erreur',name,`SIREN illisible « ${raw} » : ignoré`);
+ else if(s&&!sirenValid27(s))importIssue27('erreur',name,`SIREN ${s} invalide (clé de contrôle) : vérifie-le`);
+ if(dec==='ignore'){importIssue27('ignorée',name,'Ligne ignorée (décision)');return {skip:true};}
+ if(dec==='new')return {c:null,siren:s};
+ if(dec&&dec.startsWith('C:')){const c=cfind(dec.slice(2));if(c)return {c,siren:s};}
+ if(s){const hits=state.clients.filter(c=>sirenOf27(c.siren)===s);if(hits.length===1)return {c:hits[0],siren:s};if(hits.length>1){importIssue27('ambigu',name,`${hits.length} clients ont le SIREN ${s}`,{key,candidates:hits.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}}
+ const same=state.clients.filter(c=>nameKey27(c.name)===nameKey27(name));
+ const compatible=same.filter(c=>!s||!sirenOf27(c.siren)||sirenOf27(c.siren)===s);
+ if(same.length&&!compatible.length){importIssue27('info',name,`Même nom que « ${same[0].name} » mais SIREN différent (${sirenOf27(same[0].siren)} ≠ ${s}) : sociétés distinctes, nouvelle fiche`);return {c:null,siren:s};}
+ if(compatible.length===1)return {c:compatible[0],siren:s};
+ if(compatible.length>1){importIssue27('ambigu',name,`${compatible.length} clients portent ce nom`,{key,candidates:compatible.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}
+ const loose=state.clients.filter(c=>norm27(c.name)===norm27(name)&&(!s||!sirenOf27(c.siren)||sirenOf27(c.siren)===s));
+ if(loose.length){importIssue27('ambigu',name,`Nom proche de ${loose.map(c=>'« '+c.name+' »').join(', ')} : même société ?`,{key,candidates:loose.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}
+ return {c:null,siren:s};
+}
+/* Client créé par un import : jamais « actif » par défaut, il est à qualifier. */
+function importNewClient27(name,siren,extra){const c=newClient26({name,siren:siren||'',legalForm:extra?.legalForm||'',contact:extra?.contact||'',email:''});c.entry='';c.status='À qualifier';c.importReview27=true;state.clients.push(c);return c;}
 const normHead27=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[’`]/g,"'").replace(/\s+/g,' ').trim();
 async function importBoard27(file){
  if(!file)return;
@@ -4881,8 +4914,9 @@ async function importBoard27(file){
  for(const r of data){
   const v={};keys.forEach((k,i)=>{if(k&&r[i]!=null&&r[i]!=='')v[k]=r[i];});
   const name=String(v.name).trim(),siren=String(v.siren||'').replace(/\D/g,'');
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren,{legalForm:v.forme});created++;}else updated++;
   const x=ctx27(kind,c,year),row=x.row(true);
   for(const col of COLS27[kind]){
    if(col.t==='auto'||v[col.k]==null)continue;
@@ -4892,7 +4926,7 @@ async function importBoard27(file){
    else if(col.t==='num')val=Number(String(val).replace(',','.'))||0;
    else if(col.k==='cloture'){const m=String(val).match(/^(\d{1,2})\/(\d{1,2})/);if(!m)continue;val=m[1]+'/'+m[2];}
    else val=String(val).trim();
-   if(col.k==='siren'&&String(val).replace(/\D/g,'').length!==9)continue;
+   if(col.k==='siren'){val=sirenOf27(val);if(!val||(sirenOf27(c.siren)&&sirenOf27(c.siren)!==val))continue;}
    col.set(x,val);
   }
   // Colonne « Facturation » renseignée dans l'export : le dossier a déjà été facturé.
@@ -5067,7 +5101,7 @@ const ONB_COLS27=[
 COLS27.portfolio=PF_COLS27;COLS27.onb=ONB_COLS27;
 const FISCAL_KEYS27=['regimeFiscal','tva','cloture','associe','manager','collab',...MISSIONS27.map(([k])=>'m_'+k)];
 KINDS27.portfolio={label:'Portefeuille',
- group:x=>isOnboarding27(x.c)?"En cours d'onboarding":['Inactif','Compromis','Autres'].includes(x.c.status)?'Inactifs, compromis et autres':'Actifs',
+ group:x=>x.c.status==='À qualifier'?'À qualifier (créés par import)':isOnboarding27(x.c)?"En cours d'onboarding":['Inactif','Compromis','Autres'].includes(x.c.status)?'Inactifs, compromis et autres':'Actifs',
  afterSet:(x,k)=>{if(FISCAL_KEYS27.includes(k))regenerateAll(state,x.c.id,true);},
  rerender:['statutClient','entry',...MISSIONS27.map(([k])=>'m_'+k),'honoCourants','honoBilan','honoAgo','honoAutres','ldm','groupe']};
 KINDS27.onb={label:'Onboarding',
@@ -5079,14 +5113,14 @@ KINDS27.onb={label:'Onboarding',
   if(p.done===p.total&&isOnboarding27(x.c))toast(x.c.name+' : toutes les étapes sont faites, tu peux valider l’onboarding');
  },
  rerender:['entry','deadline','ldm',...ONB_STEPS27.map((_,i)=>'s'+i)]};
-const PF_GROUPS27={order:["En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
+const PF_GROUPS27={order:['À qualifier (créés par import)',"En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{'À qualifier (créés par import)':C27.red,"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
 const ONB_GROUPS27={order:['Prêts à valider','Bloqués','En cours'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à valider':C27.green},
  nameExtra:x=>`<button class="btn small light" onclick="letterDialog26('${x.c.id}')" title="Préparer la lettre de mission">LDM</button>`,
  empty:'Aucun client en onboarding. Un prospect validé arrive ici automatiquement, avec ses missions et ses honoraires.'};
 
 /* ---------- Pages ---------- */
 function portfolioPage27(){
- const all=state.clients.map(c=>ctx27('portfolio',c,0)),act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres'].includes(c.status));
+ const all=state.clients.map(c=>ctx27('portfolio',c,0)),act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres','À qualifier'].includes(c.status));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  return `<div class="titleRow"><div><h1>Portefeuille clients</h1><div class="sub">Une ligne par client. Ce qui est saisi ici alimente automatiquement l’onboarding, la fiscalité, les tableaux Bilan et AGO et le contrôle des honoraires.</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button>
@@ -5199,13 +5233,14 @@ function importPortfolio27(rows,hi){
  for(const it of items){
   const v={};keys.forEach((k,i)=>{if(k&&it.row[i]!=null&&it.row[i]!=='')v[k]=it.row[i];});
   const name=String(it.row[0]).trim(),siren=String(v.siren||'').replace(/\D/g,'').slice(0,9);
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:v.contact||'',email:''});state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren,{legalForm:v.forme,contact:v.contact});created++;}else updated++;
   if(!c.missions)c.missions={};
   const x=ctx27('portfolio',c,0),set=(k,val)=>{const col=PF_COLS27.find(z=>z.k===k);if(col&&col.set)col.set(x,val);};
   if(v.entry)c.entry=date(v.entry);
   ['associe','manager','collab'].forEach(k=>{if(v[k])set(k,uniqNames27(v[k]));});
-  if(siren.length===9)c.siren=siren;
+  if(m.siren&&!sirenOf27(c.siren))c.siren=m.siren;
   if(v.forme)c.legalForm=String(v.forme);
   if(v.groupe)c.group27=String(v.groupe);
   if(v.typologie)c.typologie27=String(v.typologie);
@@ -5219,7 +5254,8 @@ function importPortfolio27(rows,hi){
   ['honoCourants','honoBilan','honoAgo'].forEach(k=>{if(v[k]!=null)set(k,Number(v[k])||0);});
   if(c.missions.accounting==null&&Number(v.honoCourants)>0)c.missions.accounting=true;
   const onbGroup=/onboarding/i.test(it.group)||String(v.onbStatut||'')==='En cours';
-  c.status=onbGroup?'Onboarding':String(v.actif||'')==='Inactif'?'Inactif':/inactif/i.test(it.group)?'Inactif':'Actif';
+  // Statut repris seulement s'il est explicite dans le fichier (colonne ou groupe) ; sinon inchangé (« À qualifier » pour un nouveau client).
+  const actif=String(v.actif||'');c.status=onbGroup?'Onboarding':actif==='Inactif'||/inactif/i.test(it.group||'')?'Inactif':/^actif/i.test(actif)||/^actifs?$/i.test(String(it.group||'').trim())?'Actif':c.status;
   if(v.deadline)c.onbDeadline27=date(v.deadline);
   for(const s of it.steps){
    const i=ONB_STEPS27.findIndex(([full])=>normHead27(full).slice(0,22)===normHead27(s.name).slice(0,22));
@@ -5397,7 +5433,7 @@ const FISC_MAIN_COLS27=[
  {k:'oblig',label:'Échéances / an',t:'auto',w:105,get:x=>obligations27(x.c,fiscView27().fiscYear).length},
 ];
 COLS27.fisc=FISC_MAIN_COLS27;
-KINDS27.fisc={label:'Fiscalité',group:x=>x.c.status==='Inactif'?'Inactifs':x.c.status==='Compromis'?'Compromis':isOnboarding27(x.c)?"En cours d'onboarding":'Actifs',
+KINDS27.fisc={label:'Fiscalité',group:x=>x.c.status==='À qualifier'?'À qualifier':x.c.status==='Inactif'?'Inactifs':x.c.status==='Compromis'?'Compromis':isOnboarding27(x.c)?"En cours d'onboarding":'Actifs',
  afterSet:(x,k)=>{if(k==='tva'||k==='regimeFiscal')regenerateAll(state,x.c.id,true);},
  rerender:['tva','f_tvaDay','f_debdes','f_ts','f_acIS','f_tvs','f_ifu','f_cfe','f_cvae','f_crl','f_tf','statutClient','regimeFiscal']};
 
@@ -5432,7 +5468,7 @@ function fiscalPage27(){
   const ctxs=clients.map(c=>ctx27('fisc',c,0));
   return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients suivis</small><span class="big">${clients.length}</span></div><div class="card"><small>TVA mensuelle</small><span class="big">${clients.filter(c=>c.vatRegime==='Mensuelle').length}</span></div><div class="card"><small>Acomptes d’IS</small><span class="big">${clients.filter(c=>fisc27(c).acIS==='Oui').length}</span></div><div class="card"><small>Régimes à définir</small><span class="big warn">${clients.filter(c=>!TVA27.includes(c.vatRegime)).length}</span></div></div>
   ${filtersHtml27('<span class="sub">Un client apparaît ici dès que la mission « Fiscalité FR » est cochée dans le portefeuille.</span>')}
-  ${groupsHtml27('fisc',filterCtx27(ctxs),0,{order:['Actifs',"En cours d'onboarding",'Compromis','Inactifs'],colors:{'Actifs':C27.green,"En cours d'onboarding":C27.orange,'Compromis':C27.red,'Inactifs':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>'',empty:'Aucun client avec la mission « Fiscalité FR ». Coche-la dans le portefeuille ou importe ton fichier Fiscalité.'})}`;
+  ${groupsHtml27('fisc',filterCtx27(ctxs),0,{order:['À qualifier','Actifs',"En cours d'onboarding",'Compromis','Inactifs'],colors:{'À qualifier':C27.red,'Actifs':C27.green,"En cours d'onboarding":C27.orange,'Compromis':C27.red,'Inactifs':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>'',empty:'Aucun client avec la mission « Fiscalité FR ». Coche-la dans le portefeuille ou importe ton fichier Fiscalité.'})}`;
  }
  const concerned=clients.filter(c=>c.status!=='Inactif'&&obligations27(c,y).some(o=>inView27(o,view)));
  COLS27.fiscm=fiscMonthCols27(view,concerned,y);
@@ -5466,13 +5502,14 @@ function importFiscal27(rows,hi,file){
   const v={},st={};
   heads.forEach((h,i)=>{const val=r[i];if(val==null||val==='')return;if(/^cfe \d{4}$/.test(h))v.cfeN1=val;else if(h==='deadline taxe fonciere')v.tfDay=val;else if(FISC_HEAD27[h]&&v[FISC_HEAD27[h]]==null)v[FISC_HEAD27[h]]=val;const k=fiscStatusKey27(h);if(k&&val!=='-')st[k]=normStatus27(String(val));});
   const name=String(r[0]).trim(),siren=String(v.siren||'').replace(/\D/g,'').slice(0,9);
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren);created++;}else updated++;
   if(!c.missions)c.missions={};c.missions.tax=true;
-  if(siren.length===9&&!c.siren)c.siren=siren;
+  if(m.siren&&!c.siren)c.siren=m.siren;
   ['associe','manager','collab'].forEach(k=>{if(v[k])(c.people27=c.people27||{})[k]=uniqNames27(v[k]);});
   if(v.groupe)c.group27=String(v.groupe);
-  if(v.statut){const s=uniqNames27(v.statut);c.status=s==='Compromis'?'Compromis':s==='Inactif'?'Inactif':s.startsWith('Dossiers internes')?'Autres':c.status==='Onboarding'&&!c.onbValidated27&&c.onb27?'Onboarding':'Actif';}
+  if(v.statut){const s=uniqNames27(v.statut);c.status=s==='Compromis'?'Compromis':s==='Inactif'?'Inactif':s.startsWith('Dossiers internes')?'Autres':c.status==='Onboarding'&&!c.onbValidated27&&c.onb27?'Onboarding':/^Actif/.test(s)?'Actif':c.status;}
   if(v.tva&&TVA27.includes(String(v.tva)))c.vatRegime=String(v.tva);
   const f=fisc27(c);
   if(Number(v.tvaDay)>0){f.tvaDay=Number(v.tvaDay);c.vatDeadline=Number(v.tvaDay);}
@@ -5735,8 +5772,9 @@ function importExc27(rows,hi,file){
  let created=0,updated=0,newClients=0;
  for(const r of data){
   const name=String(r[0]).trim(),cname=String(get(r,'portefeuille clients')||name).split(',')[0].trim();
-  let c=state.clients.find(x=>norm27(x.name)===norm27(cname));
-  if(!c){c=newClient26({name:cname,siren:'',legalForm:'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);newClients++;}
+  const m=matchClient27(cname,'');if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(cname,'');newClients++;}
   const g=get(r,'groupe');if(g&&!c.group27)c.group27=String(g);
   const w={name,client:c.id,associe:uniqNames27(get(r,'associe')||''),realise:uniqNames27(get(r,'realise par')||''),revu:uniqNames27(get(r,'revu par')||''),date:date(get(r,'date mission'))||`${year}-01-01`,desc:String(get(r,'description')||''),typo:String(get(r,'typologie')||''),deadline:date(get(r,'deadline fin travaux - end')||get(r,'deadline fin travaux - start')),fees:Number(get(r,'honoraires prevus')||0),time:get(r,'temps estime')==null?'':Number(get(r,'temps estime')),statut:String(get(r,'statut')||'A faire'),lancerFact:String(get(r,'lancer facturation')||'')};
   if(/Facturé/.test(String(get(r,'statut facturation')||''))){w.factStatus='Facturé';w.factRef='import';}
@@ -5753,7 +5791,7 @@ exceptional=excPage27;
 /* ---------- Tableau de bord cabinet (temps réel) ---------- */
 function dashboardPage27(){
  const y=new Date().getFullYear(),m=new Date().getMonth()+1,ex=boards27().year,t=today27();
- const act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres'].includes(c.status)),onb=state.clients.filter(isOnboarding27);
+ const act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres','À qualifier'].includes(c.status)),onb=state.clients.filter(isOnboarding27);
  const prosp=(state.prospects||[]).filter(p=>!['Validé','Refusé'].includes(p.stage));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  const plYear=(state.pennylaneInvoices||[]).filter(i=>String(i.date).startsWith(y)&&i.status!=='Annulée'),factured=state.invoices.filter(i=>i.status!=='Annulée'&&!i.reconciled&&String(i.date).startsWith(y)).reduce((a,i)=>a+(invHT27(i)??0),0);
@@ -6201,6 +6239,106 @@ render=function(){
 
 </script>
 <script>
+/* RB Partners V27 — Historique des paramètres d'un dossier, avec dates d'effet.
+ * Régimes fiscaux, clôture, missions, honoraires, budget et statut sont historisés au moment où ils changent :
+ * une modification d'aujourd'hui ne réécrit pas les exercices précédents. Les échéances fiscales de chaque mois
+ * sont calculées avec les régimes en vigueur ce mois-là, et une obligation déjà traitée reste affichée même si
+ * le régime a changé depuis. La date d'effet proposée (1er du mois en cours) se corrige dans la fiche client. */
+const HIST_FIELDS27=[
+ ['vatRegime','Régime de TVA',c=>c.vatRegime,(c,v)=>{c.vatRegime=v;}],
+ ['vatDeadline','Échéance TVA (jour)',c=>c.vatDeadline,(c,v)=>{c.vatDeadline=v;}],
+ ['taxRegime','Régime fiscal',c=>c.taxRegime,(c,v)=>{c.taxRegime=v;}],
+ ['closing','Date de clôture',c=>c.closing,(c,v)=>{c.closing=v;}],
+ ...['tvaDay','debdes','debDay','ts','tsDay','acIS','isDay','tvs','tvsDay','ifu','cfe','cfeDay','cvae','tf','crl'].map(k=>['fisc27.'+k,'Fiscalité · '+k,c=>c.fisc27?.[k],(c,v)=>{c.fisc27={...(c.fisc27||{}),[k]:v};}]),
+ ['missions','Missions',c=>c.missions,(c,v)=>{c.missions=v;}],
+ ['feesBreakdown','Honoraires',c=>c.feesBreakdown,(c,v)=>{c.feesBreakdown=v;}],
+ ['budgetHours','Budget de temps',c=>c.budgetHours,(c,v)=>{c.budgetHours=v;}],
+ ['status','Statut',c=>c.status,(c,v)=>{c.status=v;}],
+];
+const FISCAL_HIST27=/^(vatRegime|vatDeadline|taxRegime|fisc27\.)/;
+const hist27={snap:null};
+const histVal27=v=>JSON.stringify(v??null);
+const histUnset27=v=>v==null||v===''||['À confirmer','A définir','À définir','A confirmer'].includes(v)||(typeof v==='object'&&!Object.values(v).some(Boolean));
+function histSnapshot27(){const m=new Map();for(const c of state.clients)m.set(c.id,Object.fromEntries(HIST_FIELDS27.map(([k,,g])=>[k,histVal27(g(c))])));return m;}
+/* Enregistre les changements depuis le dernier passage (appelé à chaque enregistrement). La première modification
+ * d'un champ crée deux entrées : l'ancienne valeur (valable pour tout le passé) et la nouvelle, avec sa date d'effet. */
+function histRecord27(){
+ if(!hist27.snap){hist27.snap=histSnapshot27();return;}
+ const now=new Date(),month=now.toISOString().slice(0,8)+'01',day=now.toISOString().slice(0,10),by=shared25.user?.username||'';
+ for(const c of state.clients){
+  const old=hist27.snap.get(c.id);
+  for(const [k,,g] of HIST_FIELDS27){
+   const v=histVal27(g(c));
+   if(!old||old[k]===v)continue;
+   // Première saisie d'une valeur jusque-là non renseignée : c'est un complément, valable aussi pour le passé.
+   if(histUnset27(JSON.parse(old[k]))&&!c.hist27?.[k]?.length)continue;
+   // Déjà historisé (par exemple par un collègue, reçu lors d'une fusion) : rien à ajouter.
+   if(c.hist27?.[k]?.length&&histVal27(c.hist27[k][c.hist27[k].length-1].v)===v)continue;
+   const h=c.hist27=c.hist27||{},list=h[k]=h[k]||[];
+   if(!list.length)list.push({from:'0000-01-01',v:JSON.parse(old[k]),init:true});
+   const from=FISCAL_HIST27.test(k)?month:day,last=list[list.length-1];
+   if(last.from===from&&!last.init)Object.assign(last,{v:JSON.parse(v),by,at:now.toISOString()});
+   else list.push({from,v:JSON.parse(v),by,at:now.toISOString()});
+  }
+ }
+ hist27.snap=histSnapshot27();
+}
+/* Valeurs d'un dossier à une date donnée. */
+function viewAt27(c,date){
+ if(!c.hist27)return c;
+ const v={...c,fisc27:{...(c.fisc27||{})}};
+ for(const [k,,,set] of HIST_FIELDS27){const l=c.hist27[k];if(!l?.length)continue;let e=l[0];for(const x of l)if(x.from<=date)e=x;set(v,JSON.parse(JSON.stringify(e.v??null)));}
+ return v;
+}
+const oblCache27=new Map();
+const previousObligations27=obligations27;
+obligations27=function(c,y){
+ const hasHist=c.hist27&&Object.keys(c.hist27).some(k=>FISCAL_HIST27.test(k)),row=row27('fiscm',c.id,y),hasRow=row&&Object.keys(row).length;
+ if(!hasHist&&!hasRow)return previousObligations27(c,y);
+ const key=c.id+'|'+y+'|'+JSON.stringify(c.hist27||{})+'|'+JSON.stringify([c.vatRegime,c.vatDeadline,c.taxRegime,c.fisc27,row]);
+ if(oblCache27.has(key))return oblCache27.get(key);
+ let out=[];
+ if(hasHist){
+  // Chaque mois avec les régimes en vigueur au 1er du mois.
+  const all=new Map();
+  for(let m=1;m<=12;m++)for(const o of previousObligations27(viewAt27(c,`${y}-${pad27(m)}-01`),y)){if(!all.has(o.key))all.set(o.key,o);if(o.m===m&&!out.some(z=>z.key===o.key))out.push(o);}
+  // Régimes successifs (y compris celui d'origine) : leurs obligations déjà traitées restent visibles.
+  for(const [k,l] of Object.entries(c.hist27))if(FISCAL_HIST27.test(k))for(const e of l)for(const o of previousObligations27(viewAt27(c,e.init?'0000-01-01':e.from),y))if(!all.has(o.key))all.set(o.key,o);
+  // Obligations déjà traitées sous l'ancien régime : conservées.
+  for(const [k,o] of all)if(!out.some(z=>z.key===k)&&row?.[k]&&row[k]!==o.def)out.push({...o,kept:true,label:o.label+' (ancien régime)'});
+ }else out=previousObligations27(c,y);
+ if(hasRow&&!hasHist){const keys=new Set(out.map(o=>o.key));for(const k of Object.keys(row))if(!keys.has(k)&&/^(TVA|TS|DEB|IS|CFE|CVAE|TVS|IFU|TF|CRL|CA12)/.test(k)&&row[k]&&!/^(À faire|A faire|N\.A|NA|-)$/.test(row[k])){const m=Number((k.match(/-(\d\d)$/)||[])[1])||12;out.push({key:k,label:k.replace('-',' ')+' (régime modifié)',m,due:dueDay27(y,m,15),type:k.split('-')[0].replace(/\d+$/,''),def:'À faire',kept:true});}}
+ if(hasHist)out.sort((a,b)=>a.m-b.m||a.key.localeCompare(b.key));
+ oblCache27.set(key,out);if(oblCache27.size>4000)oblCache27.clear();
+ return out;
+};
+// Clôture d'un exercice : celle en vigueur au 1er janvier de l'année de clôture.
+const previousCloseOf27=closeOf27;
+closeOf27=function(c,y){return previousCloseOf27(c.hist27?.closing?viewAt27(c,`${y}-01-01`):c,y);};
+
+const previousSaveHistory27=save;
+save=function(){try{histRecord27();}catch(e){console.error('historique',e);}return previousSaveHistory27.apply(this,arguments);};
+
+/* ---------- Fiche client : historique éditable ---------- */
+function histPanel27(c){
+ const h=c.hist27||{},rows=HIST_FIELDS27.filter(([k])=>h[k]?.length>1);
+ const show=v=>typeof v==='object'&&v?Object.entries(v).filter(([,x])=>x).map(([k,x])=>x===true?k:k+' '+x).join(', '):String(v??'—');
+ return `<div class="panel"><div class="panelHead"><h3>Historique des paramètres</h3><span class="sub">Une modification s’applique à partir de sa date d’effet ; les exercices antérieurs gardent l’ancienne valeur</span></div>${rows.length?`<table><thead><tr><th>Paramètre</th><th>À partir du</th><th>Valeur</th><th>Par</th><th></th></tr></thead><tbody>${rows.map(([k,l])=>h[k].map((e,i)=>`<tr><td>${i?'':esc(l)}</td><td>${e.init?'<span class="sub">origine</span>':`<input type="date" value="${esc(e.from)}" onchange="histFrom27('${c.id}','${esc(k)}',${i},this.value)">`}</td><td>${esc(show(e.v))}</td><td class="sub">${esc(e.by||'')}</td><td>${e.init||i<h[k].length-1?'':`<span class="sub">en vigueur</span>`}</td></tr>`).join('')).join('')}</tbody></table>`:'<div class="panelBody sub">Aucun changement enregistré pour l’instant.</div>'}</div>`;
+}
+function histFrom27(cid,k,i,from){
+ const c=cfind(cid),l=c?.hist27?.[k];if(!l?.[i]||!/^\d{4}-\d{2}-\d{2}$/.test(from))return;
+ l[i].from=from;l[i].fromBy=shared25.user?.username||'';l.sort((a,b)=>a.init?-1:b.init?1:a.from.localeCompare(b.from));
+ oblCache27.clear();log25('Date d’effet modifiée',cid,`${k} à partir du ${from}`);persist25();
+}
+const previousRenderHistory27=render;
+render=function(){
+ if(shared25.ready&&!hist27.snap)hist27.snap=histSnapshot27();
+ previousRenderHistory27();
+ if(state.page==='client'&&(state.clientTab27||'synthese')==='synthese'){const c=cfind(state.selectedClient),root=document.getElementById('root');if(c&&!root.querySelector('.hist27')){const d=document.createElement('div');d.className='hist27';d.style.marginTop='12px';d.innerHTML=histPanel27(c);root.append(d);}}
+};
+
+</script>
+<script>
 /* Matrice création : informations demandées au client pour créer sa société.
  * Liste partagée par le formulaire public (/creation/…) et l'onglet « Matrice création » du CRM ;
  * les intitulés reprennent les colonnes du tableau Monday « Matrice création ». */
@@ -6473,7 +6611,7 @@ function importCreation27(rows,hi){
   if(it.fields.legalForm)it.legalForm=it.fields.legalForm;
   const dl=get('deadline');if(dl)it.deadline=date(dl);
   // Colonne CRM, sinon même nom qu'un client du portefeuille : la société existe déjà.
-  const crm=String(get('crm')||'').split(',')[0].trim(),c=state.clients.find(x=>crm&&norm27(x.name)===norm27(crm))||state.clients.find(x=>norm27(x.name)===norm27(name));
+  const crm=String(get('crm')||'').split(',')[0].trim(),c=state.clients.find(x=>crm&&nameKey27(x.name)===nameKey27(crm))||state.clients.find(x=>nameKey27(x.name)===nameKey27(name));
   if(c&&!it.client){it.client=c.id;c.creation27=it.id;}
   if(!it.stage)it.stage=crm||c?'Société créée':'';
  }
@@ -6571,24 +6709,32 @@ flush25=async function(){
  if(shared25.busy||!shared25.pending||shared25.conflict)return;
  shared25.busy=true;const payload=shared25.pending;shared25.pending=null;let retryConflict=false;
  try{
-  const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:shared25.revision,state:JSON.parse(payload)})});
+  // Envoi par élément (seuls les clients, factures, lignes… modifiés) ; envoi complet si la version de référence manque.
+  const next=JSON.parse(payload),ops=shared25.base&&shared25.revision>0&&typeof entityPaths27==='function'?entityPaths27(JSON.parse(shared25.base),next).map(o=>({path:o.path,value:o.after})):null;
+  if(ops&&!ops.length){shared25.base=payload;shared25.error='';return;}
+  const r=ops?await fetch('/api/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseRevision:shared25.revision,ops})})
+   :await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:shared25.revision,state:next})});
   const x=await r.json().catch(()=>({}));
   if(r.status===409){shared25.pending=shared25.pending||payload;retryConflict=true;return;}
   if(!r.ok){shared25.pending=shared25.pending||payload;draftKeep27(x.error||'refus '+r.status);throw Error((r.status===403?'Refusé par le serveur (droits) : ':r.status===422?'Refusé par le serveur : ':'')+(x.error||'Enregistrement refusé ('+r.status+')'));}
-  shared25.revision=x.revision;shared25.base=payload;shared25.error='';
+  shared25.revision=x.revision;shared25.base=payload;shared25.error='';shared25.lastOps=ops?ops.length:null;
+  // Enregistré par-dessus la version d'un collègue : on récupère ses modifications.
+  if(x.rebased)rebase27=true;
   // Le brouillon reste disponible tant que des écarts de conflit n'ont pas été traités.
   if(!shared25.pending&&!sync27.conflicts.some(c=>!c.done))draftClear27();
  }catch(e){shared25.error=e.message;if(!/^Refusé/.test(e.message))draftKeep27(e.message);}
  finally{
   shared25.busy=false;
   if(retryConflict){await resolveConflict27();return;}
+  if(rebase27){rebase27=false;await resolveConflict27(true);return;}
   status25();if(shared25.pending&&!shared25.error)flush25();
  }
 };
-async function resolveConflict27(){
+let rebase27=false;
+async function resolveConflict27(silentRebase){
  shared25.busy=true;
  try{
-  draftKeep27('conflit');
+  if(!silentRebase)draftKeep27('conflit');
   const r=await fetch('/api/state');if(!r.ok)throw Error('Rechargement impossible ('+r.status+')');
   const mine=JSON.parse(JSON.stringify(state)),theirs=await r.json(),base=JSON.parse(shared25.base||'{}');
   let {merged,conflicts}=mergeStates27(base,mine,theirs.state||{});
@@ -6598,7 +6744,7 @@ async function resolveConflict27(){
   state=merged;shared25.revision=theirs.revision;shared25.base=JSON.stringify(theirs.state);shared25.pending=JSON.stringify(state);shared25.error='';shared25.conflict=false;
   sync27.conflicts=conflicts;sync27.by=theirs.updatedBy||'un collègue';
   init25();render();
-  if(conflicts.length)showConflicts27();else toast(`Enregistrement simultané de ${sync27.by} : tes modifications ont été fusionnées avec les siennes.`);
+  if(conflicts.length)showConflicts27();else if(!silentRebase)toast(`Enregistrement simultané de ${sync27.by} : tes modifications ont été fusionnées avec les siennes.`);
  }catch(e){shared25.error='Conflit non résolu : '+e.message;shared25.conflict=true;}
  finally{shared25.busy=false;status25();if(shared25.pending&&!shared25.conflict)flush25();}
 }
@@ -6679,6 +6825,172 @@ render=function(){
  previousRenderSync27();
  if(state.page==='rules'){const root=document.getElementById('root');if(!root.querySelector('.syncPanels27')){const d=document.createElement('div');d.className='syncPanels27';d.innerHTML=backupPanel27()+auditPanel27();root.append(d);}}
  if(shared25.active&&!perm27('costs'))document.querySelectorAll('.nav a[data-page="profit"]').forEach(a=>a.style.display='none');
+};
+
+</script>
+<script>
+/* RB Partners V27 — Imports Excel avec aperçu, rapport et retour arrière.
+ * Chaque import (Portefeuille, Bilan, AGO, Fiscalité, Autres travaux, Matrice création) est d'abord exécuté sur une copie
+ * des données : rien n'est modifié tant que l'aperçu n'est pas validé, et l'application se fait en une fois (pas
+ * d'application partielle silencieuse). L'aperçu montre les clients créés et modifiés, les valeurs remplacées, les
+ * lignes ignorées, les erreurs et les rapprochements ambigus (à trancher : rattacher, créer ou ignorer).
+ * Une cellule vide n'efface jamais une valeur existante, sauf choix explicite. Chaque import appliqué est journalisé
+ * et peut être annulé : seules les valeurs que personne n'a modifiées depuis sont remises en l'état. */
+const imp27={pending:null,running:false};
+const deep27=o=>JSON.parse(JSON.stringify(o??null));
+const empty27=v=>v==null||v===''||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
+
+/* ---------- Différences entité par entité ---------- */
+// Chemin d'un élément : ['clients','#C_x'] pour une liste d'éléments identifiés, ['boards27','bilan','C_x|2025'] pour une ligne de tableau.
+function entityPaths27(a,b,path=[],out=[]){
+ if(same27(a,b))return out;
+ const ids=v=>Array.isArray(v)&&v.every(x=>isObj27(x)&&typeof x.id==='string');
+ if((ids(a)||a==null)&&(ids(b)||b==null)&&(Array.isArray(a)||Array.isArray(b))){
+  const A=new Map((a||[]).map(x=>[x.id,x])),B=new Map((b||[]).map(x=>[x.id,x]));
+  for(const id of new Set([...A.keys(),...B.keys()]))if(!same27(A.get(id),B.get(id)))out.push({path:path.concat('#'+id),before:A.get(id)??null,after:B.get(id)??null});
+  return out;
+ }
+ if(isObj27(a)&&isObj27(b)&&path.length<3){for(const k of new Set([...Object.keys(a),...Object.keys(b)]))if(!(path.length===0&&PREF_KEYS27.includes(k)))entityPaths27(a[k],b[k],path.concat(k),out);return out;}
+ out.push({path,before:a??null,after:b??null});return out;
+}
+function getPath27(root,path){let o=root;for(const k of path){if(o==null)return undefined;o=String(k).startsWith('#')&&Array.isArray(o)?o.find(x=>x.id===k.slice(1)):o[k];}return o;}
+function putPath27(root,path,value){
+ let o=root;
+ for(let i=0;i<path.length-1;i++){const k=path[i],nk=path[i+1];let n=String(k).startsWith('#')?o.find(x=>x.id===k.slice(1)):o[k];if(n==null){n=String(nk).startsWith('#')?[]:{};o[k]=n;}o=n;}
+ const last=path[path.length-1];
+ if(String(last).startsWith('#')){const id=last.slice(1),i=o.findIndex(x=>x.id===id);if(value==null){if(i>=0)o.splice(i,1);}else if(i>=0)o[i]=value;else o.push(value);}
+ else if(value==null)delete o[last];else o[last]=value;
+}
+/* Champs à plat (deux niveaux) pour comparer un client ou une ligne de tableau. */
+function flat27(o,prefix='',out={}){for(const [k,v] of Object.entries(o||{})){if(isObj27(v)&&!prefix)flat27(v,k+'.',out);else out[prefix+k]=v;}return out;}
+const NOISE27=/^(createdAt|createdBy|ops25|onbOpen|collapsed)$/;
+
+/* ---------- Exécution sur une copie ---------- */
+async function sandboxImport27(file,rows,opts){
+ const real=state,snap=deep27(state),saved={save,persist25,render,toast,alert:window.alert,confirm:window.confirm,readXlsx27};
+ const msgs={confirm:[],alert:[],toast:[]};
+ importRun27.on=true;importRun27.issues=[];importRun27.decisions=opts.decisions||{};
+ state=deep27(state);
+ save=()=>{};persist25=()=>{};render=()=>{};toast=m=>msgs.toast.push(String(m));window.alert=m=>msgs.alert.push(String(m));window.confirm=m=>{msgs.confirm.push(String(m));return true;};readXlsx27=async()=>rows;
+ let clone,error='';
+ try{await imp27.base(file);}catch(e){error=e.message;}
+ finally{clone=state;state=real;({save,persist25,render,toast,readXlsx27}=saved);window.alert=saved.alert;window.confirm=saved.confirm;importRun27.on=false;}
+ const issues=importRun27.issues.slice();
+ // Cellules vides : la valeur existante est conservée (sauf choix explicite).
+ let kept=0;const before=new Map(snap.clients.map(c=>[c.id,c]));
+ const protect=(b,a)=>{if(!b||!a)return;for(const [k,v] of Object.entries(flat27(b))){if(NOISE27.test(k.split('.')[0])||empty27(v))continue;const parts=k.split('.'),cur=parts.length>1?a[parts[0]]?.[parts[1]]:a[k];if(empty27(cur)){if(parts.length>1){a[parts[0]]=a[parts[0]]||{};a[parts[0]][parts[1]]=v;}else a[k]=v;kept++;}}};
+ if(!opts.allowEmpty){
+  for(const c of clone.clients)protect(before.get(c.id),c);
+  for(const kind of Object.keys(clone.boards27||{}))if(isObj27(clone.boards27[kind]))for(const [k,row] of Object.entries(clone.boards27[kind]))if(isObj27(row))protect(snap.boards27?.[kind]?.[k],row);
+ }
+ return {snap,clone,issues,msgs,error,kept};
+}
+function summarize27(r){
+ const s={created:[],modified:[],replaced:[],filled:0,rows:0,errors:[],ambiguous:[],ignored:[],info:[]};
+ const B=new Map(r.snap.clients.map(c=>[c.id,c]));
+ for(const c of r.clone.clients){
+  const b=B.get(c.id);
+  if(!b){s.created.push(c);continue;}
+  if(same27(b,c))continue;
+  const fb=flat27(b),fa=flat27(c),ch=[];
+  for(const k of new Set([...Object.keys(fb),...Object.keys(fa)])){if(NOISE27.test(k.split('.')[0])||same27(fb[k],fa[k]))continue;if(empty27(fb[k]))s.filled++;else{ch.push(k);s.replaced.push({c,k,before:fb[k],after:fa[k]});}}
+  s.modified.push({c,keys:ch});
+ }
+ for(const kind of Object.keys(r.clone.boards27||{})){const A=r.snap.boards27?.[kind],Z=r.clone.boards27[kind];if(!isObj27(Z))continue;
+  for(const [k,row] of Object.entries(Z)){const o=A?.[k];if(same27(o,row))continue;s.rows++;if(!isObj27(row))continue;const name=cfind(k.split('|')[0])?.name||r.clone.clients.find(c=>c.id===k.split('|')[0])?.name||k;
+   for(const [f,v] of Object.entries(row)){const ov=o?.[f];if(same27(ov,v))continue;if(empty27(ov))s.filled++;else s.replaced.push({c:{name},k:kind+' '+k.split('|')[1]+' · '+f,before:ov,after:v});}}}
+ for(const coll of ['exc27','creation27'])if(r.clone[coll]?.items){const before=new Map((r.snap[coll]?.items||[]).map(x=>[x.id,x]));r.clone[coll].items.forEach(x=>{if(!before.has(x.id))s.info.push(`${coll==='exc27'?'Travail':'Dossier de création'} ajouté : ${x.name}`);});}
+ for(const i of r.issues){if(i.type==='erreur')s.errors.push(i);else if(i.type==='ambigu')s.ambiguous.push(i);else if(i.type==='ignorée')s.ignored.push(i);else s.info.push(i.row+' : '+i.msg);}
+ // Contrôles après import : SIREN, dates, montants.
+ for(const c of r.clone.clients){const sv=sirenOf27(c.siren);if(c.siren&&(!sv||!sirenValid27(sv))&&!s.errors.some(e=>e.row===c.name&&/SIREN/.test(e.msg)))s.errors.push({row:c.name,msg:`SIREN « ${c.siren} » invalide`});if(c.entry&&!/^\d{4}-\d{2}-\d{2}$/.test(c.entry))s.errors.push({row:c.name,msg:`date d’entrée « ${c.entry} » invalide`});for(const [k,v] of Object.entries(c.feesBreakdown||{}))if(v!==''&&v!=null&&!Number.isFinite(Number(v)))s.errors.push({row:c.name,msg:`honoraires ${k} « ${v} » invalides`});}
+ if(r.error)s.errors.unshift({row:'Fichier',msg:r.error});
+ r.msgs.alert.forEach(m=>s.errors.unshift({row:'Fichier',msg:m}));
+ return s;
+}
+
+/* ---------- Aperçu ---------- */
+const previousImportBoard27b=importBoard27;
+imp27.base=previousImportBoard27b;
+importBoard27=async function(file){
+ if(!file)return;
+ if(shared25.active&&!perm27('import'))return alert('Les imports sont réservés aux managers, associés et administrateurs.');
+ let rows;try{rows=await readXlsx27(file);}catch(e){return alert('Import impossible : '+e.message);}
+ imp27.pending={file,rows,decisions:{},allowEmpty:false};
+ await previewImport27();
+};
+async function previewImport27(){
+ const p=imp27.pending;if(!p)return;
+ // Les choix faits dans l'aperçu (rapprochements ambigus, effacement) sont relus avant de recalculer.
+ document.querySelectorAll('select[data-amb]').forEach(s=>{if(s.value)p.decisions[s.dataset.amb]=s.value;else delete p.decisions[s.dataset.amb];});
+ const ae=document.getElementById('imp_allowEmpty');if(ae)p.allowEmpty=ae.checked;
+ p.result=await sandboxImport27(p.file,p.rows,{decisions:p.decisions,allowEmpty:p.allowEmpty});
+ p.summary=summarize27(p.result);
+ showImportPreview27();
+}
+function showImportPreview27(){
+ const p=imp27.pending,s=p.summary,r=p.result,v=x=>typeof x==='object'?JSON.stringify(x):String(x??'');
+ const fatal=!r.clone||r.msgs.alert.length||r.error;
+ const card=(l,n,cls)=>`<div class="card"><small>${l}</small><span class="big ${n&&cls?cls:''}">${n}</span></div>`;
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(1100px,97vw)"><div class="modalHead"><div><h3>Aperçu de l’import · ${esc(p.file.name)}</h3><div class="sub">${esc(r.msgs.confirm[0]?.split('\n')[0]||'Rien n’est encore modifié : vérifie puis applique.')}</div></div><button class="btn secondary" onclick="imp27.pending=null;closeModal()">Annuler</button></div>
+ <div class="modalBody">
+  <div class="cards" style="grid-template-columns:repeat(7,1fr)">${card('Clients créés',s.created.length)}${card('Clients modifiés',s.modified.length)}${card('Lignes de tableau modifiées',s.rows)}${card('Valeurs remplacées',s.replaced.length,'warn')}${card('Cellules vides ignorées',r.kept)}${card('Lignes mises de côté',s.ambiguous.length+s.ignored.length,'warn')}${card('Erreurs',s.errors.length,'bad')}</div>
+  ${s.errors.length?`<div class="panel"><div class="panelHead"><h3>Erreurs</h3><span class="sub">À corriger dans le fichier ou dans le CRM ; les lignes concernées sont importées sans la valeur fautive.</span></div><table><tbody>${s.errors.slice(0,100).map(e=>`<tr><td><b>${esc(e.row)}</b></td><td>${esc(e.msg)}</td></tr>`).join('')}</tbody></table></div>`:''}
+  ${s.ambiguous.length?`<div class="panel"><div class="panelHead"><h3>Rapprochements à trancher</h3><span class="sub">Ces lignes ne sont pas importées tant qu’aucun choix n’est fait.</span></div><table><thead><tr><th>Ligne du fichier</th><th>Constat</th><th>Choix</th></tr></thead><tbody>${s.ambiguous.map(a=>`<tr><td><b>${esc(a.row)}</b></td><td class="sub">${esc(a.msg)}</td><td><select data-amb="${esc(a.key)}"><option value="">Mettre de côté</option>${a.candidates.map(c=>`<option value="C:${esc(c.id)}">Rattacher à ${esc(c.name)}${c.siren?' ('+esc(c.siren)+')':''}</option>`).join('')}<option value="new">Créer une nouvelle fiche</option><option value="ignore">Ignorer la ligne</option></select></td></tr>`).join('')}</tbody></table></div>`:''}
+  ${s.created.length?`<div class="panel"><div class="panelHead"><h3>Clients créés (statut « À qualifier »)</h3></div><div class="panelBody">${s.created.slice(0,200).map(c=>`<span class="badge blue" style="margin:2px">${esc(c.name)}${c.siren?' · '+esc(c.siren):''}</span>`).join('')}${s.created.length>200?` … +${s.created.length-200}`:''}</div></div>`:''}
+  ${s.replaced.length?`<div class="panel"><div class="panelHead"><h3>Valeurs remplacées</h3><span class="sub">Valeurs existantes que le fichier change (${s.filled} champ(s) vide(s) seront simplement complétés)</span></div><div style="max-height:320px;overflow:auto"><table><thead><tr><th>Client</th><th>Champ</th><th>Avant</th><th>Après</th></tr></thead><tbody>${s.replaced.slice(0,400).map(x=>`<tr><td>${esc(x.c.name)}</td><td class="sub">${esc(x.k)}</td><td>${esc(v(x.before)).slice(0,80)}</td><td><b>${esc(v(x.after)).slice(0,80)}</b></td></tr>`).join('')}</tbody></table></div></div>`:''}
+  ${s.info.length||s.ignored.length?`<div class="panel"><div class="panelHead"><h3>Informations</h3></div><div class="panelBody sub">${[...s.ignored.map(i=>i.row+' : '+i.msg),...s.info].slice(0,100).map(esc).join('<br>')}</div></div>`:''}
+  <label class="sub"><input type="checkbox" id="imp_allowEmpty" ${p.allowEmpty?'checked':''}> Autoriser les cellules vides à effacer les valeurs existantes</label>
+ </div>
+ <div class="modalFooter" style="display:flex;justify-content:space-between;gap:8px"><button class="btn secondary" onclick="previewImport27()">Recalculer avec mes choix</button><button class="btn green" ${fatal?'disabled':''} onclick="applyImport27()">Appliquer l’import</button></div></div></div>`;
+}
+
+/* ---------- Application et rapport ---------- */
+async function applyImport27(){
+ const p=imp27.pending;if(!p?.result?.clone)return;
+ const {snap,clone}=p.result,s=p.summary;
+ // Appliqué en une fois sur les données actuelles (fusion si un collègue a enregistré pendant l'aperçu).
+ const {merged,conflicts}=mergeStates27(snap,clone,deep27(state));
+ const paths=entityPaths27(snap,clone);
+ const id=uid('IMP'),meta={id,at:new Date().toISOString(),user:shared25.user?.username||state.currentUser||'',file:p.file.name,created:s.created.length,modified:s.modified.length,rows:s.rows,replaced:s.replaced.length,kept:p.result.kept,ignored:s.ambiguous.length+s.ignored.length,errors:s.errors.length,changes:paths.length};
+ state=merged;imp27.pending=null;closeModal();init25();
+ (state.imports27=state.imports27||[]).unshift({...meta,undoable:false});state.imports27=state.imports27.slice(0,30);
+ log25('Import appliqué',`${p.file.name}`,`${meta.created} créé(s), ${meta.modified} modifié(s), ${meta.rows} ligne(s) de tableau, ${meta.replaced} valeur(s) remplacée(s), ${meta.ignored} ligne(s) de côté, ${meta.errors} erreur(s)`);
+ persist25();
+ // Valeurs « après » relevées une fois les données affichées (l'affichage complète certains champs par défaut).
+ const changes=paths.map(c=>({path:c.path,before:c.before,after:deep27(getPath27(state,c.path)??null)}));
+ let stored=false,why='';
+ if(shared25.active){try{await api27('/api/imports',{method:'POST',body:JSON.stringify({meta,changes})});stored=true;}catch(e){why=e.message;}}
+ else{try{localStorage.setItem('rb_import27_'+id,JSON.stringify({meta,changes}));stored=true;}catch(e){why=e.message;}}
+ const rec=(state.imports27||[]).find(x=>x.id===id);if(rec){rec.undoable=stored;save();}
+ toast(`Import appliqué : ${meta.created} créé(s), ${meta.modified} modifié(s)${conflicts.length?` · ${conflicts.length} valeur(s) modifiée(s) entre-temps par un collègue conservée(s)`:''}.${stored?' Annulable dans Automatisations cabinet › Imports.':' Retour arrière indisponible : '+why}`);
+}
+/* Comparaison tolérante : les champs vides ajoutés ensuite par l'affichage (objets vides, zéros) ne comptent pas comme une modification. */
+function emptyish27(v){return v==null||v===''||v===0||v===false||(Array.isArray(v)&&!v.length)||(isObj27(v)&&Object.values(v).every(emptyish27));}
+function sameish27(cur,ref){
+ if(same27(cur,ref))return true;
+ if(isObj27(cur)&&isObj27(ref)){for(const k of new Set([...Object.keys(cur),...Object.keys(ref)])){if(!(k in ref)&&emptyish27(cur[k]))continue;if(!(k in cur)&&emptyish27(ref[k]))continue;if(!sameish27(cur[k],ref[k]))return false;}return true;}
+ return false;
+}
+async function undoImport27(id){
+ const rec=(state.imports27||[]).find(x=>x.id===id);if(!rec)return;
+ let data;
+ try{data=shared25.active?await api27('/api/imports?id='+encodeURIComponent(id)):JSON.parse(localStorage.getItem('rb_import27_'+id)||'null');}catch(e){return alert('Retour arrière impossible : '+e.message);}
+ if(!data?.changes)return alert('Les données de retour arrière de cet import ne sont plus disponibles.');
+ if(!confirm(`Annuler l’import « ${rec.file} » du ${new Date(rec.at).toLocaleString('fr-FR')} ?\n${data.changes.length} élément(s) concerné(s). Seuls ceux que personne n’a modifiés depuis seront remis en l’état ; les autres te seront listés.`))return;
+ const conflicts=[];let undone=0;
+ for(const ch of data.changes){const cur=getPath27(state,ch.path);if(sameish27(cur??null,ch.after)){putPath27(state,ch.path,ch.before==null?null:deep27(ch.before));undone++;}else conflicts.push(ch);}
+ rec.undoneAt=new Date().toISOString();rec.undoneBy=shared25.user?.username||'';rec.undoConflicts=conflicts.length;
+ log25('Import annulé',rec.file,`${undone} élément(s) remis en l’état, ${conflicts.length} conservé(s) car modifié(s) depuis`);persist25();
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal" style="width:min(760px,96vw)"><div class="modalHead"><h3>Import annulé · ${esc(rec.file)}</h3><button class="btn secondary" onclick="closeModal()">Fermer</button></div><div class="modalBody"><p>${undone} élément(s) remis en l’état.</p>${conflicts.length?`<p><b>${conflicts.length} élément(s) conservé(s)</b> car modifié(s) depuis l’import :</p><ul>${conflicts.slice(0,100).map(c=>`<li>${esc(c.path.join(' › '))}</li>`).join('')}</ul>`:''}</div></div></div>`;
+}
+function importsPanel27(){
+ const l=state.imports27||[];if(!l.length)return '';
+ return `<div class="panel"><div class="panelHead"><h2>Imports</h2><span class="sub">Rapport de chaque import appliqué ; un import peut être annulé (retour arrière contrôlé)</span></div><table><thead><tr><th>Date</th><th>Fichier</th><th>Par</th><th>Résultat</th><th></th></tr></thead><tbody>${l.map(i=>`<tr><td style="white-space:nowrap">${new Date(i.at).toLocaleString('fr-FR')}</td><td>${esc(i.file)}</td><td>${esc(i.user||'')}</td><td class="sub">${i.created} créé(s), ${i.modified} modifié(s), ${i.rows} ligne(s) de tableau, ${i.replaced} remplacée(s), ${i.kept} cellule(s) vide(s) ignorée(s), ${i.ignored} de côté, ${i.errors} erreur(s)${i.undoneAt?` · <b>annulé le ${new Date(i.undoneAt).toLocaleString('fr-FR')}</b>${i.undoConflicts?` (${i.undoConflicts} conservé(s))`:''}`:''}</td><td>${!i.undoneAt&&i.undoable&&perm27('import')?`<button class="btn small secondary" onclick="undoImport27('${esc(i.id)}')">Annuler l’import</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+const previousRenderImports27=render;
+render=function(){
+ previousRenderImports27();
+ if(state.page==='rules'){const root=document.getElementById('root');if(!root.querySelector('.impPanel27')){const d=document.createElement('div');d.className='impPanel27';d.innerHTML=importsPanel27();root.append(d);}}
 };
 
 </script>

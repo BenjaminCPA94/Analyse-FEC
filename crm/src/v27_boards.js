@@ -9,7 +9,7 @@ const BILAN_ETATS27=['1. A faire','2. En cours','3. A revoir par Manager','4. A 
 const AGO_STATUTS27=['1. A faire','2. A revoir par Manager','3. A revoir par Associés','4. A envoyer au client','5. Déposé au Greffe','6. En attente client','7. Validé par le greffe','En attente Greffe','En attente validation greffe','A définir','N.A'];
 const OUINON27=['Oui','Non'];
 const TVA27=['Mensuelle','Trimestrielle','Annuelle','Non assujetti','Exonéré','Franchise en base'];
-const STATUT_CLIENT27=['Actif',"En cours d'onboarding",'Dossier compromis','Inactif','Autres dossiers'];
+const STATUT_CLIENT27=['À qualifier','Actif',"En cours d'onboarding",'Dossier compromis','Inactif','Autres dossiers'];
 
 function color27(v){
  v=String(v??'');
@@ -106,7 +106,7 @@ const AGO_COLS27=[
  rowCol27('annexe',"Type d'annexe",'status','Annexe simplifiée',['Annexe simplifiée','Annexe abrégée','Annexe complète','Dispense (micro)']),
  rowCol27('lancerFact','Lancer facturation','status','-',['Oui','Non','-']),
  clientCol27('honoAgo','Honoraires','num',c=>fees27(c).legalAnnual||0,(c,v)=>{fees27(c).legalAnnual=Number(v||0);syncFees27(c);}),
- clientCol27('statutClient','Statut client','status',c=>({Actif:'Actif',Onboarding:"En cours d'onboarding",Compromis:'Dossier compromis','Dossier compromis':'Dossier compromis',Inactif:'Inactif',Autres:'Autres dossiers'})[c.status]||'',(c,v)=>{c.status={"En cours d'onboarding":'Onboarding','Dossier compromis':'Compromis','Autres dossiers':'Autres'}[v]||v;},STATUT_CLIENT27,150),
+ clientCol27('statutClient','Statut client','status',c=>({'À qualifier':'À qualifier',Actif:'Actif',Onboarding:"En cours d'onboarding",Compromis:'Dossier compromis','Dossier compromis':'Dossier compromis',Inactif:'Inactif',Autres:'Autres dossiers'})[c.status]||'',(c,v)=>{c.status={"En cours d'onboarding":'Onboarding','Dossier compromis':'Compromis','Autres dossiers':'Autres'}[v]||v;},STATUT_CLIENT27,150),
  {k:'factPL',label:'Facturation (Pennylane)',t:'auto',w:150,get:x=>x.invJ?x.invJ.number||'Facturé':''},
 ];
 const COLS27={bilan:BILAN_COLS27,ago:AGO_COLS27};
@@ -255,6 +255,39 @@ async function readXlsx27(file){
  return Array.from(rows,r=>r||[]);
 }
 const HEAD27={'name':'name','associe':'associe','manager':'manager','collaborateur':'collab','collaborateurs':'collab','groupe':'groupe','groupe#2':'statutClient','cloture':'cloture','date de cloture':'cloture','echeance':'echeance','siren':'siren','etat dossier':'etat','regime fiscal':'regimeFiscal','regime tva':'tva','solde is':'soldeIS','solde cvae':'cvae','solde ca12':'ca12','das 2':'das2','liasse fiscale':'liasse','decloyer':'decloyer','lancer facturation':'lancerFact','honoraires annuels':'honoAnnuels','honoraires bilans':'honoBilan','forme juridique':'forme','miroir':'miroir','is/crl':'isCrl','acompte 1':'ac1','acompte 2':'ac2','acompte 3':'ac3','acompte 4':'ac4','formule':'formule','rl 10 %':'rl','dividendes ou ran':'affectation','statut ago':'statut','facturation':'factLink',"type d'annexe":'annexe','honoraires':'honoAgo'};
+/* ---------- Identité client : règles communes à tous les imports ---------- */
+/* SIREN : 9 chiffres (un SIRET de 14 chiffres est ramené à son SIREN) et clé de contrôle (Luhn) valide. */
+function sirenOf27(v){const d=String(v??'').replace(/\D/g,'');return d.length===14?d.slice(0,9):d.length===9?d:'';}
+function sirenValid27(s){if(!/^\d{9}$/.test(s))return false;let t=0;for(let i=0;i<9;i++){let n=Number(s[8-i]);if(i%2){n*=2;if(n>9)n-=9;}t+=n;}return t%10===0;}
+/* Nom strict : casse, accents et ponctuation ignorés, mais forme juridique et mots conservés (« SCI DUPONT » ≠ « DUPONT SAS »). */
+function nameKey27(n){return String(n||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' ET ').replace(/[^A-Z0-9]/g,'');}
+const importRun27={on:false,issues:[],decisions:{}};
+function importIssue27(type,row,msg,extra){if(importRun27.on)importRun27.issues.push({type,row,msg,...(extra||{})});}
+/* Rapprochement d'une ligne importée avec un client existant.
+ *  - SIREN valide connu : ce client ;
+ *  - sinon, même nom strict : uniquement s'il n'y a pas deux SIREN renseignés différents, et un seul candidat ;
+ *  - nom voisin (forme juridique retirée) ou plusieurs candidats : rapprochement ambigu, ligne mise de côté
+ *    tant qu'aucune décision n'est prise dans l'aperçu (rattacher, créer ou ignorer).
+ * Renvoie {c} (client trouvé ou null = à créer) ou {skip:true}. */
+function matchClient27(name,sirenRaw){
+ const raw=String(sirenRaw??'').trim(),s=sirenOf27(raw),key=nameKey27(name)+'|'+s,dec=importRun27.decisions[key];
+ if(raw&&!s)importIssue27('erreur',name,`SIREN illisible « ${raw} » : ignoré`);
+ else if(s&&!sirenValid27(s))importIssue27('erreur',name,`SIREN ${s} invalide (clé de contrôle) : vérifie-le`);
+ if(dec==='ignore'){importIssue27('ignorée',name,'Ligne ignorée (décision)');return {skip:true};}
+ if(dec==='new')return {c:null,siren:s};
+ if(dec&&dec.startsWith('C:')){const c=cfind(dec.slice(2));if(c)return {c,siren:s};}
+ if(s){const hits=state.clients.filter(c=>sirenOf27(c.siren)===s);if(hits.length===1)return {c:hits[0],siren:s};if(hits.length>1){importIssue27('ambigu',name,`${hits.length} clients ont le SIREN ${s}`,{key,candidates:hits.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}}
+ const same=state.clients.filter(c=>nameKey27(c.name)===nameKey27(name));
+ const compatible=same.filter(c=>!s||!sirenOf27(c.siren)||sirenOf27(c.siren)===s);
+ if(same.length&&!compatible.length){importIssue27('info',name,`Même nom que « ${same[0].name} » mais SIREN différent (${sirenOf27(same[0].siren)} ≠ ${s}) : sociétés distinctes, nouvelle fiche`);return {c:null,siren:s};}
+ if(compatible.length===1)return {c:compatible[0],siren:s};
+ if(compatible.length>1){importIssue27('ambigu',name,`${compatible.length} clients portent ce nom`,{key,candidates:compatible.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}
+ const loose=state.clients.filter(c=>norm27(c.name)===norm27(name)&&(!s||!sirenOf27(c.siren)||sirenOf27(c.siren)===s));
+ if(loose.length){importIssue27('ambigu',name,`Nom proche de ${loose.map(c=>'« '+c.name+' »').join(', ')} : même société ?`,{key,candidates:loose.map(c=>({id:c.id,name:c.name,siren:c.siren}))});return {skip:true};}
+ return {c:null,siren:s};
+}
+/* Client créé par un import : jamais « actif » par défaut, il est à qualifier. */
+function importNewClient27(name,siren,extra){const c=newClient26({name,siren:siren||'',legalForm:extra?.legalForm||'',contact:extra?.contact||'',email:''});c.entry='';c.status='À qualifier';c.importReview27=true;state.clients.push(c);return c;}
 const normHead27=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[’`]/g,"'").replace(/\s+/g,' ').trim();
 async function importBoard27(file){
  if(!file)return;
@@ -274,8 +307,9 @@ async function importBoard27(file){
  for(const r of data){
   const v={};keys.forEach((k,i)=>{if(k&&r[i]!=null&&r[i]!=='')v[k]=r[i];});
   const name=String(v.name).trim(),siren=String(v.siren||'').replace(/\D/g,'');
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren,{legalForm:v.forme});created++;}else updated++;
   const x=ctx27(kind,c,year),row=x.row(true);
   for(const col of COLS27[kind]){
    if(col.t==='auto'||v[col.k]==null)continue;
@@ -285,7 +319,7 @@ async function importBoard27(file){
    else if(col.t==='num')val=Number(String(val).replace(',','.'))||0;
    else if(col.k==='cloture'){const m=String(val).match(/^(\d{1,2})\/(\d{1,2})/);if(!m)continue;val=m[1]+'/'+m[2];}
    else val=String(val).trim();
-   if(col.k==='siren'&&String(val).replace(/\D/g,'').length!==9)continue;
+   if(col.k==='siren'){val=sirenOf27(val);if(!val||(sirenOf27(c.siren)&&sirenOf27(c.siren)!==val))continue;}
    col.set(x,val);
   }
   // Colonne « Facturation » renseignée dans l'export : le dossier a déjà été facturé.

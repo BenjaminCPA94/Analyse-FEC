@@ -233,7 +233,7 @@ function importCreation27(rows,hi){
   if(it.fields.legalForm)it.legalForm=it.fields.legalForm;
   const dl=get('deadline');if(dl)it.deadline=date(dl);
   // Colonne CRM, sinon même nom qu'un client du portefeuille : la société existe déjà.
-  const crm=String(get('crm')||'').split(',')[0].trim(),c=state.clients.find(x=>crm&&norm27(x.name)===norm27(crm))||state.clients.find(x=>norm27(x.name)===norm27(name));
+  const crm=String(get('crm')||'').split(',')[0].trim(),c=state.clients.find(x=>crm&&nameKey27(x.name)===nameKey27(crm))||state.clients.find(x=>nameKey27(x.name)===nameKey27(name));
   if(c&&!it.client){it.client=c.id;c.creation27=it.id;}
   if(!it.stage)it.stage=crm||c?'Société créée':'';
  }

@@ -148,6 +148,7 @@ function waitFor(proc, text) {
   assert.equal(before.u, 'retard'); assert.equal(before.june, '2026-10-15');
   await page.evaluate(() => { window.confirm = () => true; });
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'bilan_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => state.clients.some(c => c.name === 'NOUVEAU CLIENT'));
   const bi = await page.evaluate(() => {
     const c2 = cfind('C2'), n = state.clients.find(c => c.name === 'NOUVEAU CLIENT'), x2 = ctx27('bilan', c2, 2025), xn = ctx27('bilan', n, 2025);
@@ -169,6 +170,7 @@ function waitFor(proc, text) {
 
   await page.evaluate(() => routePage('legal'));
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'ago_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => state.clients.some(c => c.name === 'AUTRE SAS'));
   const ag = await page.evaluate(() => {
     const c2 = cfind('C2'), au = state.clients.find(c => c.name === 'AUTRE SAS'), sci = state.clients.find(c => c.name === 'SCI SANS AGO');
@@ -211,21 +213,23 @@ function waitFor(proc, text) {
   // Portefeuille clients (import Excel avec étapes d'onboarding) et données reliées
   await page.evaluate(() => routePage('clients'));
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'portfolio_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => state.clients.some(c => c.name === 'ONBOARD TEST'));
   const pf = await page.evaluate(() => {
     const c = state.clients.find(x => x.name === 'ONBOARD TEST'), y = new Date().getFullYear();
     const tva = () => obligations27(c, y).filter(o => o.type === 'TVA').length;
     const before = tva();
     setCell27({ value: 'Trimestrielle', style: {} }, 'portfolio', c.id, 0, 'tva');
-    const after = tva();
+    const after = tva(), m0 = new Date().getMonth() + 1, expected = (m0 - 1) + [1, 4, 7, 10].filter(m => m >= m0).length;
+    const hist = [after === expected, obligations27(c, y + 1).filter(o => o.type === 'TVA').length, obligations27(c, y - 1).filter(o => o.type === 'TVA').length];
     return { st: c.status, siren: c.siren, mgr: people27(c, 'manager'), m: ['tax', 'annualAccounts', 'legal', 'einvoice'].map(k => c.missions[k]), f: [fees27(c).accounting, fees27(c).annualAccounts, fees27(c).legalAnnual],
-      step: onbStep27(c, 2), prog: onbProgress27(c).label, before, after, is: c.missions.tax ? 4 : 0,
+      step: onbStep27(c, 2), prog: onbProgress27(c).label, before, after: hist, is: c.missions.tax ? 4 : 0,
       bilan: val27(ctx27('bilan', c, 2026), 'afaire'), ago: val27(ctx27('ago', c, 2026), 'juridique'), closing: c.closing, html: document.body.innerText.includes('Portefeuille clients') };
   });
   assert.ok(pf.html); assert.equal(pf.st, 'Onboarding'); assert.equal(pf.siren, '222333444', 'SIRET ramené au SIREN'); assert.equal(pf.mgr, 'Bruno Test');
   assert.deepEqual(pf.m, [true, true, true, true]); assert.deepEqual(pf.f, [2400, 800, 453]);
   assert.equal(pf.step, 'Bloqué'); assert.equal(pf.prog, '10/16', 'paramétrage à vérifier par un humain, étapes Pennylane distinctes');
-  assert.deepEqual([pf.before, pf.after, pf.is], [12, 4, 4], 'échéances fiscales recalculées depuis le portefeuille');
+  assert.deepEqual([pf.before, pf.after, pf.is], [12, [true, 4, 12], 4], 'changement de régime : mois passés et année précédente inchangés, trimestriel ensuite');
   assert.deepEqual([pf.bilan, pf.ago, pf.closing], ['Oui', 'Oui', '12-31'], 'missions reprises dans Bilan et AGO');
   const fin = await page.evaluate(() => { const c = state.clients.find(x => x.name === 'PRESQUE FINI'); routePage('onboarding'); const b = onbProgress27(c).label; ONB_STEPS27.forEach((_, i) => { if (!['Fait', 'NA'].includes(onbStep27(c, i))) setCell27({ value: 'Fait', style: {} }, 'onb', c.id, 0, 's' + i); }); return [b, c.status, group27(ctx27('onb', c, 0))]; });
   assert.deepEqual(fin, ['12/16', 'Onboarding', 'Prêts à valider'], 'toutes les étapes faites : pas de bascule automatique');
@@ -263,6 +267,7 @@ function waitFor(proc, text) {
   // Fiscalité : tableau principal des régimes et échéances mensuelles automatiques
   await page.evaluate(() => routePage('fiscal'));
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'fiscal_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => state.clients.some(c => c.name === 'FISC TRIMESTRIEL'));
   const fi = await page.evaluate(() => {
     const m = state.clients.find(x => x.name === 'FISC MENSUEL'), t = state.clients.find(x => x.name === 'FISC TRIMESTRIEL'), keys = c => obligations27(c, 2026).map(o => o.key);
@@ -270,7 +275,9 @@ function waitFor(proc, text) {
       tKeys: keys(t).filter(k => !k.startsWith('DEB-')), tDeb: obligations27(t, 2026).find(o => o.key === 'DEB-03').due, st: row27('fiscm', m.id, 2026)['TVA-01'], tf: obligations27(m, 2026).find(o => o.key === 'TF').def,
       tax: m.missions.tax, html: document.body.innerText.includes('Tableau principal') };
     setCell27({ value: 'Annuelle', style: {} }, 'fisc', m.id, 0, 'tva');
-    r.after = keys(m).filter(k => k.startsWith('TVA') || k === 'CA12');
+    const i = m.hist27.vatRegime.length - 1; histFrom27(m.id, 'vatRegime', i, '2026-01-01');
+    const ob = obligations27(m, 2026).filter(o => o.key.startsWith('TVA') || o.key === 'CA12');
+    r.after = ob.filter(o => !o.kept).map(o => o.key); r.kept = ob.filter(o => o.kept).map(o => o.key).includes('TVA-01');
     setFiscView27('3'); r.march = COLS27.fiscm.map(c => c.label).filter(l => /TVA|IS|DES/.test(l)); r.marchRows = document.querySelectorAll('.board27 tbody tr').length;
     return r;
   });
@@ -279,7 +286,8 @@ function waitFor(proc, text) {
   assert.equal(fi.mTva, 12); assert.deepEqual(fi.mKeys, ['IS-T1', 'IS-T2', 'IS-T3', 'IS-T4', 'CFE-AC', 'CFE', 'TVS', 'TF']);
   assert.deepEqual(fi.tKeys, ['TVA-01', 'TVA-04', 'TVA-07', 'TVA-10', 'TS-01', 'TS-04', 'TS-07', 'TS-10', 'IFU', 'CRL']);
   assert.equal(fi.tDeb, '2026-03-08'); assert.equal(fi.st, 'Déclarée', 'statut importé et harmonisé'); assert.equal(fi.tf, 'Payée');
-  assert.deepEqual(fi.after, ['CA12', 'TVA-S1', 'TVA-S2'], 'passage en TVA annuelle → CA12 et acomptes');
+  assert.deepEqual(fi.after.sort(), ['CA12', 'TVA-S1', 'TVA-S2'], 'passage en TVA annuelle au 1er janvier → CA12 et acomptes');
+  assert.ok(fi.kept, 'TVA-01 déjà déclarée sous l’ancien régime : conservée');
   assert.ok(fi.march.includes('DES/DEB 03') && fi.marchRows >= 1, 'vue mensuelle calculée');
   if (shots) await page.screenshot({ path: path.join(shots, 'fiscalite.png'), fullPage: false });
   console.log('✓ Fiscalité : import Excel, tableau principal des régimes, échéances mensuelles et annuelles automatiques');
@@ -288,6 +296,7 @@ function waitFor(proc, text) {
   await page.evaluate(() => routePage('exceptional'));
   assert.ok(!(await page.evaluate(() => document.body.innerText.includes('BR IMMOBILIER Transfert de siège'))), 'plus de maquette figée');
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'autres_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => exc27().items.length >= 3);
   const ex = await page.evaluate(() => {
     const it = exc27().items, sto = cfind('C2'), nv = state.clients.find(c => c.name === 'CLIENT EXC NOUVEAU'), inv = excInvoices27();
@@ -295,9 +304,9 @@ function waitFor(proc, text) {
     const tr = it.find(w => w.name === 'Transfert de siège');
     setExc27({ value: 'Terminé', style: {}, tagName: 'SELECT' }, tr.id, 'statut');
     const bill2 = toBill27().filter(x => x.src === 'Travail exceptionnel').map(x => x.label).sort();
-    return { n: it.length, stoik: it.filter(w => w.client === sto.id).length, nv: Boolean(nv && nv.status === 'Actif'), billed: excBilling27(it.find(w => w.name === 'STOIK - Evaluation'), inv.x).label, bill, bill2, lancer: tr.lancerFact, html: document.body.innerText.includes('Autres travaux Fr 2025') };
+    return { n: it.length, stoik: it.filter(w => w.client === sto.id).length, nv: Boolean(nv && nv.status === 'À qualifier'), billed: excBilling27(it.find(w => w.name === 'STOIK - Evaluation'), inv.x).label, bill, bill2, lancer: tr.lancerFact, html: document.body.innerText.includes('Autres travaux Fr 2025') };
   });
-  assert.ok(ex.html); assert.equal(ex.n, 3); assert.equal(ex.stoik, 2, 'travaux rattachés au client existant'); assert.ok(ex.nv, 'client absent créé');
+  assert.ok(ex.html); assert.equal(ex.n, 3); assert.equal(ex.stoik, 2, 'travaux rattachés au client existant'); assert.ok(ex.nv, 'client absent créé, à qualifier (jamais actif par défaut)');
   assert.equal(ex.billed, 'Facturé (déclaré)', 'ancien statut « facturé » : déclaré, sans facture reconstituée'); assert.deepEqual(ex.bill, ['Création holding']);
   assert.deepEqual(ex.bill2, ['Création holding', 'Transfert de siège'], 'travail terminé → à facturer'); assert.equal(ex.lancer, 'Oui');
   await page.evaluate(() => routePage('billing'));
@@ -379,6 +388,7 @@ function waitFor(proc, text) {
   await page.evaluate(() => routePage('creation'));
   assert.ok(await page.evaluate(() => { const a = [...document.querySelectorAll('.nav a')].map(a => a.dataset.page); return a.indexOf('creation') === a.indexOf('prospects') + 1; }), 'onglet Matrice création après Prospects');
   await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(FIX, 'creation_test.xlsx'));
+  await page.click('button:has-text(\"Appliquer l’import\")');
   await page.waitForFunction(() => creation27().items.length >= 2);
   const ci = await page.evaluate(() => { const a = creation27().items.find(x => x.name === 'TEST CREA ALPHA'), b = creation27().items.find(x => x.name === 'TEST CREA BETA'); return { a: a.fields.capital, close: a.fields.firstClose, doc: crDocs27(a, 'docIdSh').length, sa: crStatus27(a), b: b.deadline, sb: crStatus27(b), form: b.legalForm, t: document.body.innerText }; });
   assert.ok(ci.a === '1000' && ci.close === '2025-12-31' && ci.doc === 1 && ci.sa === 'Société créée' && ci.b === '2025-06-30' && ci.sb === 'Informations reçues' && ci.form === 'SCI' && ci.t.includes('Informations reçues') && ci.t.includes('Banque Test'), 'import Matrice création ' + JSON.stringify({ ...ci, t: '' }));

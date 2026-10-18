@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const vm = require('node:vm');
+const zlib = require('node:zlib');
 const guard = require('./guard');
 
 const ROOT = path.join(__dirname, '..');
@@ -89,6 +90,12 @@ class FileStore {
     const next = { revision: cur.revision + 1, state, updatedAt: new Date().toISOString(), updatedBy: username };
     this.write(this.files.state, next);
     return { revision: next.revision };
+  }
+  async getRevision(rev) {
+    const cur = await this.getShared();
+    if (cur.revision === rev) return cur.state;
+    const f = path.join(this.files.history, `state-r${String(rev).padStart(6, '0')}.json`);
+    return fs.existsSync(f) ? this.read(f, {}).state || null : null;
   }
   async auditPush(entry) {
     const f = path.join(this.dir, 'audit.jsonl');
@@ -171,6 +178,16 @@ class RedisStore {
   async kvGet(key) { const v = await this.cmd('GET', 'rb:kv:' + key); return v ? JSON.parse(v) : null; }
   async kvSet(key, value) { await this.cmd('SET', 'rb:kv:' + key, JSON.stringify(value)); }
   async kvDel(key) { await this.cmd('DEL', 'rb:kv:' + key); }
+  async getRevision(rev) {
+    const cur = Number(await this.cmd('GET', 'rb:rev') || 0);
+    if (rev === cur) return JSON.parse((await this.cmd('GET', 'rb:state')) || 'null');
+    const i = cur - rev - 1;
+    if (i < 0 || i >= HISTORY_SIZE) return null;
+    const h = await this.cmd('LINDEX', 'rb:history', String(i));
+    if (!h) return null;
+    const e = JSON.parse(h);
+    return e.revision === rev ? JSON.parse(e.state) : null;
+  }
   async auditPush(entry) { await this.cmd('LPUSH', 'rb:audit', JSON.stringify(entry)); await this.cmd('LTRIM', 'rb:audit', '0', String(AUDIT_SIZE - 1)); }
   async auditList(limit = 200) { return ((await this.cmd('LRANGE', 'rb:audit', '0', String(limit - 1))) || []).map(x => JSON.parse(x)); }
   async incrWindow(key, seconds) { const n = await this.cmd('INCR', 'rb:rl:' + key); if (n === 1) await this.cmd('EXPIRE', 'rb:rl:' + key, String(seconds)); return n; }
@@ -270,7 +287,7 @@ function normCustomer(x) {
 /* ---------- page du CRM ---------- */
 function buildIndex() {
   const base = fs.readFileSync(path.join(ROOT, 'src', 'crm_v26.html'), 'utf8');
-  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_billing.js', 'v27_team.js', 'creation_fields.js', 'v27_creation.js', 'v27_sync.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
+  const modules = ['v27_pennylane.js', 'v27_boards.js', 'v27_portfolio.js', 'v27_fiscal.js', 'v27_reprise.js', 'v27_cabinet.js', 'v27_billing.js', 'v27_team.js', 'v27_history.js', 'creation_fields.js', 'v27_creation.js', 'v27_sync.js', 'v27_imports.js', 'v27_style.js'].map(f => '<script>\n' + fs.readFileSync(path.join(ROOT, 'src', f), 'utf8') + '\n</script>\n').join('');
   const i = base.lastIndexOf('</body>');
   if (i < 0) throw new Error('crm_v26.html : balise </body> introuvable');
   return base.slice(0, i) + modules + base.slice(i);
@@ -343,6 +360,22 @@ function creationMissing(fields, files) {
   return creationFields().filter(f => f.required && (f.type === 'file' ? !files.some(x => x.kind === f.key) : !String(fields[f.key] || '').trim())).map(f => f.label.split(',')[0]);
 }
 const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+/* Chemins des modifications par élément : ['clients', '#C_x'], ['boards27', 'bilan', 'C_x|2025']… */
+const BAD_KEY = /^(__proto__|constructor|prototype)$/;
+function validOp(o) { return o && Array.isArray(o.path) && o.path.length >= 1 && o.path.length <= 6 && o.path.every(k => (typeof k === 'string' && k.length <= 120 && !BAD_KEY.test(k.replace(/^#/, ''))) || Number.isInteger(k)); }
+function getAt(root, p) { let o = root; for (const k of p) { if (o == null) return undefined; o = String(k).startsWith('#') && Array.isArray(o) ? o.find(x => x && x.id === k.slice(1)) : o[k]; } return o; }
+function putAt(root, p, value) {
+  let o = root;
+  for (let i = 0; i < p.length - 1; i++) {
+    const k = p[i], nk = p[i + 1];
+    let n = String(k).startsWith('#') && Array.isArray(o) ? o.find(x => x && x.id === k.slice(1)) : o[k];
+    if (n == null || typeof n !== 'object') { n = String(nk).startsWith('#') ? [] : {}; if (String(k).startsWith('#')) return; o[k] = n; }
+    o = n;
+  }
+  const last = p[p.length - 1];
+  if (String(last).startsWith('#') && Array.isArray(o)) { const id = last.slice(1), i = o.findIndex(x => x && x.id === id); if (value == null) { if (i >= 0) o.splice(i, 1); } else if (i >= 0) o[i] = value; else o.push(value); }
+  else if (value == null) delete o[last]; else o[last] = value;
+}
 const httpError = (status, message) => Object.assign(new Error(message), { status, public: true });
 const BACKUP_KEEP = 14;
 const MAX_STATE = Number(process.env.MAX_STATE_KB || 3500) * 1024;
@@ -393,6 +426,23 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
   // Fichiers : index séparé (nouveau format) + anciens fichiers listés dans la réponse (format précédent).
   async function creationFiles(token, sub) { return [...(sub?.files || []), ...((await store.kvGet('cr:files:' + token)) || [])]; }
   async function touchSub(token) { const sub = (await store.kvGet('cr:sub:' + token)) || { fields: {} }; sub.updatedAt = new Date().toISOString(); sub.rev = Number(sub.rev || 0) + 1; await store.kvSet('cr:sub:' + token, sub); }
+  /* Contrôles communs aux deux modes d'enregistrement, puis écriture atomique et journal. */
+  async function commitState(s, cur, next) {
+    if (!validState(next)) return { status: 400, body: { error: 'Structure de données invalide' } };
+    if (!s.perms.costs) guard.restoreCosts(cur.state, next);
+    const bad = guard.newViolations(cur.state, next);
+    if (bad.length) return { status: 422, body: { error: 'Données incohérentes refusées : ' + bad.slice(0, 5).join(' ; '), details: bad.slice(0, 50) } };
+    const denied = guard.permissionErrors(cur.state, next, s.perms, s.username);
+    if (denied.length) { await audit(s, 'enregistrement refusé (droits)', { reasons: denied }); return { status: 403, body: { error: denied.join(' '), details: denied } }; }
+    guard.stampAuthors(cur.state, next, s.username);
+    const size = Buffer.byteLength(JSON.stringify(next));
+    if (size > MAX_STATE) return { status: 413, body: { error: `Données trop volumineuses (${Math.round(size / 1024)} Ko, maximum ${Math.round(MAX_STATE / 1024)} Ko).` } };
+    const r = await store.saveShared(cur.revision, next, s.username);
+    if (r.conflict) return { status: 409, body: { error: `Les données ont été modifiées par ${r.updatedBy || 'un autre utilisateur'}.`, updatedBy: r.updatedBy } };
+    const ch = guard.changes(cur.state, next);
+    if (ch.length) await audit(s, 'enregistrement', { revision: r.revision, changes: ch.slice(0, 200), more: Math.max(0, ch.length - 200) });
+    return { status: 200, body: { revision: r.revision, size } };
+  }
   /* Instantané : état partagé, comptes (empreintes de mot de passe), liens et réponses de création ;
    * contenus des justificatifs seulement sur demande (taille). */
   async function snapshot(withFiles) {
@@ -463,25 +513,36 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
       const shared = await store.getShared();
       send(res, 200, s.perms.costs ? shared : { ...shared, state: guard.hideCosts(shared.state) });
     },
-    /* Enregistrement : structure, intégrité (aucune nouvelle anomalie), droits du rôle, puis écriture atomique et journal. */
+    /* Enregistrement complet (ancien mode, toujours accepté). */
     'PUT /api/state': async (req, res, s) => {
-      const body = await readBody(req), next = body.state, expected = Number(body.revision);
-      if (!validState(next)) return send(res, 400, { error: 'Structure de données invalide' });
+      const body = await readBody(req), expected = Number(body.revision);
       const cur = await store.getShared();
       if (cur.revision !== expected) return send(res, 409, { error: `Les données ont été modifiées par ${cur.updatedBy || 'un autre utilisateur'}.`, updatedBy: cur.updatedBy, revision: cur.revision });
-      if (!s.perms.costs) guard.restoreCosts(cur.state, next);
-      const bad = guard.newViolations(cur.state, next);
-      if (bad.length) return send(res, 422, { error: 'Données incohérentes refusées : ' + bad.slice(0, 5).join(' ; '), details: bad.slice(0, 50) });
-      const denied = guard.permissionErrors(cur.state, next, s.perms, s.username);
-      if (denied.length) { await audit(s, 'enregistrement refusé (droits)', { reasons: denied }); return send(res, 403, { error: denied.join(' '), details: denied }); }
-      guard.stampAuthors(cur.state, next, s.username);
-      const size = Buffer.byteLength(JSON.stringify(next));
-      if (size > MAX_STATE) return send(res, 413, { error: `Données trop volumineuses (${Math.round(size / 1024)} Ko, maximum ${Math.round(MAX_STATE / 1024)} Ko).` });
-      const r = await store.saveShared(expected, next, s.username);
-      if (r.conflict) return send(res, 409, { error: `Les données ont été modifiées par ${r.updatedBy || 'un autre utilisateur'}.`, updatedBy: r.updatedBy });
-      const ch = guard.changes(cur.state, next);
-      if (ch.length) await audit(s, 'enregistrement', { revision: r.revision, changes: ch.slice(0, 200), more: Math.max(0, ch.length - 200) });
-      send(res, 200, { revision: r.revision, size });
+      const r = await commitState(s, cur, body.state);
+      send(res, r.status, r.body);
+    },
+    /* Enregistrement par élément : seuls les éléments modifiés sont envoyés (client, facture, ligne de tableau…).
+     * Si quelqu'un a enregistré entre-temps, les modifications sont appliquées sur sa version à condition qu'il n'ait
+     * pas touché aux mêmes éléments ; sinon, conflit (le navigateur fusionne et affiche les écarts). */
+    'PATCH /api/state': async (req, res, s) => {
+      const body = await readBody(req), base = Number(body.baseRevision), ops = body.ops;
+      if (!Array.isArray(ops) || ops.length > 20000 || !ops.every(validOp)) return send(res, 400, { error: 'Modifications invalides' });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const cur = await store.getShared();
+        let conflicts = [];
+        if (cur.revision !== base) {
+          const baseState = await store.getRevision(base);
+          if (!baseState) return send(res, 409, { error: 'Version de départ trop ancienne : rechargement nécessaire.', updatedBy: cur.updatedBy });
+          conflicts = ops.filter(o => JSON.stringify(getAt(baseState, o.path) ?? null) !== JSON.stringify(getAt(cur.state, o.path) ?? null)).map(o => o.path);
+          if (conflicts.length) return send(res, 409, { error: `Les mêmes éléments ont été modifiés par ${cur.updatedBy || 'un autre utilisateur'}.`, updatedBy: cur.updatedBy, conflicts: conflicts.slice(0, 50) });
+        }
+        const next = JSON.parse(JSON.stringify(cur.state || {}));
+        for (const o of ops) putAt(next, o.path, o.value);
+        const r = await commitState(s, cur, next);
+        if (r.status === 409 && attempt < 2) continue;
+        if (r.status === 200) r.body.rebased = cur.revision !== base;
+        return send(res, r.status, r.body);
+      }
     },
     'GET /api/audit': async (req, res, s, url) => {
       need(s, 'audit', 'Journal réservé aux associés et administrateurs.');
@@ -677,6 +738,27 @@ function createApp({ store = createStore(), cfg = config() } = {}) {
         return next;
       });
       send(res, 200, { ok: true, rev: out.rev, submittedAt: out.submittedAt });
+    },
+    /* --- Imports : données de retour arrière (compressées), 10 derniers imports conservés --- */
+    'POST /api/imports': async (req, res, s) => {
+      need(s, 'import', 'Imports réservés aux managers, associés et administrateurs.');
+      const b = await readBody(req, 20 * 1024 * 1024), id = String(b.meta?.id || '');
+      if (!/^IMP_[a-z0-9]{4,20}$/i.test(id) || !Array.isArray(b.changes)) throw httpError(400, 'Import invalide');
+      const meta = { ...b.meta, user: s.username, storedAt: new Date().toISOString() };
+      await store.kvSet('import:' + id, { meta, gz: zlib.gzipSync(JSON.stringify(b.changes)).toString('base64') });
+      const index = ((await store.kvGet('import:index')) || []).filter(x => x !== id);
+      index.unshift(id);
+      for (const old of index.slice(10)) await store.kvDel('import:' + old);
+      await store.kvSet('import:index', index.slice(0, 10));
+      await audit(s, 'import appliqué', { target: String(meta.file || '').slice(0, 120), created: meta.created, modified: meta.modified, replaced: meta.replaced, errors: meta.errors });
+      send(res, 200, { ok: true });
+    },
+    'GET /api/imports': async (req, res, s, url) => {
+      need(s, 'import', 'Imports réservés aux managers, associés et administrateurs.');
+      const rec = await store.kvGet('import:' + String(url.searchParams.get('id') || '').replace(/[^A-Za-z0-9_]/g, ''));
+      if (!rec) throw httpError(404, 'Données de retour arrière introuvables (seuls les 10 derniers imports sont conservés).');
+      await audit(s, 'annulation d’import demandée', { target: String(rec.meta?.file || '').slice(0, 120) });
+      send(res, 200, { meta: rec.meta, changes: JSON.parse(zlib.gunzipSync(Buffer.from(rec.gz, 'base64')).toString()) });
     },
     /* --- Sauvegardes indépendantes de l'historique des 30 versions --- */
     'GET /api/backup': async (req, res, s, url) => {

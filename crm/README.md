@@ -113,7 +113,11 @@ npm i -g playwright   # une seule fois
 npm test   # parcours complets (fichiers, Redis), acceptation lot 1 (fichiers, Redis réel, Redis sans scripts Lua), point d'entrée Vercel
 ```
 
-Si `redis-server` est installé, les tests « Redis » l'utilisent réellement (le script Lua d'enregistrement atomique est exécuté) ; sinon ils utilisent un faux Upstash, qui vérifie le repli sur verrou. `test/lot1.js` couvre les tests d'acceptation du lot 1 (voir `docs/LOT1.md`).
+Si `redis-server` est installé, les tests « Redis » l'utilisent réellement (le script Lua d'enregistrement atomique est exécuté) ; sinon ils utilisent un faux Upstash, qui vérifie le repli sur verrou. `test/lot1.js` et `test/lot2.js` couvrent les tests d'acceptation des lots 1 et 2 (voir `docs/LOT1.md`, `docs/LOT2.md`).
+
+## Imports Excel
+
+Tout import (Portefeuille, Bilan, AGO, Fiscalité, Autres travaux, Matrice création, Prospects) affiche d'abord un **aperçu** : clients créés et modifiés, valeurs remplacées, erreurs, rapprochements ambigus à trancher. Rien n'est modifié avant « Appliquer l'import ». Les clients sont rapprochés par SIREN contrôlé, puis par nom exact ; deux SIREN différents ne sont jamais fusionnés ; un client créé par import est « À qualifier ». Une cellule vide n'efface rien. Chaque import est listé dans *Automatisations cabinet › Imports* et peut être annulé.
 
 Le test démarre le serveur avec un faux Pennylane (`test/mock-pennylane.js`) et un vrai navigateur. Il vérifie la connexion, la synchronisation automatique, le rapprochement des clients et des dossiers, les tableaux Bilan et AGO (import Excel avec des fichiers fictifs, échéances, retards, facturation, saisie directe, export), les conflits de version et la persistance après redémarrage.
 
@@ -137,7 +141,9 @@ crm/
   src/creation_fields.js  questions du formulaire de création (partagées CRM / formulaire)
   src/v27_creation.js     Matrice création (liens, réponses, fiche client)
   src/creation_form.html  formulaire public envoyé au client (/creation/<lien>)
-  src/v27_sync.js         enregistrement : fusion en cas de conflit, brouillon, comptes et rôles, journal, sauvegardes
+  src/v27_history.js      historique des paramètres (dates d'effet), échéances calculées mois par mois
+  src/v27_sync.js         enregistrement par élément, fusion en cas de conflit, brouillon, comptes et rôles, journal, sauvegardes
+  src/v27_imports.js      imports Excel : aperçu, rapprochements à trancher, rapport, retour arrière
   src/v27_style.js        style épuré, défilement conservé
   test/                   faux Pennylane + test de bout en bout
 ```

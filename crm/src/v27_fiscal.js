@@ -77,7 +77,7 @@ const FISC_MAIN_COLS27=[
  {k:'oblig',label:'Échéances / an',t:'auto',w:105,get:x=>obligations27(x.c,fiscView27().fiscYear).length},
 ];
 COLS27.fisc=FISC_MAIN_COLS27;
-KINDS27.fisc={label:'Fiscalité',group:x=>x.c.status==='Inactif'?'Inactifs':x.c.status==='Compromis'?'Compromis':isOnboarding27(x.c)?"En cours d'onboarding":'Actifs',
+KINDS27.fisc={label:'Fiscalité',group:x=>x.c.status==='À qualifier'?'À qualifier':x.c.status==='Inactif'?'Inactifs':x.c.status==='Compromis'?'Compromis':isOnboarding27(x.c)?"En cours d'onboarding":'Actifs',
  afterSet:(x,k)=>{if(k==='tva'||k==='regimeFiscal')regenerateAll(state,x.c.id,true);},
  rerender:['tva','f_tvaDay','f_debdes','f_ts','f_acIS','f_tvs','f_ifu','f_cfe','f_cvae','f_crl','f_tf','statutClient','regimeFiscal']};
 
@@ -112,7 +112,7 @@ function fiscalPage27(){
   const ctxs=clients.map(c=>ctx27('fisc',c,0));
   return head+`<div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients suivis</small><span class="big">${clients.length}</span></div><div class="card"><small>TVA mensuelle</small><span class="big">${clients.filter(c=>c.vatRegime==='Mensuelle').length}</span></div><div class="card"><small>Acomptes d’IS</small><span class="big">${clients.filter(c=>fisc27(c).acIS==='Oui').length}</span></div><div class="card"><small>Régimes à définir</small><span class="big warn">${clients.filter(c=>!TVA27.includes(c.vatRegime)).length}</span></div></div>
   ${filtersHtml27('<span class="sub">Un client apparaît ici dès que la mission « Fiscalité FR » est cochée dans le portefeuille.</span>')}
-  ${groupsHtml27('fisc',filterCtx27(ctxs),0,{order:['Actifs',"En cours d'onboarding",'Compromis','Inactifs'],colors:{'Actifs':C27.green,"En cours d'onboarding":C27.orange,'Compromis':C27.red,'Inactifs':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>'',empty:'Aucun client avec la mission « Fiscalité FR ». Coche-la dans le portefeuille ou importe ton fichier Fiscalité.'})}`;
+  ${groupsHtml27('fisc',filterCtx27(ctxs),0,{order:['À qualifier','Actifs',"En cours d'onboarding",'Compromis','Inactifs'],colors:{'À qualifier':C27.red,'Actifs':C27.green,"En cours d'onboarding":C27.orange,'Compromis':C27.red,'Inactifs':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>'',empty:'Aucun client avec la mission « Fiscalité FR ». Coche-la dans le portefeuille ou importe ton fichier Fiscalité.'})}`;
  }
  const concerned=clients.filter(c=>c.status!=='Inactif'&&obligations27(c,y).some(o=>inView27(o,view)));
  COLS27.fiscm=fiscMonthCols27(view,concerned,y);
@@ -146,13 +146,14 @@ function importFiscal27(rows,hi,file){
   const v={},st={};
   heads.forEach((h,i)=>{const val=r[i];if(val==null||val==='')return;if(/^cfe \d{4}$/.test(h))v.cfeN1=val;else if(h==='deadline taxe fonciere')v.tfDay=val;else if(FISC_HEAD27[h]&&v[FISC_HEAD27[h]]==null)v[FISC_HEAD27[h]]=val;const k=fiscStatusKey27(h);if(k&&val!=='-')st[k]=normStatus27(String(val));});
   const name=String(r[0]).trim(),siren=String(v.siren||'').replace(/\D/g,'').slice(0,9);
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren);created++;}else updated++;
   if(!c.missions)c.missions={};c.missions.tax=true;
-  if(siren.length===9&&!c.siren)c.siren=siren;
+  if(m.siren&&!c.siren)c.siren=m.siren;
   ['associe','manager','collab'].forEach(k=>{if(v[k])(c.people27=c.people27||{})[k]=uniqNames27(v[k]);});
   if(v.groupe)c.group27=String(v.groupe);
-  if(v.statut){const s=uniqNames27(v.statut);c.status=s==='Compromis'?'Compromis':s==='Inactif'?'Inactif':s.startsWith('Dossiers internes')?'Autres':c.status==='Onboarding'&&!c.onbValidated27&&c.onb27?'Onboarding':'Actif';}
+  if(v.statut){const s=uniqNames27(v.statut);c.status=s==='Compromis'?'Compromis':s==='Inactif'?'Inactif':s.startsWith('Dossiers internes')?'Autres':c.status==='Onboarding'&&!c.onbValidated27&&c.onb27?'Onboarding':/^Actif/.test(s)?'Actif':c.status;}
   if(v.tva&&TVA27.includes(String(v.tva)))c.vatRegime=String(v.tva);
   const f=fisc27(c);
   if(Number(v.tvaDay)>0){f.tvaDay=Number(v.tvaDay);c.vatDeadline=Number(v.tvaDay);}

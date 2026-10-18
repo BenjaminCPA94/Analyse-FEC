@@ -64,24 +64,32 @@ flush25=async function(){
  if(shared25.busy||!shared25.pending||shared25.conflict)return;
  shared25.busy=true;const payload=shared25.pending;shared25.pending=null;let retryConflict=false;
  try{
-  const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:shared25.revision,state:JSON.parse(payload)})});
+  // Envoi par élément (seuls les clients, factures, lignes… modifiés) ; envoi complet si la version de référence manque.
+  const next=JSON.parse(payload),ops=shared25.base&&shared25.revision>0&&typeof entityPaths27==='function'?entityPaths27(JSON.parse(shared25.base),next).map(o=>({path:o.path,value:o.after})):null;
+  if(ops&&!ops.length){shared25.base=payload;shared25.error='';return;}
+  const r=ops?await fetch('/api/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseRevision:shared25.revision,ops})})
+   :await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:shared25.revision,state:next})});
   const x=await r.json().catch(()=>({}));
   if(r.status===409){shared25.pending=shared25.pending||payload;retryConflict=true;return;}
   if(!r.ok){shared25.pending=shared25.pending||payload;draftKeep27(x.error||'refus '+r.status);throw Error((r.status===403?'Refusé par le serveur (droits) : ':r.status===422?'Refusé par le serveur : ':'')+(x.error||'Enregistrement refusé ('+r.status+')'));}
-  shared25.revision=x.revision;shared25.base=payload;shared25.error='';
+  shared25.revision=x.revision;shared25.base=payload;shared25.error='';shared25.lastOps=ops?ops.length:null;
+  // Enregistré par-dessus la version d'un collègue : on récupère ses modifications.
+  if(x.rebased)rebase27=true;
   // Le brouillon reste disponible tant que des écarts de conflit n'ont pas été traités.
   if(!shared25.pending&&!sync27.conflicts.some(c=>!c.done))draftClear27();
  }catch(e){shared25.error=e.message;if(!/^Refusé/.test(e.message))draftKeep27(e.message);}
  finally{
   shared25.busy=false;
   if(retryConflict){await resolveConflict27();return;}
+  if(rebase27){rebase27=false;await resolveConflict27(true);return;}
   status25();if(shared25.pending&&!shared25.error)flush25();
  }
 };
-async function resolveConflict27(){
+let rebase27=false;
+async function resolveConflict27(silentRebase){
  shared25.busy=true;
  try{
-  draftKeep27('conflit');
+  if(!silentRebase)draftKeep27('conflit');
   const r=await fetch('/api/state');if(!r.ok)throw Error('Rechargement impossible ('+r.status+')');
   const mine=JSON.parse(JSON.stringify(state)),theirs=await r.json(),base=JSON.parse(shared25.base||'{}');
   let {merged,conflicts}=mergeStates27(base,mine,theirs.state||{});
@@ -91,7 +99,7 @@ async function resolveConflict27(){
   state=merged;shared25.revision=theirs.revision;shared25.base=JSON.stringify(theirs.state);shared25.pending=JSON.stringify(state);shared25.error='';shared25.conflict=false;
   sync27.conflicts=conflicts;sync27.by=theirs.updatedBy||'un collègue';
   init25();render();
-  if(conflicts.length)showConflicts27();else toast(`Enregistrement simultané de ${sync27.by} : tes modifications ont été fusionnées avec les siennes.`);
+  if(conflicts.length)showConflicts27();else if(!silentRebase)toast(`Enregistrement simultané de ${sync27.by} : tes modifications ont été fusionnées avec les siennes.`);
  }catch(e){shared25.error='Conflit non résolu : '+e.message;shared25.conflict=true;}
  finally{shared25.busy=false;status25();if(shared25.pending&&!shared25.conflict)flush25();}
 }

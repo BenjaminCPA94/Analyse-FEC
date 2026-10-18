@@ -76,8 +76,9 @@ function importExc27(rows,hi,file){
  let created=0,updated=0,newClients=0;
  for(const r of data){
   const name=String(r[0]).trim(),cname=String(get(r,'portefeuille clients')||name).split(',')[0].trim();
-  let c=state.clients.find(x=>norm27(x.name)===norm27(cname));
-  if(!c){c=newClient26({name:cname,siren:'',legalForm:'',contact:'',email:''});c.entry='';c.status='Actif';state.clients.push(c);newClients++;}
+  const m=matchClient27(cname,'');if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(cname,'');newClients++;}
   const g=get(r,'groupe');if(g&&!c.group27)c.group27=String(g);
   const w={name,client:c.id,associe:uniqNames27(get(r,'associe')||''),realise:uniqNames27(get(r,'realise par')||''),revu:uniqNames27(get(r,'revu par')||''),date:date(get(r,'date mission'))||`${year}-01-01`,desc:String(get(r,'description')||''),typo:String(get(r,'typologie')||''),deadline:date(get(r,'deadline fin travaux - end')||get(r,'deadline fin travaux - start')),fees:Number(get(r,'honoraires prevus')||0),time:get(r,'temps estime')==null?'':Number(get(r,'temps estime')),statut:String(get(r,'statut')||'A faire'),lancerFact:String(get(r,'lancer facturation')||'')};
   if(/Facturé/.test(String(get(r,'statut facturation')||''))){w.factStatus='Facturé';w.factRef='import';}
@@ -94,7 +95,7 @@ exceptional=excPage27;
 /* ---------- Tableau de bord cabinet (temps réel) ---------- */
 function dashboardPage27(){
  const y=new Date().getFullYear(),m=new Date().getMonth()+1,ex=boards27().year,t=today27();
- const act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres'].includes(c.status)),onb=state.clients.filter(isOnboarding27);
+ const act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres','À qualifier'].includes(c.status)),onb=state.clients.filter(isOnboarding27);
  const prosp=(state.prospects||[]).filter(p=>!['Validé','Refusé'].includes(p.stage));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  const plYear=(state.pennylaneInvoices||[]).filter(i=>String(i.date).startsWith(y)&&i.status!=='Annulée'),factured=state.invoices.filter(i=>i.status!=='Annulée'&&!i.reconciled&&String(i.date).startsWith(y)).reduce((a,i)=>a+(invHT27(i)??0),0);

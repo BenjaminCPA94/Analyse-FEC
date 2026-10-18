@@ -93,7 +93,7 @@ const ONB_COLS27=[
 COLS27.portfolio=PF_COLS27;COLS27.onb=ONB_COLS27;
 const FISCAL_KEYS27=['regimeFiscal','tva','cloture','associe','manager','collab',...MISSIONS27.map(([k])=>'m_'+k)];
 KINDS27.portfolio={label:'Portefeuille',
- group:x=>isOnboarding27(x.c)?"En cours d'onboarding":['Inactif','Compromis','Autres'].includes(x.c.status)?'Inactifs, compromis et autres':'Actifs',
+ group:x=>x.c.status==='À qualifier'?'À qualifier (créés par import)':isOnboarding27(x.c)?"En cours d'onboarding":['Inactif','Compromis','Autres'].includes(x.c.status)?'Inactifs, compromis et autres':'Actifs',
  afterSet:(x,k)=>{if(FISCAL_KEYS27.includes(k))regenerateAll(state,x.c.id,true);},
  rerender:['statutClient','entry',...MISSIONS27.map(([k])=>'m_'+k),'honoCourants','honoBilan','honoAgo','honoAutres','ldm','groupe']};
 KINDS27.onb={label:'Onboarding',
@@ -105,14 +105,14 @@ KINDS27.onb={label:'Onboarding',
   if(p.done===p.total&&isOnboarding27(x.c))toast(x.c.name+' : toutes les étapes sont faites, tu peux valider l’onboarding');
  },
  rerender:['entry','deadline','ldm',...ONB_STEPS27.map((_,i)=>'s'+i)]};
-const PF_GROUPS27={order:["En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
+const PF_GROUPS27={order:['À qualifier (créés par import)',"En cours d'onboarding",'Actifs','Inactifs, compromis et autres'],colors:{'À qualifier (créés par import)':C27.red,"En cours d'onboarding":C27.orange,'Actifs':C27.green,'Inactifs, compromis et autres':C27.grey},sortKey:x=>x.c.name.toLowerCase(),nameExtra:()=>''};
 const ONB_GROUPS27={order:['Prêts à valider','Bloqués','En cours'],colors:{'Bloqués':C27.red,'En cours':C27.orange,'Prêts à valider':C27.green},
  nameExtra:x=>`<button class="btn small light" onclick="letterDialog26('${x.c.id}')" title="Préparer la lettre de mission">LDM</button>`,
  empty:'Aucun client en onboarding. Un prospect validé arrive ici automatiquement, avec ses missions et ses honoraires.'};
 
 /* ---------- Pages ---------- */
 function portfolioPage27(){
- const all=state.clients.map(c=>ctx27('portfolio',c,0)),act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres'].includes(c.status));
+ const all=state.clients.map(c=>ctx27('portfolio',c,0)),act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres','À qualifier'].includes(c.status));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  return `<div class="titleRow"><div><h1>Portefeuille clients</h1><div class="sub">Une ligne par client. Ce qui est saisi ici alimente automatiquement l’onboarding, la fiscalité, les tableaux Bilan et AGO et le contrôle des honoraires.</div></div>
   <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button>
@@ -225,13 +225,14 @@ function importPortfolio27(rows,hi){
  for(const it of items){
   const v={};keys.forEach((k,i)=>{if(k&&it.row[i]!=null&&it.row[i]!=='')v[k]=it.row[i];});
   const name=String(it.row[0]).trim(),siren=String(v.siren||'').replace(/\D/g,'').slice(0,9);
-  let c=(siren.length===9&&state.clients.find(x=>x.siren===siren))||state.clients.find(x=>norm27(x.name)===norm27(name));
-  if(!c){c=newClient26({name,siren:siren.length===9?siren:'',legalForm:v.forme||'',contact:v.contact||'',email:''});state.clients.push(c);created++;}else updated++;
+  const m=matchClient27(name,v.siren);if(m.skip)continue;
+  let c=m.c;
+  if(!c){c=importNewClient27(name,m.siren,{legalForm:v.forme,contact:v.contact});created++;}else updated++;
   if(!c.missions)c.missions={};
   const x=ctx27('portfolio',c,0),set=(k,val)=>{const col=PF_COLS27.find(z=>z.k===k);if(col&&col.set)col.set(x,val);};
   if(v.entry)c.entry=date(v.entry);
   ['associe','manager','collab'].forEach(k=>{if(v[k])set(k,uniqNames27(v[k]));});
-  if(siren.length===9)c.siren=siren;
+  if(m.siren&&!sirenOf27(c.siren))c.siren=m.siren;
   if(v.forme)c.legalForm=String(v.forme);
   if(v.groupe)c.group27=String(v.groupe);
   if(v.typologie)c.typologie27=String(v.typologie);
@@ -245,7 +246,8 @@ function importPortfolio27(rows,hi){
   ['honoCourants','honoBilan','honoAgo'].forEach(k=>{if(v[k]!=null)set(k,Number(v[k])||0);});
   if(c.missions.accounting==null&&Number(v.honoCourants)>0)c.missions.accounting=true;
   const onbGroup=/onboarding/i.test(it.group)||String(v.onbStatut||'')==='En cours';
-  c.status=onbGroup?'Onboarding':String(v.actif||'')==='Inactif'?'Inactif':/inactif/i.test(it.group)?'Inactif':'Actif';
+  // Statut repris seulement s'il est explicite dans le fichier (colonne ou groupe) ; sinon inchangé (« À qualifier » pour un nouveau client).
+  const actif=String(v.actif||'');c.status=onbGroup?'Onboarding':actif==='Inactif'||/inactif/i.test(it.group||'')?'Inactif':/^actif/i.test(actif)||/^actifs?$/i.test(String(it.group||'').trim())?'Actif':c.status;
   if(v.deadline)c.onbDeadline27=date(v.deadline);
   for(const s of it.steps){
    const i=ONB_STEPS27.findIndex(([full])=>normHead27(full).slice(0,22)===normHead27(s.name).slice(0,22));
