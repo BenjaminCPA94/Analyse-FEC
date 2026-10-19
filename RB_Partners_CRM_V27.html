@@ -7600,17 +7600,59 @@ function plApply27(t,k){
  if(k==='status'&&t.status==='Fait')plRecur27(t);
 }
 
-/* ---------- Saisie ---------- */
-function plAdd27(sec){
- const g=k=>document.getElementById(`pl27_${k}_${sec}`)?.value.trim()||'',title=g('title');if(!title)return toast('Écris la tâche.');
+/* ---------- Saisie : formulaire clair (création et modification) ---------- */
+const PL_SEC_HELP27={onb:'Démarrage d’un nouveau dossier.',annual:'Reliée au Bilan ou à l’AGO de l’exercice : « Fait » termine le dossier dans l’onglet correspondant.',current:'Travail qui revient (saisie, TVA, tableaux…) : il se recrée tout seul selon la récurrence.',exc:'Apparaît aussi dans l’onglet Travaux exceptionnels, puis en Facturation si elle est à facturer.'};
+function plForm27(id,sec){
+ const t=id?plTask27(id):null,me=me27(),p=workPrefs27();
+ const v=t?{...t}:{section:sec||'exc',status:'A faire',bill:'À définir',recurrence:(sec==='current'?'Mensuelle':'Non'),collab:p.pwho||me||'',year:new Date().getFullYear()-1,mission:'Bilan'};
+ const c=cfind(v.client),team=[...new Set(activeTeam27().map(m=>m.name))],people=n=>[...new Set(['',...team,...(n&&!team.includes(n)?[n]:[])])];
+ const f=(l,h,help)=>`<div class="field"><label>${l}</label>${h}${help?`<div class="sub">${help}</div>`:''}</div>`;
+ const sel=(k,o,val)=>`<select id="plf_${k}">${o.map(x=>`<option value="${esc(x)}" ${x===(val??'')?'selected':''}>${esc(x||'—')}</option>`).join('')}</select>`;
+ const radio=(k,o,val)=>`<div class="pl27seg">${o.map(([x,l])=>`<label class="${x===val?'on':''}"><input type="radio" name="plf_${k}" value="${esc(x)}" ${x===val?'checked':''} onchange="plFormSync27()">${esc(l)}</label>`).join('')}</div>`;
+ document.getElementById('modalRoot').innerHTML=`<div class="modalShade"><div class="modal pl27form"><div class="modalHead"><div><h3>${t?'Modifier la tâche':'Nouvelle tâche'}</h3><div class="sub">${t?`Créée le ${datefr(String(t.createdAt||'').slice(0,10))}${t.doneAt?' · terminée le '+datefr(t.doneAt):''}`:'Renseigne au minimum la tâche. Le reste peut être complété plus tard.'}</div></div><button class="btn secondary small" onclick="closeModal()" aria-label="Fermer">✕</button></div><div class="modalBody">
+  <h4 class="pl27h">1. Quoi ?</h4>
+  ${f('Tâche',`<input id="plf_title" value="${esc(v.title||'')}" placeholder="Ex. : déposer les comptes, changement de gérant, saisie mensuelle…">`)}
+  ${f('Type de travail',radio('section',PL_SECTIONS27.map(([k,l])=>[k,l.replace(/^[IV]+\. /,'')]),v.section),`<span id="plf_help">${PL_SEC_HELP27[v.section]||''}</span>`)}
+  <div class="formGrid" id="plf_annual" ${v.section==='annual'?'':'hidden'}>${f('Mission',sel('mission',['Bilan','AGO'],v.mission||'Bilan'))}${f('Exercice',`<input id="plf_year" type="number" value="${esc(v.year??'')}">`)}</div>
+  <h4 class="pl27h">2. Pour qui ?</h4>
+  <div class="formGrid">${f('Client',`<input id="plf_client" list="pl27_clients" value="${esc(c?.name||v.clientLabel||'')}" placeholder="Laisser vide : tâche interne">`,c?esc(c.siren?'SIREN '+c.siren:''):'')}${f('Fait par',sel('collab',people(v.collab),v.collab||''))}${f('Manager',sel('manager',people(v.manager),v.manager||''),'Repris de la fiche client si vide.')}</div>
+  <h4 class="pl27h">3. Quand ?</h4>
+  <div class="formGrid">${f('Échéance',`<input id="plf_end" type="date" value="${esc(v.end||'')}">`)}${f('Début (facultatif)',`<input id="plf_start" type="date" value="${esc(v.start||'')}">`)}${f('Récurrence',sel('recurrence',PL_REC27,v.recurrence||'Non'))}${f('Priorité',sel('priority',PL_PRIO27,v.priority||''))}</div>
+  <h4 class="pl27h">4. Facturation</h4>
+  <div class="formGrid">${f('À facturer ?',radio('bill',[['À définir','À définir'],['Oui','Oui'],['Non','Non']],v.bill||'À définir'))}${f('Honoraires HT (€)',`<input id="plf_fees" type="number" min="0" step="10" value="${esc(v.fees??'')}" placeholder="${v.section==='annual'?'Repris de la fiche client si vide':'Montant à facturer'}">`)}</div>
+  <h4 class="pl27h">5. Suivi</h4>
+  <div class="formGrid">${f('Statut',sel('status',PL_STATUS27,v.status||'A faire'))}${f('Temps passé (heures)',`<input id="plf_time" type="number" min="0" step="0.25" value="${esc(v.time??'')}">`,'Enregistré aussi dans Saisie des temps.')}</div>
+ </div><div class="modalFooter" style="display:flex;justify-content:space-between;gap:8px">${t?`<button class="btn secondary pf27del" onclick="plDel27('${t.id}')">Supprimer</button>`:'<span></span>'}<span style="display:flex;gap:8px"><button class="btn secondary" onclick="closeModal()">Annuler</button><button class="btn" onclick="plSave27('${t?t.id:''}')">${t?'Enregistrer':'Ajouter la tâche'}</button></span></div></div></div>`;
+ document.getElementById('plf_title').focus();
+}
+function plFormSync27(){
+ const sec=document.querySelector('input[name="plf_section"]:checked')?.value;
+ document.querySelectorAll('.pl27seg label').forEach(l=>l.classList.toggle('on',l.querySelector('input').checked));
+ const a=document.getElementById('plf_annual');if(a)a.hidden=sec!=='annual';
+ const h=document.getElementById('plf_help');if(h)h.textContent=PL_SEC_HELP27[sec]||'';
+}
+function plSave27(id){
+ const g=k=>(document.getElementById('plf_'+k)?.value||'').trim(),r=k=>document.querySelector(`input[name="plf_${k}"]:checked`)?.value||'';
+ const title=g('title');if(!title)return toast('Écris la tâche.');
  const name=g('client'),c=name?plClientByName27(name):null;
- if(name&&!c)return toast('Dossier introuvable : choisis-le dans la liste (ou laisse vide pour une tâche interne).');
- const p=workPrefs27(),me=me27(),y=new Date().getFullYear()-1;
- const t={id:uid('MT'),section:sec,title,client:c?.id||'',manager:c?people27(c,'manager'):'',collab:p.pwho||me||'',status:'A faire',start:'',end:g('end')||'',recurrence:sec==='current'?'Mensuelle':'Non',time:'',priority:'',fees:'',bill:'À définir',createdAt:new Date().toISOString(),by:shared25.user?.username||''};
- if(sec==='annual'){t.mission=/\bAGO\b|juridique/i.test(title)?'AGO':'Bilan';t.year=y;if(c)t.fees=(t.mission==='AGO'?fees27(c).legalAnnual:fees27(c).annualAccounts)||'';}
- if(c&&!t.collab)t.collab=people27(c,'collab');
- plItems27().push(t);plApply27(t,'client');log25('Planning · tâche ajoutée',t.client,title);save();render();
- document.getElementById('pl27_title_'+sec)?.focus();
+ if(name&&!c)return toast('Client introuvable : choisis-le dans la liste (ou laisse vide pour une tâche interne).');
+ const num=x=>x===''?'':Number(String(x).replace(',','.'));
+ const nv={title,section:r('section')||'exc',client:c?.id||'',collab:g('collab'),manager:g('manager'),end:g('end'),start:g('start'),recurrence:g('recurrence')||'Non',priority:g('priority'),bill:r('bill')||'À définir',fees:num(g('fees')),status:g('status')||'A faire',time:num(g('time'))};
+ if(nv.section==='annual'){nv.mission=g('mission')||'Bilan';nv.year=num(g('year'))||new Date().getFullYear()-1;if(nv.fees===''&&c)nv.fees=(nv.mission==='AGO'?fees27(c).legalAnnual:fees27(c).annualAccounts)||'';}
+ if(c&&!nv.manager)nv.manager=people27(c,'manager');
+ let t=id?plTask27(id):null;const isNew=!t;
+ if(isNew){t={id:uid('MT'),createdAt:new Date().toISOString(),by:shared25.user?.username||''};plItems27().push(t);}
+ const changed=isNew?Object.keys(nv):Object.keys(nv).filter(k=>String(t[k]??'')!==String(nv[k]??''));
+ if(!isNew&&!changed.length){closeModal();return;}
+ if(nv.client)t.clientLabel='';
+ Object.assign(t,nv);
+ // Automatisations : statut en dernier (fin de Bilan / AGO, récurrence, facturation).
+ for(const k of ['client','section','mission','year','bill','fees','end','collab','time'].filter(k=>changed.includes(k)))plApply27(t,k);
+ if(changed.includes('status'))plApply27(t,'status');else if(changed.length)plSyncExc27(t);
+ log25(isNew?'Planning · tâche ajoutée':'Planning · tâche modifiée',t.client,title);
+ closeModal();save();render();
+ if(t.status==='Fait'&&t.bill==='Oui'&&!t.client)toast('Tâche sans client : rattache-la à un client pour qu’elle passe en facturation.');
+ else toast(isNew?'Tâche ajoutée':'Tâche enregistrée');
 }
 function plClientByName27(name){const k=nameKey27(name);return state.clients.find(c=>c.name.toLowerCase()===name.toLowerCase())||state.clients.find(c=>nameKey27(c.name)===k);}
 function plSet27(id,k,v){
@@ -7643,25 +7685,17 @@ function plLinkCell27(t){
  return '';
 }
 function plRow27(t){
- const c=cfind(t.client),late=!plDone27(t)&&t.end&&t.end<today27(),sel=(k,o,v,w)=>`<select class="cell27" style="${w?'width:'+w+'px':''}" onchange="plSet27('${t.id}','${k}',this.value)">${o.map(x=>`<option value="${esc(x)}" ${x===(v??'')?'selected':''}>${esc(x||'—')}</option>`).join('')}</select>`;
- const inp=(k,type,w,ph='')=>`<input class="cell27" type="${type}" style="width:${w}px" value="${esc(t[k]??'')}" placeholder="${ph}" onchange="plSet27('${t.id}','${k}',this.value)">`;
- return `<tr class="${plDone27(t)?'pl27done':''}">
-  <td class="pl27name"><input class="cell27 pl27title" value="${esc(t.title)}" onchange="plSet27('${t.id}','title',this.value)">${t.section==='annual'?`<div class="pl27sub">${sel('mission',['Bilan','AGO'],t.mission,80)}<input class="cell27" type="number" style="width:70px" value="${esc(t.year??'')}" title="Exercice" onchange="plSet27('${t.id}','year',this.value)"></div>`:''}</td>
-  <td style="min-width:170px"><input class="cell27" list="pl27_clients" value="${esc(c?.name||t.clientLabel||'')}" placeholder="Interne" onchange="plSet27('${t.id}','client',this.value)">${plLinkCell27(t)}</td>
-  <td class="sub" style="white-space:nowrap">${esc(c?.siren||'')}</td>
-  <td>${inp('manager','text',120)}</td><td>${inp('collab','text',140)}</td>
-  <td><select class="pl27pill" style="background:${PL_STATUS_COLOR27[t.status]||'#8a94a6'}" onchange="plSet27('${t.id}','status',this.value)">${PL_STATUS27.map(x=>`<option ${x===t.status?'selected':''}>${x}</option>`).join('')}</select></td>
-  <td>${inp('start','date',130)}</td><td class="${late?'pl27late':''}">${inp('end','date',130)}</td>
-  <td>${sel('recurrence',PL_REC27,t.recurrence||'Non',115)}</td>
-  <td>${inp('time','number',70,'h')}</td>
-  <td><select class="pl27pill" style="background:${PL_PRIO_COLOR27[t.priority]||'#c9ced8'}" onchange="plSet27('${t.id}','priority',this.value)">${PL_PRIO27.map(x=>`<option value="${x}" ${x===(t.priority||'')?'selected':''}>${x||'—'}</option>`).join('')}</select></td>
-  <td>${inp('fees','number',90,'HT')}</td>
-  <td>${sel('bill',PL_BILL27,t.bill||'À définir',105)}</td>
-  <td style="min-width:130px">${plBillCell27(t)}</td>
-  <td class="sub" style="white-space:nowrap">${t.createdAt?datefr(t.createdAt.slice(0,10)):''}${t.doneAt?' → '+datefr(t.doneAt):''}</td>
-  <td><button class="btn small light pf27del" title="Supprimer la tâche" onclick="plDel27('${t.id}')">✕</button></td></tr>`;
+ const c=cfind(t.client),late=!plDone27(t)&&t.end&&t.end<today27(),sub=[t.section==='annual'&&t.mission?`${t.mission} ${t.year||''}`:'',t.recurrence&&t.recurrence!=='Non'?'↻ '+t.recurrence.toLowerCase():''].filter(Boolean).join(' · ');
+ const bill=t.bill==='Oui'?(plBillKey27(t)?plBillCell27(t):`<span class="pl27badge" style="background:#e0364f">À facturer</span>`)+(t.fees?` <b>${euro(t.fees)}</b>`:''):t.bill==='Non'?'<span class="sub">Non facturable</span>':'<span class="sub">À définir</span>';
+ return `<tr class="pl27row ${plDone27(t)?'pl27done':''}" onclick="plForm27('${t.id}')" title="Cliquer pour ouvrir la tâche">
+  <td class="pl27name">${t.priority?`<span class="pl27dot" style="background:${PL_PRIO_COLOR27[t.priority]}" title="Priorité ${esc(t.priority)}"></span>`:''}<b class="pl27title">${esc(t.title)}</b>${sub?`<div class="sub">${esc(sub)}</div>`:''}</td>
+  <td>${c?esc(c.name):t.clientLabel?`<span class="sub" title="Client inconnu du CRM">${esc(t.clientLabel)} ?</span>`:'<span class="sub">Interne</span>'}${plLinkCell27(t)}</td>
+  <td>${esc(plNames27(t.collab)[0]||'—')}</td>
+  <td class="${late?'pl27late':''}">${t.end?datefr(t.end):'<span class="sub">—</span>'}${late?'<div class="sub bad">en retard</div>':''}</td>
+  <td onclick="event.stopPropagation()"><select class="pl27pill" aria-label="Statut" style="background:${PL_STATUS_COLOR27[t.status]||'#8a94a6'}" onchange="plSet27('${t.id}','status',this.value)">${PL_STATUS27.map(x=>`<option ${x===t.status?'selected':''}>${x}</option>`).join('')}</select></td>
+  <td>${bill}</td></tr>`;
 }
-const PL_HEAD27='<tr><th class="pl27name">Tâche</th><th>Client</th><th>SIREN</th><th>Manager</th><th>Collaborateur</th><th>Statut</th><th>Début</th><th>Échéance</th><th>Récurrence</th><th>Temps (h)</th><th>Priorité</th><th>Honoraires HT</th><th>À facturer</th><th>Facturation</th><th>Création → fin</th><th></th></tr>';
+const PL_HEAD27='<tr><th class="pl27name">Tâche</th><th style="width:17%">Client</th><th style="width:13%">Fait par</th><th style="width:10%">Échéance</th><th style="width:150px">Statut</th><th style="width:15%">Facturation</th></tr>';
 function planningPage27(){
  if(plMigrate27())save();
  const p=workPrefs27(),me=me27(),who=p.pwho==null?me:p.pwho,q=(p.pq||'').toLowerCase(),coll=p.pcoll||{};
@@ -7672,16 +7706,15 @@ function planningPage27(){
  const late=open.filter(t=>t.end&&t.end<today27()).length,week=open.filter(t=>t.end&&t.end>=today27()&&t.end<=iso(addDays(new Date(),7))).length;
  const bill=open.concat(done).filter(t=>t.bill==='Oui'&&plBillKey27(t)&&!/^Facturé/.test(billState27(plBillKey27(t)).label)).reduce((s,t)=>s+Number(t.fees||0),0);
  const group=([k,label,color])=>{const list=open.filter(t=>t.section===k).sort(sortOpen),hidden=coll[k];return `<div class="pl27grp" style="--g:${color}"><div class="pl27gh" onclick="plToggle27('${k}')"><span>${hidden?'▸':'▾'}</span><b>${esc(label)}</b><span class="sub">${list.length} tâche(s)${list.some(t=>t.end&&t.end<today27())?` · <span class="bad">${list.filter(t=>t.end&&t.end<today27()).length} en retard</span>`:''}</span></div>
-  ${hidden?'':`<div class="board27 pl27board" data-k="pl_${k}"><table><thead>${PL_HEAD27}</thead><tbody>${list.map(plRow27).join('')}
-  <tr class="pl27add"><td class="pl27name"><input id="pl27_title_${k}" placeholder="+ Ajouter une tâche" onkeydown="if(event.key==='Enter')plAdd27('${k}')"></td><td><input id="pl27_client_${k}" list="pl27_clients" placeholder="Client (vide : interne)" onkeydown="if(event.key==='Enter')plAdd27('${k}')"></td><td></td><td></td><td></td><td></td><td></td><td><input id="pl27_end_${k}" type="date" title="Échéance"></td><td colspan="8"><button class="btn small" onclick="plAdd27('${k}')">Ajouter</button></td></tr></tbody></table></div>`}</div>`;};
- return `<div class="titleRow"><div><h1>Mon travail · Planning</h1><div class="sub">Ton planning : chaque tâche avec son client, son statut, ses échéances et sa facturation. Les tâches sont reliées aux autres onglets (travaux exceptionnels, Bilan / AGO, saisie des temps, facturation).</div></div>
-  <div class="v25actions"><label class="btn small secondary" style="cursor:pointer">Importer un planning Monday (Excel)<input type="file" accept=".xlsx" hidden onchange="plImport27(this.files[0]);this.value=''"></label><button class="btn small secondary" onclick="workPrefs27().mode='auto';save();render()">Échéances automatiques</button></div></div>
+  ${hidden?'':`<div class="board27 pl27board" data-k="pl_${k}"><table><thead>${PL_HEAD27}</thead><tbody>${list.map(plRow27).join('')||`<tr><td colspan="6" class="sub">Aucune tâche.</td></tr>`}</tbody></table><div class="pl27addbar"><button class="btn small light" onclick="plForm27('','${k}')">+ Nouvelle tâche ${esc(label.replace(/^[IV]+\. /,'').toLowerCase())}</button></div></div>`}</div>`;};
+ return `<div class="titleRow"><div><h1>Mon travail · Planning</h1><div class="sub">« + Nouvelle tâche » pour ajouter, clic sur une ligne pour l’ouvrir. Le statut se change directement dans la liste.</div></div>
+  <div class="v25actions"><button class="btn" onclick="plForm27('','exc')">+ Nouvelle tâche</button><label class="btn small secondary" style="cursor:pointer">Importer un planning Monday (Excel)<input type="file" accept=".xlsx" hidden onchange="plImport27(this.files[0]);this.value=''"></label><button class="btn small secondary" onclick="workPrefs27().mode='auto';save();render()">Échéances automatiques</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Tâches ouvertes</small><span class="big">${open.length}</span></div><div class="card"><small>En retard</small><span class="big ${late?'bad':'good'}">${late}</span></div><div class="card"><small>Échéance sous 7 jours</small><span class="big ${week?'warn':''}">${week}</span></div><div class="card"><small>À facturer (tâches)</small><span class="big ${bill?'bad':''}">${euro(bill)}</span></div></div>
  <div class="panel panelBody myt27bar"><label class="sub">Personne <select onchange="workPrefs27().pwho=this.value;save();render()"><option value="">Toute l’équipe</option>${people.map(n=>`<option ${n===who?'selected':''}>${esc(n)}</option>`).join('')}</select></label><input placeholder="Rechercher une tâche ou un client" value="${esc(p.pq||'')}" onchange="workPrefs27().pq=this.value;save();render()" style="flex:1;max-width:340px"></div>
  <datalist id="pl27_clients">${state.clients.filter(c=>c.status!=='Inactif').map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
  ${PL_SECTIONS27.map(group).join('')}
  <div class="pl27grp" style="--g:#17a673"><div class="pl27gh" onclick="plToggle27('done')"><span>${coll.done===false?'▾':'▸'}</span><b>Fait</b><span class="sub">${done.length} tâche(s) terminée(s) ou annulée(s)</span></div>
- ${coll.done===false?`<div class="board27 pl27board" data-k="pl_done"><table><thead>${PL_HEAD27}</thead><tbody>${done.sort((a,b)=>String(b.doneAt||'').localeCompare(String(a.doneAt||''))).slice(0,300).map(plRow27).join('')||'<tr><td colspan="16" class="sub">Aucune tâche terminée.</td></tr>'}</tbody></table></div>`:''}</div>`;
+ ${coll.done===false?`<div class="board27 pl27board" data-k="pl_done"><table><thead>${PL_HEAD27}</thead><tbody>${done.sort((a,b)=>String(b.doneAt||'').localeCompare(String(a.doneAt||''))).slice(0,300).map(plRow27).join('')||'<tr><td colspan="6" class="sub">Aucune tâche terminée.</td></tr>'}</tbody></table></div>`:''}</div>`;
 }
 function plToggle27(k){const p=workPrefs27(),c=p.pcoll=p.pcoll||{};c[k]=k==='done'?c[k]===false?undefined:false:!c[k];save();render();}
 
@@ -7722,10 +7755,14 @@ myWorkPage27=planningPage27;
 .pl27grp{margin:14px 0 6px;border-left:4px solid var(--g);background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
 .pl27gh{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;color:var(--g)}.pl27gh b{font-size:15px}
 .pl27board{max-height:none;border-top:1px solid #eef0f4}.pl27board td{padding:3px 6px;vertical-align:middle;border-bottom:1px solid #f1f2f5}.pl27board th{white-space:nowrap;font-size:11px}
-.pl27name{min-width:300px;text-align:left!important;position:sticky;left:0;background:#fff;z-index:1}.pl27title{width:100%;font-weight:600;text-align:left}
+.pl27name{text-align:left!important}.pl27title{font-weight:600}
 .pl27sub{display:flex;gap:6px;margin-top:3px}.pl27pill{border:0;border-radius:5px;color:#fff;font-weight:600;height:26px;min-width:120px;text-align:center;cursor:pointer}.pl27pill option{color:#1f2a3d;background:#fff}
 .pl27badge{display:inline-block;color:#fff;border-radius:5px;padding:3px 8px;font-size:12px;font-weight:600}.pl27late input{color:#c4162a;font-weight:700}
-.pl27done td{opacity:.6}.pl27done .pl27title{text-decoration:line-through}.pl27add td{background:#fafbfc}.pl27add input{height:30px;border:1px dashed #cfd5df;border-radius:6px;padding:0 8px;width:100%;background:#fff}`;document.head.append(st);})();
+.pl27done td{opacity:.6}.pl27done .pl27title{text-decoration:line-through}.pl27board{overflow-x:visible}.pl27board table{width:100%;min-width:0;table-layout:fixed}.pl27board td,.pl27board th{white-space:normal;word-break:break-word;text-align:left}.pl27board .pl27pill{min-width:0;width:100%}.pl27row{cursor:pointer}.pl27row:hover td{background:#f6f8fc}.pl27board td{height:44px}.pl27name{min-width:320px}
+.pl27dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:1px}.pl27addbar{padding:8px 10px;border-top:1px solid #f1f2f5}
+.modal.pl27form{width:min(720px,96vw)}.pl27form .modalBody{display:flex;flex-direction:column;gap:10px}.pl27form .formGrid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}
+.pl27form .field label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:#1f2a3d}.pl27h{margin:8px 0 0;font-size:14px;color:#1768c6;border-bottom:1px solid #eef0f4;padding-bottom:4px}
+.pl27seg{display:flex;flex-wrap:wrap;gap:6px}.pl27seg label{border:1px solid #d9dee7;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:13px;background:#fff}.pl27seg label.on{background:#1768c6;border-color:#1768c6;color:#fff}.pl27seg input{position:absolute;opacity:0;width:1px;height:1px}`;document.head.append(st);})();
 
 </script>
 <script>

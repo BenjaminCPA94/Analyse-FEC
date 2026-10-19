@@ -210,21 +210,31 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   const groups = await page.evaluate(() => [...document.querySelectorAll('.pl27gh b')].map(b => b.textContent));
   assert.deepEqual(groups, ['I. Onboarding', 'II. Travaux annuels (Bilan + AGO)', 'III. Travaux courants (à échéance répétitive)', 'IV. Travaux exceptionnels', 'Fait'], 'groupes du planning');
   // Travail exceptionnel : créé et tenu à jour, facturation.
-  await page.fill('#pl27_title_exc', 'Changement de gérant'); await page.fill('#pl27_client_exc', 'CLIENT À GARDER'); await page.click('.pl27grp:has-text("IV. Travaux") .pl27add button');
+  await page.click('button:has-text("+ Nouvelle tâche travaux exceptionnels")');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.pl27form .pl27h')].map(h => h.textContent)), ['1. Quoi ?', '2. Pour qui ?', '3. Quand ?', '4. Facturation', '5. Suivi'], 'formulaire en cinq questions');
+  await page.click('.pl27form .modalFooter button:has-text("Ajouter la tâche")');
+  assert.equal(await page.evaluate(() => myTasks27().items.length), 0, 'tâche vide refusée');
+  await page.fill('#plf_title', 'Changement de gérant'); await page.fill('#plf_client', 'CLIENT À GARDER'); await page.click('.pl27form .modalFooter button:has-text("Ajouter la tâche")');
   await settle();
   let t = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Changement de gérant'); return { id: t.id, exc: exc27().items.find(w => w.id === t.exc)?.name, manager: t.manager }; });
   assert.equal(t.exc, 'Changement de gérant', 'tâche exceptionnelle → travail exceptionnel créé');
-  await page.evaluate(id => { plSet27(id, 'fees', '200'); plSet27(id, 'bill', 'Oui'); plSet27(id, 'time', '1.5'); plSet27(id, 'status', 'Fait'); }, t.id);
+  await page.click('.pl27row:has-text("Changement de gérant")');
+  await page.click('.pl27seg label:has-text("Oui")'); await page.fill('#plf_fees', '200'); await page.fill('#plf_time', '1.5'); await page.selectOption('#plf_status', 'Fait');
+  await page.click('.pl27form .modalFooter button:has-text("Enregistrer")');
   await settle();
-  const ex = await page.evaluate(id => { const t = plTask27(id), w = exc27().items.find(x => x.id === t.exc), tm = state.time.find(x => x.id === t.timeId); return { w: [w.fees, w.statut, w.lancerFact], toBill: toBill27().some(x => x.key === 'X|' + w.id && x.amount === 200), time: tm && [tm.hours, tm.mission, tm.exc === w.id], done: document.querySelectorAll('[data-k="pl_exc"] tbody tr:not(.pl27add)').length }; }, t.id);
+  const ex = await page.evaluate(id => { const t = plTask27(id), w = exc27().items.find(x => x.id === t.exc), tm = state.time.find(x => x.id === t.timeId); return { w: [w.fees, w.statut, w.lancerFact], toBill: toBill27().some(x => x.key === 'X|' + w.id && x.amount === 200), time: tm && [tm.hours, tm.mission, tm.exc === w.id], done: document.querySelectorAll('[data-k="pl_exc"] .pl27row').length }; }, t.id);
   assert.deepEqual(ex, { w: [200, 'Terminé', 'Oui'], toBill: true, time: [1.5, 'Travail exceptionnel', true], done: 0 }, 'honoraires, statut, facturation et temps reliés ' + JSON.stringify(ex));
   // Travail annuel : relié au Bilan de l'exercice.
-  await page.fill('#pl27_title_annual', 'Bilan 2025 à finaliser'); await page.fill('#pl27_client_annual', 'CLIENT À GARDER'); await page.click('.pl27grp:has-text("II. Travaux") .pl27add button');
+  await page.click('button:has-text("+ Nouvelle tâche travaux annuels")');
+  assert.ok(await page.isVisible('#plf_mission'), 'mission et exercice proposés pour un travail annuel');
+  await page.fill('#plf_title', 'Bilan 2025 à finaliser'); await page.fill('#plf_client', 'CLIENT À GARDER'); await page.fill('#plf_year', '2025'); await page.click('.pl27form .modalFooter button:has-text("Ajouter la tâche")');
   await settle();
   const an = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Bilan 2025 à finaliser'), cid = t.client; plSet27(t.id, 'bill', 'Oui'); plSet27(t.id, 'status', 'Fait'); const r = row27('bilan', cid, 2025); return [t.mission, t.year, r.lancerFact, r.etat, toBill27().some(x => x.key === 'B|' + cid + '|2025')]; });
   assert.deepEqual(an, ['Bilan', 2025, 'Oui', '9. Bilan télédéclaré', true], 'tâche annuelle : Bilan terminé et à facturer ' + JSON.stringify(an));
   // Récurrence : prochaine occurrence créée.
-  await page.fill('#pl27_title_current', 'Saisie mensuelle'); await page.fill('#pl27_end_current', '2026-01-31'); await page.click('.pl27grp:has-text("III. Travaux") .pl27add button');
+  await page.click('button:has-text("+ Nouvelle tâche travaux courants")');
+  assert.equal(await page.inputValue('#plf_recurrence'), 'Mensuelle', 'travail courant : récurrence mensuelle par défaut');
+  await page.fill('#plf_title', 'Saisie mensuelle'); await page.fill('#plf_end', '2026-01-31'); await page.click('.pl27form .modalFooter button:has-text("Ajouter la tâche")');
   await settle();
   const rec = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Saisie mensuelle'); plSet27(t.id, 'status', 'Fait'); return myTasks27().items.filter(x => x.title === 'Saisie mensuelle').map(x => [x.status, x.end, x.recurrence]); });
   assert.deepEqual(rec, [['Fait', '2026-01-31', 'Mensuelle'], ['A faire', '2026-02-28', 'Mensuelle']], 'tâche récurrente recréée ' + JSON.stringify(rec));
