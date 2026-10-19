@@ -167,7 +167,23 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   const gone = await page.evaluate(([a, b]) => [Boolean(cfind(a)), creation27().items.some(x => x.client === a), JSON.stringify(state).includes(a), Boolean(cfind(b))], [direct.a, direct.b]);
   assert.deepEqual(gone, [false, false, false, true], 'dossier direct supprimé partout, y compris dans la matrice ; l’autre reste');
 
+  // Onboarding : deux portes d'entrée et changement de statut de plusieurs étapes d'un coup.
+  const ob = await page.evaluate(() => { const c = newClient26({ name: 'ONB MULTI', siren: '552100554', legalForm: 'SARL', contact: '', email: '' }); state.clients.push(c); regenerateAll(state, c.id); boards27().onbOpen = { [c.id]: true }; persist25(); routePage('onboarding'); return { id: c.id, btns: [...document.querySelectorAll('.titleRow .v25actions button')].map(b => b.textContent) }; });
+  await settle();
+  assert.ok(ob.btns.includes('+ Nouveau prospect') && ob.btns.includes('+ Nouvelle création') && !ob.btns.some(t => /Client par SIREN/.test(t)), 'entrées : prospect ou création ' + ob.btns);
+  const boxes = page.locator('.onbSteps27 tbody .onbChk27 input');
+  for (const n of [8, 9, 10]) await boxes.nth(n).check();
+  assert.equal(await page.textContent('.onbBulk27 b'), '3 étape(s) sélectionnée(s)');
+  await page.selectOption('.onbBulk27 select', 'Fait'); await page.click('.onbBulk27 button:has-text("Appliquer")');
+  await settle();
+  const after = await page.evaluate(cid => { const c = cfind(cid); return [ONB_ORDER27.map(i => onbStep27(c, i)).filter(s => s === 'Fait').length, document.querySelectorAll('.onbBulk27').length]; }, ob.id);
+  assert.deepEqual(after, [3, 0], 'trois étapes passées en Fait d’un coup, sélection remise à zéro');
+  await page.locator('.onbSteps27 thead .onbChk27 input').check();
+  assert.equal(await page.textContent('.onbBulk27 b'), '16 étape(s) sélectionnée(s)', 'tout sélectionner');
+  await page.click('.onbBulk27 button:has-text("Annuler")');
+  assert.equal(await page.locator('.onbBulk27').count(), 0);
+
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

@@ -5123,7 +5123,7 @@ function portfolioPage27(){
  const all=state.clients.map(c=>ctx27('portfolio',c,0)),act=state.clients.filter(c=>!isOnboarding27(c)&&!['Inactif','Compromis','Autres','À qualifier'].includes(c.status));
  const budget=act.reduce((a,c)=>a+feeTotalClient(c)-Number(fees27(c).exceptional||0),0);
  return `<div class="titleRow"><div><h1>Portefeuille clients</h1><div class="sub">Une ligne par client. Ce qui est saisi ici alimente automatiquement l’onboarding, la fiscalité, les tableaux Bilan et AGO et le contrôle des honoraires.</div></div>
-  <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button>
+  <div class="v25actions"><button class="btn small" onclick="nav('prospects');openNewProspect()">+ Nouveau prospect</button><button class="btn small secondary" onclick="routePage('creation');crNew27()">+ Nouvelle création</button>
   <label class="btn small light">Importer un Excel<input hidden type="file" accept=".xlsx" onchange="importBoard27(this.files[0]);this.value=''"></label>
   <button class="btn small secondary" onclick="exportBoard27('portfolio')">Exporter (Excel)</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Clients actifs</small><span class="big">${act.length}</span></div><div class="card"><small>En onboarding</small><span class="big warn">${state.clients.filter(isOnboarding27).length}</span></div><div class="card"><small>Honoraires annuels (actifs)</small><span class="big">${euro(budget)}</span></div><div class="card"><small>Bilans à produire</small><span class="big">${state.clients.filter(c=>c.missions?.annualAccounts&&!['Inactif','Compromis'].includes(c.status)).length}</span></div></div>
@@ -5171,7 +5171,7 @@ function setOnbPerson27(cid,i,v){const c=cfind(cid);if(!c)return;onb27(c).p[i]=v
 function onbRow27(x){
  const c=x.c,p=onbProgress27(c),open=boards27().onbOpen?.[c.id],u=urgency27(x),dl=val27(x,'deadline');
  const steps=ONB_ORDER27.map((i,n)=>{const [full]=ONB_STEPS27[i],st=onbStep27(c,i),auto=!onb27(c).s[i]&&st!=='A faire';
-  return `<tr><td class="onbNum27">${n+1}</td><td>${esc(full)}${ONB_BLOCKING27.includes(i)?' <span class="badge orange" title="Prérequis bloquant">bloquant</span>':''}${auto?` <span class="sub">· ${st==='À vérifier'?'à vérifier':'automatique'}</span>`:''}${i===5&&onbParamMissing27(c).length?` <span class="sub">· manque : ${esc(onbParamMissing27(c).join(', '))}</span>`:''}</td>
+  return `<tr class="${onbSel27(c.id).has(i)?'onbSel27':''}"><td class="onbChk27"><input type="checkbox" aria-label="Sélectionner l’étape ${n+1}" ${onbSel27(c.id).has(i)?'checked':''} onchange="onbPick27('${c.id}',${i},this.checked)"></td><td class="onbNum27">${n+1}</td><td>${esc(full)}${ONB_BLOCKING27.includes(i)?' <span class="badge orange" title="Prérequis bloquant">bloquant</span>':''}${auto?` <span class="sub">· ${st==='À vérifier'?'à vérifier':'automatique'}</span>`:''}${i===5&&onbParamMissing27(c).length?` <span class="sub">· manque : ${esc(onbParamMissing27(c).join(', '))}</span>`:''}</td>
    <td><input class="cell27 onbPerson27" value="${esc(onb27(c).p[i]||'')}" placeholder="${esc(people27(c,'collab').split(',')[0]||'Responsable')}" onchange="setOnbPerson27('${c.id}',${i},this.value)"></td>
    <td style="width:150px"><select class="pill27 onbPill27" style="background:${st==='À vérifier'?C27.orange:color27(st==='Fait'?'Oui':st==='Bloqué'?'Bloqué':st==='En cours'?'2.':st==='NA'?'NA':'1.')}" onchange="setCell27(this,'onb','${c.id}',0,'s${i}')">${ONB_OPTS27.map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}</select></td>
    <td style="width:150px;text-align:right">${ONB_ACTIONS27[i]?ONB_ACTIONS27[i](c):''}</td></tr>`;}).join('');
@@ -5186,7 +5186,18 @@ function onbRow27(x){
    ${onbDone27(c)?`<div class="onbAct27"><span class="badge green">${c.onbValidated27?(c.onbValidated27.forced?'Validé par exception le ':'Validé le ')+new Date(c.onbValidated27.date).toLocaleDateString('fr-FR'):'Validé'}</span><button class="btn small secondary" onclick="event.stopPropagation();reopenOnb27('${c.id}')">Rouvrir</button></div>`:`<div class="onbAct27"><button class="btn small ${p.done===p.total?'green':'secondary'}" onclick="event.stopPropagation();validateOnb27('${c.id}')">Valider l’onboarding</button></div>`}
   </div>
   ${open?`<div class="onbBody27"><div class="v25actions" style="margin-bottom:8px"><button class="btn small secondary" onclick="openClient('${c.id}')">Fiche client</button><label class="sub">Date d’entrée <input class="mini" type="date" value="${esc(c.entry||'')}" onchange="setCell27(this,'onb','${c.id}',0,'entry')"></label><label class="sub">Deadline <input class="mini" type="date" value="${esc(dl||'')}" onchange="setCell27(this,'onb','${c.id}',0,'deadline')"></label><label class="sub">Lettre de mission <select class="mini" onchange="setCell27(this,'onb','${c.id}',0,'ldm')">${LDM_OPTS27.map(o=>`<option ${o===ldm27(c)?'selected':''}>${o}</option>`).join('')}</select></label></div>
-   <table class="onbSteps27"><thead><tr><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
+   ${onbBulkBar27(c)}<table class="onbSteps27"><thead><tr><th class="onbChk27"><input type="checkbox" aria-label="Tout sélectionner" ${onbSel27(c.id).size===ONB_ORDER27.length?'checked':''} onchange="onbPickAll27('${c.id}',this.checked)"></th><th>#</th><th>Étape</th><th>Responsable</th><th>Statut</th><th></th></tr></thead><tbody>${steps}</tbody></table></div>`:''}</div>`;
+}
+/* Sélection de plusieurs étapes pour changer leur statut d'un coup (sélection propre à l'écran, non enregistrée). */
+const ONB_SEL27={};
+function onbSel27(cid){return ONB_SEL27[cid]||(ONB_SEL27[cid]=new Set());}
+function onbPick27(cid,i,on){const s=onbSel27(cid);on?s.add(i):s.delete(i);render();}
+function onbPickAll27(cid,on){const s=onbSel27(cid);s.clear();if(on)ONB_ORDER27.forEach(i=>s.add(i));render();}
+function onbBulkBar27(c){const n=onbSel27(c.id).size;if(!n)return '';return `<div class="onbBulk27"><b>${n} étape(s) sélectionnée(s)</b><span>Passer en</span><select id="onbBulk27_${c.id}">${ONB_OPTS27.map(o=>`<option>${esc(o)}</option>`).join('')}</select><button class="btn small" onclick="onbBulkApply27('${c.id}')">Appliquer</button><button class="btn small secondary" onclick="onbPickAll27('${c.id}',false)">Annuler la sélection</button></div>`;}
+function onbBulkApply27(cid){
+ const c=cfind(cid),sel=[...onbSel27(cid)],v=document.getElementById('onbBulk27_'+cid)?.value;if(!c||!sel.length||!v)return;
+ const x=ctx27('onb',c,0);sel.forEach(i=>{COLS27.onb.find(z=>z.k==='s'+i)?.set(x,v);KINDS27.onb?.afterSet?.(x,'s'+i,v);});
+ log25('Onboarding · statut de '+sel.length+' étape(s)',cid,v);onbSel27(cid).clear();save();render();toast(sel.length+' étape(s) passée(s) en « '+v+' »');
 }
 function onboardingPage27(){
  const list=filterCtx27(state.clients.filter(isOnboarding27).map(c=>ctx27('onb',c,0)));
@@ -5195,7 +5206,7 @@ function onboardingPage27(){
  const groups={};list.forEach(x=>{const g=group27(x);(groups[g]=groups[g]||[]).push(x);});
  const sortKey=x=>(val27(x,'deadline')||'9999')+x.c.name.toLowerCase();
  return `<div class="titleRow"><div><h1>Onboarding</h1><div class="sub">Clique sur un dossier pour dérouler ses étapes. Certaines se cochent seules ; c’est toi qui valides l’onboarding, le dossier passe alors dans « Onboarding validé ».</div></div>
-  <div class="v25actions"><button class="btn small" onclick="identityDialog26('client')">+ Client par SIREN</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
+  <div class="v25actions"><button class="btn small" onclick="nav('prospects');openNewProspect()">+ Nouveau prospect</button><button class="btn small secondary" onclick="routePage('creation');crNew27()">+ Nouvelle création</button><button class="btn small secondary" onclick="cabinetDialog26()">Modèle de lettre de mission</button></div></div>
  <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><small>Clients en onboarding</small><span class="big">${list.length}</span></div><div class="card"><small>Bloqués</small><span class="big ${list.some(x=>onbProgress27(x.c).blocked)?'bad':'good'}">${list.filter(x=>onbProgress27(x.c).blocked).length}</span></div><div class="card"><small>Deadline dépassée</small><span class="big ${list.some(x=>urgency27(x)?.level==='retard')?'bad':'good'}">${list.filter(x=>urgency27(x)?.level==='retard').length}</span></div></div>
  ${filtersHtml27()}
  <h2 class="sec27">Onboarding en cours <span class="sub">${list.length} dossier(s)</span></h2>
@@ -7718,7 +7729,7 @@ table{font-size:12.5px}th{font-size:10.5px;font-weight:600}
 .late27t{color:#c62a3d;font-weight:600}.soon27t{color:#b26b00;font-weight:600}
 .onbProg27{display:flex;align-items:center;gap:8px;font-size:12px}.bar27{flex:1;height:6px;background:#edf0f4;border-radius:4px;overflow:hidden}.bar27 i{display:block;height:100%}
 .onbBody27{border-top:1px solid #eef0f4;padding:10px 12px 12px 42px}
-.onbSteps27{width:100%;border-collapse:collapse}.onbSteps27 td{border-bottom:1px solid #f1f2f5;padding:0 6px;height:34px}.onbSteps27 th{text-align:left;padding:6px}
+.onbSteps27{width:100%;border-collapse:collapse}.onbChk27{width:28px;text-align:center}.onbChk27 input{width:16px;height:16px;cursor:pointer}.onbSteps27 tr.onbSel27 td{background:#eef4ff}.onbBulk27{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:8px 12px;margin-bottom:8px}.onbBulk27 select{height:30px}.onbSteps27 td{border-bottom:1px solid #f1f2f5;padding:0 6px;height:34px}.onbSteps27 th{text-align:left;padding:6px}
 .onbSteps27 a,.onbHead27 a{text-decoration:none}.onbNum27{color:#8a93a3;width:28px}.onbPerson27{text-align:left;max-width:200px}.onbPill27{border-radius:5px;height:26px}
 .v25actions label.sub{display:flex;align-items:center;gap:6px}`;document.head.append(s);})();
 // Une modification ne ramène plus en haut ni tout à gauche : le défilement est conservé après le rafraîchissement.

@@ -31,7 +31,7 @@ table{font-size:12.5px}th{font-size:10.5px;font-weight:600}
 .late27t{color:#c62a3d;font-weight:600}.soon27t{color:#b26b00;font-weight:600}
 .onbProg27{display:flex;align-items:center;gap:8px;font-size:12px}.bar27{flex:1;height:6px;background:#edf0f4;border-radius:4px;overflow:hidden}.bar27 i{display:block;height:100%}
 .onbBody27{border-top:1px solid #eef0f4;padding:10px 12px 12px 42px}
-.onbSteps27{width:100%;border-collapse:collapse}.onbSteps27 td{border-bottom:1px solid #f1f2f5;padding:0 6px;height:34px}.onbSteps27 th{text-align:left;padding:6px}
+.onbSteps27{width:100%;border-collapse:collapse}.onbChk27{width:28px;text-align:center}.onbChk27 input{width:16px;height:16px;cursor:pointer}.onbSteps27 tr.onbSel27 td{background:#eef4ff}.onbBulk27{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:8px 12px;margin-bottom:8px}.onbBulk27 select{height:30px}.onbSteps27 td{border-bottom:1px solid #f1f2f5;padding:0 6px;height:34px}.onbSteps27 th{text-align:left;padding:6px}
 .onbSteps27 a,.onbHead27 a{text-decoration:none}.onbNum27{color:#8a93a3;width:28px}.onbPerson27{text-align:left;max-width:200px}.onbPill27{border-radius:5px;height:26px}
 .v25actions label.sub{display:flex;align-items:center;gap:6px}`;document.head.append(s);})();
 // Une modification ne ramène plus en haut ni tout à gauche : le défilement est conservé après le rafraîchissement.
