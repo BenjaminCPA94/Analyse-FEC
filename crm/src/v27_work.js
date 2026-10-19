@@ -155,6 +155,71 @@ render=function(){
  const keep={};document.querySelectorAll('.board27[data-k]').forEach(e=>{keep[e.dataset.k]=e.scrollTop;});
  previousRenderWork27();
  document.querySelectorAll('.board27[data-k]').forEach(e=>{if(keep[e.dataset.k])e.scrollTop=keep[e.dataset.k];});
- if(state.page==='work'){document.getElementById('root').innerHTML=workPage27();}
+ if(state.page==='work'){document.getElementById('root').innerHTML=workPrefs27().mode==='auto'?workPage27():myWorkPage27();}
  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===state.page));
 };
+
+/* ---------- Mon travail : liste de tâches que chacun s'organise lui-même ----------
+ * Chaque matin : la tâche, le dossier concerné, et si elle est facturable. Une tâche « À facturer » terminée crée
+ * un travail exceptionnel « Lancer facturation = Oui » : elle apparaît dans Facturation. Les tâches non terminées
+ * des jours précédents restent dans la liste. Données partagées (state.myTasks27) ; filtres personnels (work27). */
+const MYT_BILL27=['Non facturable','À facturer','Déjà facturé'];
+const MYT_STATUS27=['À faire','En cours','Fait'];
+function myTasks27(){if(!state.myTasks27)state.myTasks27={items:[]};return state.myTasks27;}
+function mytFind27(id){return myTasks27().items.find(t=>t.id===id);}
+function myWorkPage27(){
+ const p=workPrefs27(),me=me27(),who=p.mwho==null?me:p.mwho,day=p.day||today27(),isToday=day===today27();
+ const mine=myTasks27().items.filter(t=>!who||t.owner===who);
+ const list=mine.filter(t=>t.date===day||(isToday&&t.date<day&&t.status!=='Fait')).sort((a,b)=>(a.status==='Fait')-(b.status==='Fait')||String(a.date).localeCompare(String(b.date))||String(a.createdAt).localeCompare(String(b.createdAt)));
+ const people=[...new Set(activeTeam27().map(m=>m.name))],d=draftMyt27(),opt=(o,v)=>o.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
+ const done=list.filter(t=>t.status==='Fait').length,toBill=list.filter(t=>t.billing==='À facturer').reduce((s,t)=>s+Number(t.amount||0),0);
+ const shift=n=>iso(addDays(new Date(day+'T12:00:00'),n));
+ const row=t=>{const c=cfind(t.client),late=t.date<day&&t.status!=='Fait';return `<tr class="${t.status==='Fait'?'myt27done':''}"><td class="onbChk27"><input type="checkbox" aria-label="Tâche faite" ${t.status==='Fait'?'checked':''} onchange="setMyt27('${t.id}','status',this.checked?'Fait':'À faire')"></td>
+  <td style="text-align:left;min-width:260px"><input class="cell27 myt27title" value="${esc(t.title)}" onchange="setMyt27('${t.id}','title',this.value)">${late?`<div class="sub bad">reportée · prévue le ${datefr(t.date)}</div>`:''}</td>
+  <td style="text-align:left">${c?`<a href="#" onclick="event.preventDefault();openClient('${c.id}')">${esc(c.name)}</a>`:'<span class="sub">Interne</span>'}</td>
+  <td><select class="cell27" onchange="setMyt27('${t.id}','billing',this.value)">${opt(MYT_BILL27,t.billing)}</select></td>
+  <td>${t.billing==='À facturer'?`<input class="cell27" type="number" min="0" step="10" style="width:90px" value="${esc(t.amount??'')}" placeholder="HT" onchange="setMyt27('${t.id}','amount',this.value)">`:'<span class="sub">—</span>'}${t.exc?'<div class="sub">→ Facturation</div>':''}</td>
+  <td><select class="cell27" onchange="setMyt27('${t.id}','status',this.value)">${opt(MYT_STATUS27,t.status)}</select></td>
+  <td style="white-space:nowrap">${t.status!=='Fait'?`<button class="btn small light" title="Reporter au jour suivant" onclick="setMyt27('${t.id}','date','${shift(1)}')">Demain</button>`:''} <button class="btn small light pf27del" title="Supprimer la tâche" onclick="delMyt27('${t.id}')">✕</button></td></tr>`;};
+ return `<div class="titleRow"><div><h1>Mon travail</h1><div class="sub">Ta liste du jour : la tâche, le dossier, et si c’est facturable. Les tâches non terminées des jours précédents restent dans la liste. Une tâche « À facturer » terminée passe dans Facturation.</div></div>
+  <div class="v25actions"><button class="btn small secondary" onclick="workPrefs27().mode='auto';save();render()">Échéances automatiques</button></div></div>
+ <div class="panel panelBody myt27bar"><button class="btn small secondary" onclick="workPrefs27().day='${shift(-1)}';save();render()" aria-label="Jour précédent">‹</button><input type="date" value="${day}" onchange="workPrefs27().day=this.value;save();render()"><button class="btn small secondary" onclick="workPrefs27().day='${shift(1)}';save();render()" aria-label="Jour suivant">›</button>${isToday?'<b>Aujourd’hui</b>':`<button class="btn small light" onclick="workPrefs27().day='';save();render()">Revenir à aujourd’hui</button>`}
+  <span style="flex:1"></span><label class="sub">Personne <select onchange="workPrefs27().mwho=this.value;save();render()"><option value="">Toute l’équipe</option>${people.map(n=>`<option ${n===who?'selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
+ <datalist id="myt27_clients">${state.clients.filter(c=>c.status!=='Inactif').map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
+ <div class="panel panelBody myt27add"><input id="myt27_title" placeholder="Nouvelle tâche (ex. : révision TVA, appel client, dépôt des comptes…)" value="${esc(d.title||'')}" onkeydown="if(event.key==='Enter')addMyt27()">
+  <input id="myt27_client" list="myt27_clients" placeholder="Dossier (laisser vide : interne)" value="${esc(d.client||'')}">
+  <select id="myt27_billing" onchange="document.getElementById('myt27_amount').style.display=this.value==='À facturer'?'':'none'">${opt(MYT_BILL27,d.billing||'Non facturable')}</select>
+  <input id="myt27_amount" type="number" min="0" step="10" placeholder="Montant HT" style="width:120px;${d.billing==='À facturer'?'':'display:none'}">
+  ${people.length?`<select id="myt27_owner" aria-label="Pour">${people.map(n=>`<option ${n===(who||me)?'selected':''}>${esc(n)}</option>`).join('')}</select>`:'<span></span>'}
+  <button class="btn" onclick="addMyt27()">Ajouter</button></div>
+ <div class="panel"><div class="panelHead"><h3>${isToday?'Aujourd’hui':datefr(day)} · ${list.length} tâche(s)</h3><span class="sub">${done} faite(s)${toBill?' · '+euro(toBill)+' HT à facturer':''}</span></div>
+  <table class="myt27"><thead><tr><th></th><th>Tâche</th><th>Dossier</th><th>Facturation</th><th>Montant HT</th><th>Statut</th><th></th></tr></thead><tbody>${list.map(row).join('')||`<tr><td colspan="7" class="sub">Aucune tâche${isToday?' pour aujourd’hui : ajoute ta première tâche ci-dessus.':' ce jour-là.'}</td></tr>`}</tbody></table></div>`;
+}
+function draftMyt27(){return workPrefs27().mdraft||{};}
+function addMyt27(){
+ const g=k=>document.getElementById('myt27_'+k)?.value.trim()||'',title=g('title');if(!title)return toast('Écris la tâche à faire.');
+ const name=g('client'),c=name?state.clients.find(x=>x.name.toLowerCase()===name.toLowerCase()):null;
+ if(name&&!c)return toast('Dossier introuvable : choisis-le dans la liste (ou laisse vide pour une tâche interne).');
+ const p=workPrefs27(),t={id:uid('MT'),date:p.day||today27(),owner:g('owner')||me27(),title,client:c?.id||'',billing:g('billing')||'Non facturable',amount:g('amount')===''?'':Number(g('amount')),status:'À faire',createdAt:new Date().toISOString(),by:shared25.user?.username||''};
+ myTasks27().items.push(t);p.mdraft={billing:t.billing};save();render();document.getElementById('myt27_title')?.focus();
+}
+function setMyt27(id,k,v){
+ const t=mytFind27(id);if(!t)return;
+ if(k==='amount')v=v===''?'':Number(v);
+ t[k]=v;if(k==='status')t.doneAt=v==='Fait'?today27():'';
+ // Tâche facturable terminée : travail exceptionnel « Lancer facturation = Oui », visible dans Facturation.
+ if(t.status==='Fait'&&t.billing==='À facturer'&&t.client&&!t.exc){
+  const c=cfind(t.client),w={id:uid('EX'),client:t.client,name:t.title,typo:'Autre',fees:Number(t.amount||0),date:t.date,deadline:'',realise:t.owner,time:'',desc:'Tâche de Mon travail',associe:c?people27(c,'associe'):'',statut:'Terminé',lancerFact:'Oui',doneAt:today27(),fromTask:t.id};
+  exc27().items.push(w);t.exc=w.id;log25('Mon travail · tâche facturable terminée',t.client,t.title);toast('Tâche terminée : elle passe dans Facturation › Prestations à facturer');
+ }
+ if(t.exc){const w=exc27().items.find(x=>x.id===t.exc);if(w){if(k==='amount')w.fees=Number(v||0);if(k==='title')w.name=v;if(k==='billing'&&v!=='À facturer')w.lancerFact='Non';if(k==='billing'&&v==='À facturer')w.lancerFact='Oui';}}
+ if(t.status==='Fait'&&t.billing==='À facturer'&&!t.client&&k==='status')toast('Tâche interne : rattache-la à un dossier pour qu’elle passe en facturation.');
+ save();render();
+}
+function delMyt27(id){const t=mytFind27(id);if(!t)return;if(t.exc&&!confirm('Cette tâche est déjà passée en facturation. La supprimer de ta liste ? (le travail facturable reste dans Travaux exceptionnels)'))return;myTasks27().items=myTasks27().items.filter(x=>x.id!==id);save();render();}
+const previousWorkPage27=workPage27;
+workPage27=function(){return `<div class="v25actions" style="justify-content:flex-end;margin-bottom:6px"><button class="btn small" onclick="workPrefs27().mode='';save();render()">← Ma liste de tâches</button></div>`+previousWorkPage27();};
+(function(){const st=document.createElement('style');st.textContent=`
+.myt27bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px}.myt27add{display:grid;grid-template-columns:2fr 1.4fr 150px auto 160px auto;gap:8px;align-items:center;padding:10px 14px}
+.myt27add input,.myt27add select,.myt27bar input,.myt27bar select{height:34px;border:1px solid #d9dee7;border-radius:8px;padding:0 10px;font:inherit;background:#fff}.myt27 td{padding:4px 8px;vertical-align:middle}.myt27 .myt27title{width:100%;text-align:left;font-weight:600}.myt27done td{opacity:.55}.myt27done .myt27title{text-decoration:line-through}
+@media(max-width:900px){.myt27add{grid-template-columns:1fr 1fr}}`;document.head.append(st);})();

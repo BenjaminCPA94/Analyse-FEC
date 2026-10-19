@@ -205,7 +205,32 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   const ctl2 = await page.evaluate(() => ({ row: [...document.querySelectorAll('.billCtl27 tbody tr')].find(r => r.children[0].textContent === 'CTL BILAN FINI')?.children[5].textContent, toBill: toBill27().filter(x => x.c.name.startsWith('CTL')).map(x => x.label).sort() }));
   assert.deepEqual(ctl2, { row: 'À facturer', toBill: ['Bilan 2025', 'Juridique annuel 2025'] }, '« Oui » : la mission passe dans Prestations à facturer et reste suivie jusqu’à la facture ' + JSON.stringify(ctl2));
 
+  // Mon travail : liste de tâches personnelle, tâche facturable terminée → Facturation.
+  await page.evaluate(() => { workPrefs27().mode = ''; workPrefs27().day = ''; workPrefs27().mwho = null; routePage('work'); });
+  assert.ok(await page.isVisible('#myt27_title'), 'saisie de tâche en tête de Mon travail');
+  await page.fill('#myt27_title', 'Révision TVA T3'); await page.fill('#myt27_client', 'CLIENT À GARDER'); await page.click('.myt27add button:has-text("Ajouter")');
+  await page.fill('#myt27_title', 'Rendez-vous conseil'); await page.fill('#myt27_client', 'CLIENT À GARDER'); await page.selectOption('#myt27_billing', 'À facturer'); await page.fill('#myt27_amount', '450'); await page.click('.myt27add button:has-text("Ajouter")');
+  await page.fill('#myt27_title', 'Tâche sans dossier inconnu'); await page.fill('#myt27_client', 'DOSSIER QUI N EXISTE PAS'); await page.click('.myt27add button:has-text("Ajouter")');
+  await settle();
+  const mt = await page.evaluate(() => ({ items: myTasks27().items.map(t => [t.title, cfind(t.client)?.name, t.billing, t.amount, t.status, t.owner, t.date === today27()]), rows: document.querySelectorAll('table.myt27 tbody tr').length }));
+  assert.deepEqual(mt.items, [['Révision TVA T3', 'CLIENT À GARDER', 'Non facturable', '', 'À faire', 'Ruben HAZIZA', true], ['Rendez-vous conseil', 'CLIENT À GARDER', 'À facturer', 450, 'À faire', 'Ruben HAZIZA', true]], 'tâches ajoutées (dossier inconnu refusé) ' + JSON.stringify(mt));
+  assert.equal(mt.rows, 2);
+  await page.check('table.myt27 tr:has(input[value="Rendez-vous conseil"]) td.onbChk27 input');
+  await settle();
+  const fact = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Rendez-vous conseil'), w = exc27().items.find(x => x.id === t.exc); return { st: t.status, w: w && [w.name, w.fees, w.statut, w.lancerFact], toBill: toBill27().some(x => x.exc === t.exc && x.amount === 450) }; });
+  assert.deepEqual(fact, { st: 'Fait', w: ['Rendez-vous conseil', 450, 'Terminé', 'Oui'], toBill: true }, 'tâche facturable terminée → Prestations à facturer');
+  // Tâche non faite d'hier : reportée dans la liste du jour ; « Demain » la décale.
+  await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Révision TVA T3'); t.date = iso(addDays(new Date(), -1)); save(); render(); });
+  assert.ok(/reportée/.test(await page.textContent('table.myt27 tr:has(input[value="Révision TVA T3"])')), 'tâche d’hier non faite reportée');
+  await page.click('table.myt27 tr:has(input[value="Révision TVA T3"]) button:has-text("Demain")');
+  await settle();
+  assert.equal(await page.locator('table.myt27 input[value="Révision TVA T3"]').count(), 0, 'tâche décalée à demain');
+  const srvT = await page.evaluate(async () => (await (await fetch('/api/state')).json()).state.myTasks27?.items?.length);
+  assert.equal(srvT, 2, 'tâches enregistrées sur le serveur');
+  await page.evaluate(() => { workPrefs27().mode = 'auto'; render(); });
+  assert.ok(await page.isVisible('button:has-text("Ma liste de tâches")'), 'échéances automatiques toujours accessibles');
+
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup, contrôle facturation');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup, contrôle facturation, Mon travail (liste de tâches)');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

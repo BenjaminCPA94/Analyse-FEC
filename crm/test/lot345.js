@@ -75,7 +75,7 @@ function waitFor(proc, text) {
   /* ---------- Lot 3 : navigation et Mon travail ---------- */
   const nav = await page.evaluate(() => [...document.querySelectorAll('.nav .navsec')].map(e => e.textContent));
   assert.deepEqual(nav, ['Pilotage', 'Clients', 'Production', 'Honoraires', 'Mon travail', 'Organisation', 'Paramètres'], 'menu dans l’ordre choisi');
-  await page.evaluate(() => { workPrefs27().view = 'all'; workPrefs27().who = null; routePage('work'); });
+  await page.evaluate(() => { workPrefs27().mode = 'auto'; workPrefs27().view = 'all'; workPrefs27().who = null; routePage('work'); });
   const work = await page.evaluate(() => { const l = tasks27().filter(x => mine27(x, me27())); return { me: me27(), n: l.length, src: [...new Set(l.map(x => x.src))].sort(), first: document.querySelector('.board27 tbody tr td:nth-child(2)')?.textContent, html: /échéance officielle/i.test(document.body.innerText) }; });
   assert.equal(work.me, 'Alice Test', 'compte relié explicitement à un collaborateur');
   assert.ok(work.n >= 3 && work.src.includes('bilan') && work.src.includes('exc') && work.src.includes('fiscal') && work.html, 'tâches déduites des tableaux ' + JSON.stringify(work));
@@ -96,7 +96,7 @@ function waitFor(proc, text) {
   assert.ok(shared.work27?.view !== 'late' && shared.boards27?.q !== 'FILTRE-A', 'filtres personnels non partagés');
   // 13. Compte sans collaborateur associé : rien ne lui est attribué.
   const N = await open('nolink');
-  const nl = await N.page.evaluate(() => { routePage('work'); return { me: me27(), mine: tasks27().filter(x => mine27(x, me27())).length, banner: document.body.innerText.includes('relié à aucun collaborateur'), q: boards27().q || '', view: workPrefs27().view }; });
+  const nl = await N.page.evaluate(() => { workPrefs27().mode = 'auto'; routePage('work'); return { me: me27(), mine: tasks27().filter(x => mine27(x, me27())).length, banner: document.body.innerText.includes('relié à aucun collaborateur'), q: boards27().q || '', view: workPrefs27().view }; });
   assert.deepEqual([nl.me, nl.banner, nl.q], ['', true, ''], 'compte sans collaborateur : aucune attribution, message explicite, filtres de l’autre utilisateur absents');
   const tsel = await N.page.evaluate(() => { routePage('time'); return document.getElementById('t27_who').value; });
   assert.equal(tsel, '', 'saisie des temps : aucun collaborateur présélectionné');
