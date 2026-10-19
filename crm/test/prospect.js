@@ -183,7 +183,25 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   await page.click('.onbBulk27 button:has-text("Annuler")');
   assert.equal(await page.locator('.onbBulk27').count(), 0);
 
+  // Facturation : contrôle des missions sans statut « Lancer facturation ».
+  const ctl = await page.evaluate(() => {
+    const y = new Date().getFullYear(), mk = n => { const c = newClient26({ name: n, siren: '', legalForm: 'SAS', contact: '', email: '' }); c.status = 'Actif'; state.clients.push(c); return c; };
+    const a = mk('CTL BILAN FINI'), b = mk('CTL AGO EN COURS'), d = mk('CTL DEJA DECIDE');
+    Object.assign(row27('bilan', a.id, y, true), { afaire: 'Oui', etat: '9. Terminé' }); row27('bilan', a.id, y).lancerFact = '';
+    Object.assign(row27('ago', b.id, y, true), { juridique: 'Oui', statut: '1. A faire' });
+    Object.assign(row27('bilan', d.id, y, true), { afaire: 'Oui', etat: '9. Terminé', lancerFact: 'Non' });
+    exc27().items.push({ id: 'EX_CTL', client: d.id, name: 'Conseil ponctuel', statut: 'Terminé', fees: 300, date: y + '-03-01' });
+    persist25(); billingKey27().ctlDone = false; routePage('billing');
+    return [...document.querySelectorAll('.billCtl27 tbody tr')].map(r => r.children[0].textContent + ' · ' + r.children[1].textContent + ' · ' + (r.children[3]?.textContent || '').split(' ')[0]);
+  });
+  await settle();
+  assert.deepEqual(ctl.filter(t => t.startsWith('CTL')), ['CTL BILAN FINI · Bilan ' + new Date().getFullYear() + ' · Terminée', 'CTL DEJA DECIDE · Conseil ponctuel · Terminée', 'CTL AGO EN COURS · Juridique annuel / AGO ' + new Date().getFullYear() + ' · En'], 'missions sans statut de facturation, terminées en tête ' + JSON.stringify(ctl));
+  await page.selectOption('.billCtl27 tr:has-text("CTL BILAN FINI") select', 'Oui');
+  await settle();
+  const ctl2 = await page.evaluate(() => ({ rows: [...document.querySelectorAll('.billCtl27 tbody tr')].map(r => r.children[0].textContent), toBill: toBill27().map(x => x.c.name) }));
+  assert.ok(!ctl2.rows.includes('CTL BILAN FINI') && ctl2.toBill.includes('CTL BILAN FINI'), 'statut choisi : la mission quitte le contrôle et passe à facturer ' + JSON.stringify(ctl2));
+
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup, contrôle facturation');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });

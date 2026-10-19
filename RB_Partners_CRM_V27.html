@@ -6092,6 +6092,42 @@ function excBilling27(w,s){
 const previousSaveBilling27=save;
 save=function(){allocCache27=null;return previousSaveBilling27.apply(this,arguments);};
 
+/* ---------- Contrôle : missions dont le statut de facturation n'est pas renseigné ----------
+ * Bilan, Juridique annuel / AGO et travaux exceptionnels concernés, terminés ou non, sans « Lancer facturation »
+ * choisi (Oui / Non). But : ne pas oublier de décider si une mission réalisée est à facturer. */
+const BILLCTL_BLANK27=v=>v==null||v===''||v==='-';
+function billControl27(){
+ const out=[];
+ for(const y of billYears27())for(const c of state.clients){
+  if(['Inactif','Compromis'].includes(c.status))continue;
+  for(const [kind,label,page] of [['bilan','Bilan','closing'],['ago','Juridique annuel / AGO','legal']]){
+   const x=ctx27(kind,c,y),g=group27(x);if(g==='Non concernés')continue;
+   if(!BILLCTL_BLANK27(row27(kind,c.id,y).lancerFact))continue;
+   out.push({kind,c,y,id:'',label:`${label} ${y}`,page,done:g==='Terminés',status:kind==='bilan'?val27(x,'etat'):val27(x,'statut')});
+  }
+ }
+ for(const w of exc27().items){const c=cfind(w.client);if(!c||w.included==='Oui'||!BILLCTL_BLANK27(w.lancerFact))continue;
+  out.push({kind:'exc',c,y:excYear27(w),id:w.id,label:w.name||'Travail exceptionnel',page:'exceptional',done:w.statut==='Terminé',status:w.statut||'—'});}
+ return out.sort((a,b)=>Number(b.done)-Number(a.done)||String(b.y).localeCompare(String(a.y))||a.c.name.localeCompare(b.c.name));
+}
+function setBillCtl27(kind,cid,y,id,v){
+ if(!v)return;
+ if(kind==='exc'){const w=exc27().items.find(x=>x.id===id);if(!w)return;w.lancerFact=v;}
+ else row27(kind,cid,Number(y),true).lancerFact=v;
+ log25('Contrôle facturation · lancer facturation',cid,v);save();render();
+ toast(v==='Oui'?'Mission marquée à facturer':'Mission marquée non facturable');
+}
+function billControlPanel27(){
+ const b=billingKey27(),all=billControl27(),onlyDone=b.ctlDone!==false,list=onlyDone?all.filter(x=>x.done):all,nDone=all.filter(x=>x.done).length;
+ const btn=(on,l,v)=>`<button class="btn small ${on?'':'secondary'}" onclick="billingKey27().ctlDone=${v};save();render()">${l}</button>`;
+ return `<div class="panel billCtl27"><div class="panelHead"><div><h3>Contrôle : statut de facturation à renseigner <span class="badge ${nDone?'red':'green'}">${nDone} terminée(s)</span> <span class="badge gray">${all.length-nDone} en cours</span></h3><div class="sub">Missions des onglets Bilan, Juridique annuel / AGO et Travaux exceptionnels dont « Lancer facturation » n’est pas renseigné. Choisis Oui (à facturer) ou Non : les missions « Oui » terminées passent dans « Prestations à facturer ».</div></div><div class="v25actions">${btn(onlyDone,'Terminées',true)}${btn(!onlyDone,'Toutes',false)}</div></div>
+ <table><thead><tr><th>Client</th><th>Mission</th><th>Exercice</th><th>Avancement</th><th>Lancer facturation</th><th></th></tr></thead><tbody>${list.slice(0,300).map(x=>`<tr><td><b>${esc(x.c.name)}</b></td><td>${esc(x.label)}</td><td>${esc(String(x.y||''))}</td><td><span class="badge ${x.done?'green':'orange'}">${x.done?'Terminée':'En cours'}</span> <span class="sub">${esc(x.status||'')}</span></td><td><select class="cell27" aria-label="Lancer facturation" onchange="setBillCtl27('${x.kind}','${x.c.id}','${x.y}','${x.id}',this.value)"><option value="">À renseigner</option><option>Oui</option><option>Non</option></select></td><td><button class="btn small light" onclick="routePage('${x.page}')">Ouvrir l’onglet</button></td></tr>`).join('')||`<tr><td colspan="6" class="sub">${onlyDone?'Aucune mission terminée sans statut de facturation.':'Toutes les missions ont un statut de facturation.'}</td></tr>`}</tbody></table>${list.length>300?`<div class="panelBody sub">300 premières lignes affichées sur ${list.length}.</div>`:''}</div>`;
+}
+billing=function(){
+ const html=billingPage27(),mark='<div class="panel"><div class="panelHead"><h3>Factures émises';
+ return html.includes(mark)?html.replace(mark,billControlPanel27()+mark):html+billControlPanel27();
+};
+
 </script>
 <script>
 /* RB Partners V27 — équipe réelle, saisie des temps, rentabilité, charge équipe, fiche client unifiée et recherche.
