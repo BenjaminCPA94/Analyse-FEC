@@ -112,7 +112,7 @@ function crStage27(id,v){
  if(['Société créée','Abandonné'].includes(v)&&it.token&&it.link?.state!=='clôturé')crLinkState27(id,'close',true);
  // La société créée termine le travail exceptionnel lié : il passe automatiquement dans « À facturer ».
  const w=it.exc&&exc27().items.find(x=>x.id===it.exc);
- if(w){if(v==='Société créée'){w.statut='Terminé';w.doneAt=w.doneAt||today27();}else if(v==='Abandonné'){w.statut='A revoir';}else if(['Statuts en cours','Dépôt au greffe'].includes(v)&&w.statut==='A faire')w.statut='En cours';}
+ if(w){if(v==='Société créée'){w.statut='Terminé';w.doneAt=w.doneAt||today27();if(w.lancerFact!=='Non')w.lancerFact='Oui';}else if(v==='Abandonné'){w.statut='A revoir';}else if(['Statuts en cours','Dépôt au greffe'].includes(v)&&w.statut==='A faire')w.statut='En cours';}
  log25('Matrice création : '+v,it.client||'',it.name);persist25();
 }
 
@@ -208,7 +208,7 @@ function crClient27(id){
  if(c&&!confirm(`Un client « ${c.name} » existe déjà. Le rattacher à ce dossier ?`))c=null;
  if(!c){c=newClient26({name:it.fields?.denomination||it.name,siren:'',legalForm:it.legalForm||'',contact:it.contactName||'',email:it.contactEmail||''});state.clients.push(c);}
  it.client=c.id;c.creation27=it.id;crToClient27(it);
- if(!it.exc){const w={id:uid('EX'),client:c.id,name:'Création de société',typo:'Juridique',fees:Number(it.fees||0),date:today27(),deadline:it.deadline||'',realise:'',time:'',desc:`Création ${it.legalForm||''} ${it.name}`.trim(),associe:people27(c,'associe'),statut:it.stage==='Société créée'?'Terminé':'En cours',lancerFact:'',created:today27()};exc27().items.push(w);it.exc=w.id;}
+ if(!it.exc){const w={id:uid('EX'),client:c.id,name:'Création de société',typo:'Juridique',fees:Number(it.fees||0),date:today27(),deadline:it.deadline||'',realise:'',time:'',desc:`Création ${it.legalForm||''} ${it.name}`.trim(),associe:people27(c,'associe'),statut:it.stage==='Société créée'?'Terminé':'En cours',lancerFact:it.stage==='Société créée'?'Oui':'',created:today27()};exc27().items.push(w);it.exc=w.id;}
  log25('Matrice création : fiche client créée',c.id,it.name);closeModal();persist25();
  toast(`Fiche « ${c.name} » créée : elle apparaît dans l’onboarding, et la création dans les travaux exceptionnels.`);
 }

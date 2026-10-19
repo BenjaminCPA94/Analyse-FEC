@@ -5921,15 +5921,16 @@ function billYears27(){
  for(const k of ['bilan','ago'])Object.keys(boards27()[k]||{}).forEach(id=>{const y=Number(id.split('|')[1]);if(y>2000)ys.add(y);});
  return [...ys].sort();
 }
-/* Missions terminées et facturables, tous exercices confondus. */
+/* Missions à facturer (« Lancer facturation = Oui »), tous exercices confondus. */
 function billableItems27(){
  const out=[];
  for(const yy of billYears27())for(const c of state.clients){
   const b=ctx27('bilan',c,yy),a=ctx27('ago',c,yy);
-  if(group27(b)==='Terminés'&&val27(b,'lancerFact')==='Oui')out.push({key:'B|'+c.id+'|'+yy,c,src:'Bilan '+yy,label:'Bilan '+yy,page:'closing',y:yy});
-  if(group27(a)==='Terminés'&&val27(a,'lancerFact')!=='Non')out.push({key:'J|'+c.id+'|'+yy,c,src:'AGO '+yy,label:'Juridique annuel '+yy,page:'legal',y:yy});
+  // « Lancer facturation = Oui » suffit, quel que soit l'avancement de la mission.
+  if(val27(b,'lancerFact')==='Oui')out.push({key:'B|'+c.id+'|'+yy,c,src:'Bilan '+yy,label:'Bilan '+yy,page:'closing',y:yy});
+  if(val27(a,'lancerFact')==='Oui')out.push({key:'J|'+c.id+'|'+yy,c,src:'AGO '+yy,label:'Juridique annuel '+yy,page:'legal',y:yy});
  }
- exc27().items.forEach(w=>{const c=cfind(w.client);if(c&&w.included!=='Oui'&&(w.statut==='Terminé'||w.lancerFact==='Oui'))out.push({key:'X|'+w.id,c,src:'Travail exceptionnel',label:w.name,page:'exceptional',exc:w.id,y:excYear27(w)});});
+ exc27().items.forEach(w=>{const c=cfind(w.client);if(c&&w.included!=='Oui'&&w.lancerFact==='Oui')out.push({key:'X|'+w.id,c,src:'Travail exceptionnel',label:w.name,page:'exceptional',exc:w.id,y:excYear27(w)});});
  return out;
 }
 /* Prestations encore à facturer (tout ou partie). */
@@ -6067,7 +6068,7 @@ function billingPage27(){
  <div class="cards" style="grid-template-columns:repeat(4,1fr)"><div class="card"><small>Reste à facturer (HT)</small><span class="big ${list.length?'bad':'good'}">${euro(list.reduce((a,x)=>a+x.amount,0))}</span><div class="sub">${list.length} prestation(s), tous exercices</div></div><div class="card"><small>Rapprochements à valider</small><span class="big ${sugg.length?'warn':'good'}">${sugg.length}</span></div><div class="card"><small>Écarts d’honoraires à vérifier</small><span class="big ${gaps.length?'warn':'good'}">${gaps.length}</span></div><div class="card"><small>Facturé ${y} (HT)</small><span class="big">${euro(sumKnown(yearInv))}</span><div class="sub">ce mois : ${euro(sumKnown(yearInv.filter(i=>String(i.date).startsWith(mo))))}${declN?` · dont ${declN} déclarée(s) CRM`:''}${unknownN?` · ${unknownN} HT inconnu`:''}</div></div></div>
  ${state.pennylaneSync?.lastSync?'':'<div class="note" style="margin-bottom:12px">Pennylane n’est pas encore synchronisé : aucune facture émise n’est connue et les écarts d’honoraires ne sont pas calculés.</div>'}
  ${sugg.length?`<div class="panel"><div class="panelHead"><h3>Rapprochements à valider</h3><div class="v25actions"><span class="sub">Correspondances possibles, jamais appliquées sans ta confirmation</span>${exactSuggestions27().length?`<button class="btn small green" onclick="confirmExact27()">Confirmer les ${exactSuggestions27().length} sans ambiguïté…</button>`:''}</div></div><table><thead><tr><th>Client</th><th>Facture Pennylane</th><th>Proposé pour</th><th>Motif</th><th style="text-align:right">Montant affecté</th><th></th></tr></thead><tbody>${sugg.map((s,n)=>s.kind==='pl'?`<tr><td><b>${esc(s.it.c.name)}</b></td><td>${esc(s.inv.number||'—')} <span class="sub">· ${datefr(s.inv.date)} · ${euro(s.inv.amount)} HT${Math.abs(s.left-s.inv.amount)>0.5?' · reste '+euro(s.left):''}</span></td><td>${esc(s.it.label)} <span class="sub">· reste ${euro(s.it.amount)}</span></td><td class="sub">${esc(s.why)}</td><td style="text-align:right"><input id="sg_${n}" type="number" step="0.01" value="${s.ht}" style="width:110px"></td><td style="white-space:nowrap"><button class="btn small green" onclick="confirmLink27('${esc(s.inv.id)}','${esc(s.key)}',Number(document.getElementById('sg_${n}').value))">Confirmer</button> <button class="btn small secondary" onclick="rejectLink27('${esc(s.inv.id)}','${esc(s.key)}')">Écarter</button></td></tr>`:`<tr><td><b>${esc(cfind(s.m.client)?.name||'')}</b></td><td>${esc(s.inv.number||'—')} <span class="sub">· ${datefr(s.inv.date)} · ${euro(s.inv.amount)} HT</span></td><td>Saisie CRM ${esc(s.m.number||s.m.label)} <span class="sub">· ${euro(invHT27(s.m))} HT</span></td><td class="sub">${esc(s.why)}</td><td></td><td style="white-space:nowrap"><button class="btn small green" onclick="reconcileManual27('${esc(s.m.id)}','${esc(s.inv.id)}');persist25()">C’est la même</button> <button class="btn small secondary" onclick="rejectLink27('${esc(s.inv.id)}','M|${esc(s.m.id)}')">Écarter</button></td></tr>`).join('')}</tbody></table></div>`:''}
- <div class="panel"><div class="panelHead"><h3>Prestations à facturer</h3><span class="sub">Missions terminées, tous exercices · une facture peut couvrir plusieurs missions</span></div><table><thead><tr><th>Client</th><th>Origine</th><th>Objet</th><th style="text-align:right">Prévu HT</th><th style="text-align:right">Déjà facturé</th><th style="text-align:right">Reste HT</th><th></th></tr></thead><tbody>${list.map(x=>`<tr><td><b><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')">${esc(x.c.name)}</a></b></td><td><a href="#" onclick="event.preventDefault();routePage('${x.page}')">${esc(x.src)}</a></td><td>${esc(x.label)}${x.state.label==='Partiellement facturé'?' <span class="badge orange">Partiel</span>':''}</td><td style="text-align:right">${x.state.exp?euro(x.state.exp):'<span class="sub">honoraires à renseigner</span>'}</td><td style="text-align:right">${x.state.billed?euro(x.state.billed):''}</td><td style="text-align:right"><b>${euro(x.amount)}</b></td><td style="text-align:right"><button class="btn small light" onclick="markBilled27('${x.key}')">Déclarer une facture</button></td></tr>`).join('')||'<tr><td colspan="7" class="sub">Rien à facturer pour l’instant.</td></tr>'}</tbody></table></div>
+ <div class="panel"><div class="panelHead"><h3>Prestations à facturer</h3><span class="sub">Missions avec « Lancer facturation = Oui », terminées ou non, tous exercices · une facture peut couvrir plusieurs missions</span></div><table><thead><tr><th>Client</th><th>Origine</th><th>Objet</th><th style="text-align:right">Prévu HT</th><th style="text-align:right">Déjà facturé</th><th style="text-align:right">Reste HT</th><th></th></tr></thead><tbody>${list.map(x=>`<tr><td><b><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')">${esc(x.c.name)}</a></b></td><td><a href="#" onclick="event.preventDefault();routePage('${x.page}')">${esc(x.src)}</a></td><td>${esc(x.label)}${x.state.label==='Partiellement facturé'?' <span class="badge orange">Partiel</span>':''}</td><td style="text-align:right">${x.state.exp?euro(x.state.exp):'<span class="sub">honoraires à renseigner</span>'}</td><td style="text-align:right">${x.state.billed?euro(x.state.billed):''}</td><td style="text-align:right"><b>${euro(x.amount)}</b></td><td style="text-align:right"><button class="btn small light" onclick="markBilled27('${x.key}')">Déclarer une facture</button></td></tr>`).join('')||'<tr><td colspan="7" class="sub">Rien à facturer pour l’instant.</td></tr>'}</tbody></table></div>
  ${gaps.length?`<div class="panel"><div class="panelHead"><h3>Écarts d’honoraires à vérifier</h3><span class="sub">Honoraires courants facturés dans Pennylane inférieurs au prorata du budget : à analyser, ce n’est pas automatiquement une facture à émettre</span></div><table><thead><tr><th>Client</th><th>Constat</th><th style="text-align:right">Écart HT</th><th></th></tr></thead><tbody>${gaps.map(x=>`<tr><td><b><a href="#" onclick="event.preventDefault();openClient('${x.c.id}')">${esc(x.c.name)}</a></b></td><td>${esc(x.label)}</td><td style="text-align:right">${euro(x.amount)}</td><td style="text-align:right"><button class="btn small secondary" onclick="routePage('fees')">Analyser</button> <button class="btn small light" onclick="gapChecked27('${x.key}')">Vérifié</button></td></tr>`).join('')}</tbody></table></div>`:''}
  <div class="panel"><div class="panelHead"><h3>Factures émises</h3><div class="v25actions">${['Année en cours','Toutes'].map(o=>`<button class="btn small ${f===o?'':'secondary'}" onclick="billingKey27().filter='${o}';save();render()">${o}</button>`).join('')}</div></div><table><thead><tr><th>Client</th><th>Facture</th><th>Date</th><th>État</th><th>Missions couvertes</th><th style="text-align:right">Montant HT</th><th></th></tr></thead><tbody>${shown.slice(0,400).map(i=>{const [st,col]=stateOf(i),al=allocOf(i);return `<tr style="${i.reconciled?'opacity:.6':''}"><td><b><a href="#" onclick="event.preventDefault();openClient('${i.client}')">${esc(cfind(i.client)?.name||'—')}</a></b></td><td>${esc(i.label||'')}</td><td>${datefr(i.date)}</td><td><span class="badge ${col}">${esc(st)}</span></td><td class="sub">${al.map(a=>esc(keyLabel27(a.key))+(a.ht!=null?' ('+euro(a.ht)+')':'')+(i.source==='pennylane'?` <a href="#" title="Annuler ce rapprochement" onclick="event.preventDefault();unlink27('${esc(i.id)}','${esc(a.key)}')">×</a>`:'')).join('<br>')}</td><td style="text-align:right">${htTxt27(invHT27(i))}</td><td style="text-align:right;white-space:nowrap">${i.source==='pennylane'?`<button class="btn small light" onclick="assignPl27('${esc(i.id)}')">Affecter</button>`:i.reconciled?'':`<button class="btn small secondary" title="Supprimer la facture déclarée" onclick="delInvoice27('${i.id}')">×</button>`}</td></tr>`;}).join('')||'<tr><td colspan="7" class="sub">Aucune facture.</td></tr>'}</tbody></table></div>`;
 }
@@ -6092,40 +6093,40 @@ function excBilling27(w,s){
 const previousSaveBilling27=save;
 save=function(){allocCache27=null;return previousSaveBilling27.apply(this,arguments);};
 
-/* ---------- Contrôle : missions dont le statut de facturation n'est pas renseigné ----------
- * Bilan, Juridique annuel / AGO et travaux exceptionnels concernés, terminés ou non, sans « Lancer facturation »
- * choisi (Oui / Non). But : ne pas oublier de décider si une mission réalisée est à facturer. */
+/* ---------- Missions réalisées · suivi de facturation ----------
+ * Toutes les missions terminées (Bilan, Juridique annuel / AGO, travaux exceptionnels hors forfait) qui ne sont pas
+ * encore facturées, quel que soit « Lancer facturation » (Oui, Non ou non renseigné), modifiable ici. */
 const BILLCTL_BLANK27=v=>v==null||v===''||v==='-';
 function billControl27(){
- const out=[];
+ const out=[],cache=allocs27();
+ const add=(kind,c,y,id,label,page,status,lf,key)=>{const st=billState27(key,cache);if(/^Facturé/.test(st.label))return;out.push({kind,c,y,id,label,page,status,lf:BILLCTL_BLANK27(lf)?'':lf,key,st});};
  for(const y of billYears27())for(const c of state.clients){
   if(['Inactif','Compromis'].includes(c.status))continue;
-  for(const [kind,label,page] of [['bilan','Bilan','closing'],['ago','Juridique annuel / AGO','legal']]){
-   const x=ctx27(kind,c,y),g=group27(x);if(g==='Non concernés')continue;
-   if(!BILLCTL_BLANK27(row27(kind,c.id,y).lancerFact))continue;
-   out.push({kind,c,y,id:'',label:`${label} ${y}`,page,done:g==='Terminés',status:kind==='bilan'?val27(x,'etat'):val27(x,'statut')});
-  }
+  const b=ctx27('bilan',c,y),a=ctx27('ago',c,y);
+  if(group27(b)==='Terminés')add('bilan',c,y,'','Bilan '+y,'closing',val27(b,'etat'),row27('bilan',c.id,y).lancerFact,'B|'+c.id+'|'+y);
+  if(group27(a)==='Terminés')add('ago',c,y,'','Juridique annuel / AGO '+y,'legal',val27(a,'statut'),row27('ago',c.id,y).lancerFact,'J|'+c.id+'|'+y);
  }
- for(const w of exc27().items){const c=cfind(w.client);if(!c||w.included==='Oui'||!BILLCTL_BLANK27(w.lancerFact))continue;
-  out.push({kind:'exc',c,y:excYear27(w),id:w.id,label:w.name||'Travail exceptionnel',page:'exceptional',done:w.statut==='Terminé',status:w.statut||'—'});}
- return out.sort((a,b)=>Number(b.done)-Number(a.done)||String(b.y).localeCompare(String(a.y))||a.c.name.localeCompare(b.c.name));
+ for(const w of exc27().items){const c=cfind(w.client);if(!c||w.included==='Oui'||w.statut!=='Terminé')continue;add('exc',c,excYear27(w),w.id,w.name||'Travail exceptionnel','exceptional',w.statut,w.lancerFact,'X|'+w.id);}
+ const rank={'':0,Oui:1,Non:2};
+ return out.sort((a,b)=>rank[a.lf]-rank[b.lf]||String(b.y).localeCompare(String(a.y))||a.c.name.localeCompare(b.c.name));
 }
 function setBillCtl27(kind,cid,y,id,v){
- if(!v)return;
  if(kind==='exc'){const w=exc27().items.find(x=>x.id===id);if(!w)return;w.lancerFact=v;}
  else row27(kind,cid,Number(y),true).lancerFact=v;
- log25('Contrôle facturation · lancer facturation',cid,v);save();render();
- toast(v==='Oui'?'Mission marquée à facturer':'Mission marquée non facturable');
+ log25('Facturation · lancer facturation',cid,v||'non renseigné');save();render();
+ toast(v==='Oui'?'Mission ajoutée aux prestations à facturer':v==='Non'?'Mission marquée non facturable':'Statut de facturation effacé');
 }
 function billControlPanel27(){
- const b=billingKey27(),all=billControl27(),onlyDone=b.ctlDone!==false,list=onlyDone?all.filter(x=>x.done):all,nDone=all.filter(x=>x.done).length;
- const btn=(on,l,v)=>`<button class="btn small ${on?'':'secondary'}" onclick="billingKey27().ctlDone=${v};save();render()">${l}</button>`;
- return `<div class="panel billCtl27"><div class="panelHead"><div><h3>Contrôle : statut de facturation à renseigner <span class="badge ${nDone?'red':'green'}">${nDone} terminée(s)</span> <span class="badge gray">${all.length-nDone} en cours</span></h3><div class="sub">Missions des onglets Bilan, Juridique annuel / AGO et Travaux exceptionnels dont « Lancer facturation » n’est pas renseigné. Choisis Oui (à facturer) ou Non : les missions « Oui » terminées passent dans « Prestations à facturer ».</div></div><div class="v25actions">${btn(onlyDone,'Terminées',true)}${btn(!onlyDone,'Toutes',false)}</div></div>
- <table><thead><tr><th>Client</th><th>Mission</th><th>Exercice</th><th>Avancement</th><th>Lancer facturation</th><th></th></tr></thead><tbody>${list.slice(0,300).map(x=>`<tr><td><b>${esc(x.c.name)}</b></td><td>${esc(x.label)}</td><td>${esc(String(x.y||''))}</td><td><span class="badge ${x.done?'green':'orange'}">${x.done?'Terminée':'En cours'}</span> <span class="sub">${esc(x.status||'')}</span></td><td><select class="cell27" aria-label="Lancer facturation" onchange="setBillCtl27('${x.kind}','${x.c.id}','${x.y}','${x.id}',this.value)"><option value="">À renseigner</option><option>Oui</option><option>Non</option></select></td><td><button class="btn small light" onclick="routePage('${x.page}')">Ouvrir l’onglet</button></td></tr>`).join('')||`<tr><td colspan="6" class="sub">${onlyDone?'Aucune mission terminée sans statut de facturation.':'Toutes les missions ont un statut de facturation.'}</td></tr>`}</tbody></table>${list.length>300?`<div class="panelBody sub">300 premières lignes affichées sur ${list.length}.</div>`:''}</div>`;
+ const b=billingKey27(),all=billControl27(),f=['Tous','À renseigner','Oui','Non'].includes(b.ctlF)?b.ctlF:'Tous';
+ const n=k=>all.filter(x=>x.lf===k).length,list=f==='Tous'?all:all.filter(x=>x.lf===(f==='À renseigner'?'':f));
+ const btn=(l,cnt)=>`<button class="btn small ${f===l?'':'secondary'}" onclick="billingKey27().ctlF='${l}';save();render()">${l} · ${cnt}</button>`;
+ const etat=x=>x.lf==='Oui'?`<span class="badge ${x.st.label==='Partiellement facturé'?'orange':'red'}">${esc(x.st.label)}</span>`:x.lf==='Non'?'<span class="badge gray">Non facturable</span>':'<span class="badge orange">Décision à prendre</span>';
+ return `<div class="panel billCtl27"><div class="panelHead"><div><h3>Missions réalisées · suivi de facturation</h3><div class="sub">Bilans, Juridique annuel / AGO et travaux exceptionnels terminés, pas encore facturés. « Oui » : la mission passe dans « Prestations à facturer ». Les honoraires récurrents ne sont pas concernés.</div></div><div class="v25actions">${btn('Tous',all.length)}${btn('À renseigner',n(''))}${btn('Oui',n('Oui'))}${btn('Non',n('Non'))}</div></div>
+ <table><thead><tr><th>Client</th><th>Mission</th><th>Exercice</th><th>Avancement</th><th>Lancer facturation</th><th>Facturation</th><th></th></tr></thead><tbody>${list.slice(0,300).map(x=>`<tr><td><b>${esc(x.c.name)}</b></td><td>${esc(x.label)}</td><td>${esc(String(x.y||''))}</td><td><span class="badge green">Terminée</span> <span class="sub">${esc(x.status||'')}</span></td><td><select class="cell27" aria-label="Lancer facturation" onchange="setBillCtl27('${x.kind}','${x.c.id}','${x.y}','${x.id}',this.value)"><option value="" ${x.lf===''?'selected':''}>— À renseigner</option><option ${x.lf==='Oui'?'selected':''}>Oui</option><option ${x.lf==='Non'?'selected':''}>Non</option></select></td><td>${etat(x)}</td><td><button class="btn small light" onclick="routePage('${x.page}')">Ouvrir l’onglet</button></td></tr>`).join('')||`<tr><td colspan="7" class="sub">Aucune mission réalisée non facturée${f==='Tous'?'':' pour ce filtre'}.</td></tr>`}</tbody></table>${list.length>300?`<div class="panelBody sub">300 premières lignes affichées sur ${list.length}.</div>`:''}</div>`;
 }
 billing=function(){
- const html=billingPage27(),mark='<div class="panel"><div class="panelHead"><h3>Factures émises';
- return html.includes(mark)?html.replace(mark,billControlPanel27()+mark):html+billControlPanel27();
+ const html=billingPage27(),marks=['<div class="panel"><div class="panelHead"><h3>Rapprochements à valider','<div class="panel"><div class="panelHead"><h3>Prestations à facturer'],m=marks.find(x=>html.includes(x));
+ return m?html.replace(m,billControlPanel27()+m):billControlPanel27()+html;
 };
 
 </script>
@@ -6537,7 +6538,7 @@ function crStage27(id,v){
  if(['Société créée','Abandonné'].includes(v)&&it.token&&it.link?.state!=='clôturé')crLinkState27(id,'close',true);
  // La société créée termine le travail exceptionnel lié : il passe automatiquement dans « À facturer ».
  const w=it.exc&&exc27().items.find(x=>x.id===it.exc);
- if(w){if(v==='Société créée'){w.statut='Terminé';w.doneAt=w.doneAt||today27();}else if(v==='Abandonné'){w.statut='A revoir';}else if(['Statuts en cours','Dépôt au greffe'].includes(v)&&w.statut==='A faire')w.statut='En cours';}
+ if(w){if(v==='Société créée'){w.statut='Terminé';w.doneAt=w.doneAt||today27();if(w.lancerFact!=='Non')w.lancerFact='Oui';}else if(v==='Abandonné'){w.statut='A revoir';}else if(['Statuts en cours','Dépôt au greffe'].includes(v)&&w.statut==='A faire')w.statut='En cours';}
  log25('Matrice création : '+v,it.client||'',it.name);persist25();
 }
 
@@ -6633,7 +6634,7 @@ function crClient27(id){
  if(c&&!confirm(`Un client « ${c.name} » existe déjà. Le rattacher à ce dossier ?`))c=null;
  if(!c){c=newClient26({name:it.fields?.denomination||it.name,siren:'',legalForm:it.legalForm||'',contact:it.contactName||'',email:it.contactEmail||''});state.clients.push(c);}
  it.client=c.id;c.creation27=it.id;crToClient27(it);
- if(!it.exc){const w={id:uid('EX'),client:c.id,name:'Création de société',typo:'Juridique',fees:Number(it.fees||0),date:today27(),deadline:it.deadline||'',realise:'',time:'',desc:`Création ${it.legalForm||''} ${it.name}`.trim(),associe:people27(c,'associe'),statut:it.stage==='Société créée'?'Terminé':'En cours',lancerFact:'',created:today27()};exc27().items.push(w);it.exc=w.id;}
+ if(!it.exc){const w={id:uid('EX'),client:c.id,name:'Création de société',typo:'Juridique',fees:Number(it.fees||0),date:today27(),deadline:it.deadline||'',realise:'',time:'',desc:`Création ${it.legalForm||''} ${it.name}`.trim(),associe:people27(c,'associe'),statut:it.stage==='Société créée'?'Terminé':'En cours',lancerFact:it.stage==='Société créée'?'Oui':'',created:today27()};exc27().items.push(w);it.exc=w.id;}
  log25('Matrice création : fiche client créée',c.id,it.name);closeModal();persist25();
  toast(`Fiche « ${c.name} » créée : elle apparaît dans l’onboarding, et la création dans les travaux exceptionnels.`);
 }

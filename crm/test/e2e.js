@@ -339,8 +339,10 @@ function waitFor(proc, text) {
   }, key);
   assert.deepEqual(rec, { sug: 2, before: 0, n: 1, kept: true, pl: 'PL_T2', linked: true, st: 'Facturé' }, 'rapprochement approximatif à valider, numéro identique rapproché sans suppression ' + JSON.stringify(rec));
   // Un travail ancien non facturé reste visible.
-  const old = await page.evaluate(() => { const c = state.clients[0]; exc27().items.push({ id: uid('EX'), client: c.id, name: 'Rattrapage 2019', date: '2019-03-01', statut: 'Terminé', fees: 400 }); save(); return toBill27().some(x => x.label === 'Rattrapage 2019' && x.amount === 400); });
-  assert.ok(old, 'travail de 2019 non facturé toujours à facturer');
+  const old = await page.evaluate(() => { const c = state.clients[0], w = { id: uid('EX'), client: c.id, name: 'Rattrapage 2019', date: '2019-03-01', statut: 'Terminé', fees: 400 }; exc27().items.push(w); save();
+    const toDecide = billControl27().some(x => x.label === 'Rattrapage 2019' && x.lf === '') && !toBill27().some(x => x.label === 'Rattrapage 2019');
+    setBillCtl27('exc', c.id, 2019, w.id, 'Oui'); return toDecide && toBill27().some(x => x.label === 'Rattrapage 2019' && x.amount === 400); });
+  assert.ok(old, 'travail de 2019 terminé : à décider dans le suivi, puis à facturer une fois « Oui »');
   const fid = await page.evaluate(() => state.invoices.find(i => i.number === 'F-98').id);
   await page.evaluate(() => { window.confirm = () => true; });
   await page.evaluate(id => delInvoice27(id), fid);

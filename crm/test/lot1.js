@@ -229,7 +229,7 @@ function waitFor(proc, text) {
 
   /* ---------- Rapprochements groupés : seulement sans ambiguïté, avec aperçu ---------- */
   const grp = await A.page.evaluate(() => {
-    exc27().items.push({ id: 'EXA', client: 'C1', name: 'Mission A', statut: 'Terminé', fees: 500, date: '2026-01-10' }, { id: 'EXB', client: 'C1', name: 'Mission B', statut: 'Terminé', fees: 700, date: '2026-01-10' });
+    exc27().items.push({ id: 'EXA', client: 'C1', name: 'Mission A', statut: 'Terminé', lancerFact: 'Oui', fees: 500, date: '2026-01-10' }, { id: 'EXB', client: 'C1', name: 'Mission B', statut: 'Terminé', lancerFact: 'Oui', fees: 700, date: '2026-01-10' });
     state.pennylaneInvoices = [{ id: 'PLA', source: 'pennylane', client: 'C1', category: 'Travaux exceptionnels', status: 'Finalisée', number: 'FA-1', date: '2026-02-01', amount: 500 }, { id: 'PLB', source: 'pennylane', client: 'C1', category: 'Travaux exceptionnels', status: 'Finalisée', number: 'FA-2', date: '2026-02-01', amount: 650 }];
     allocCache27 = null;
     const all = suggestions27().filter(x => x.kind === 'pl').length, exact = exactSuggestions27().map(x => x.inv.number + '>' + x.key);
