@@ -146,7 +146,7 @@ crm/
   src/v27_imports.js      imports Excel : aperçu, rapprochements à trancher, rapport, retour arrière
   src/v27_work.js         navigation par sections, Mon travail, onglets de la fiche client
   src/v27_process.js      jours ouvrés, règles d'échéance, premier bilan, sortie de client, relances
-  src/v27_planning.js     Mon travail : planning d'équipe relié aux autres onglets, import Monday
+  src/v27_planning.js     Mon travail : tableau de tâches saisi à la main, onglet Tâches de la fiche client, import Monday
   src/v27_prospect.js     fiche Nouveau prospect (température, relance, structure, recherche par nom)
   src/v27_pilot.js        équipe (coûts datés), rentabilité, capacité, revue d'honoraires, qualité
   src/v27_style.js        style épuré, défilement conservé
