@@ -205,32 +205,48 @@ const HIT = { siren: '732829320', nom_raison_sociale: 'BOULANGERIE DU TEST', nat
   const ctl2 = await page.evaluate(() => ({ row: [...document.querySelectorAll('.billCtl27 tbody tr')].find(r => r.children[0].textContent === 'CTL BILAN FINI')?.children[5].textContent, toBill: toBill27().filter(x => x.c.name.startsWith('CTL')).map(x => x.label).sort() }));
   assert.deepEqual(ctl2, { row: 'À facturer', toBill: ['Bilan 2025', 'Juridique annuel 2025'] }, '« Oui » : la mission passe dans Prestations à facturer et reste suivie jusqu’à la facture ' + JSON.stringify(ctl2));
 
-  // Mon travail : liste de tâches personnelle, tâche facturable terminée → Facturation.
-  await page.evaluate(() => { workPrefs27().mode = ''; workPrefs27().day = ''; workPrefs27().mwho = null; routePage('work'); });
-  assert.ok(await page.isVisible('#myt27_title'), 'saisie de tâche en tête de Mon travail');
-  await page.fill('#myt27_title', 'Révision TVA T3'); await page.fill('#myt27_client', 'CLIENT À GARDER'); await page.click('.myt27add button:has-text("Ajouter")');
-  await page.fill('#myt27_title', 'Rendez-vous conseil'); await page.fill('#myt27_client', 'CLIENT À GARDER'); await page.selectOption('#myt27_billing', 'À facturer'); await page.fill('#myt27_amount', '450'); await page.click('.myt27add button:has-text("Ajouter")');
-  await page.fill('#myt27_title', 'Tâche sans dossier inconnu'); await page.fill('#myt27_client', 'DOSSIER QUI N EXISTE PAS'); await page.click('.myt27add button:has-text("Ajouter")');
+  // Mon travail : planning (groupes, automatisations avec les autres onglets, import Monday).
+  await page.evaluate(() => { workPrefs27().mode = ''; workPrefs27().pwho = ''; workPrefs27().pq = ''; routePage('work'); });
+  const groups = await page.evaluate(() => [...document.querySelectorAll('.pl27gh b')].map(b => b.textContent));
+  assert.deepEqual(groups, ['I. Onboarding', 'II. Travaux annuels (Bilan + AGO)', 'III. Travaux courants (à échéance répétitive)', 'IV. Travaux exceptionnels', 'Fait'], 'groupes du planning');
+  // Travail exceptionnel : créé et tenu à jour, facturation.
+  await page.fill('#pl27_title_exc', 'Changement de gérant'); await page.fill('#pl27_client_exc', 'CLIENT À GARDER'); await page.click('.pl27grp:has-text("IV. Travaux") .pl27add button');
   await settle();
-  const mt = await page.evaluate(() => ({ items: myTasks27().items.map(t => [t.title, cfind(t.client)?.name, t.billing, t.amount, t.status, t.owner, t.date === today27()]), rows: document.querySelectorAll('table.myt27 tbody tr').length }));
-  assert.deepEqual(mt.items, [['Révision TVA T3', 'CLIENT À GARDER', 'Non facturable', '', 'À faire', 'Ruben HAZIZA', true], ['Rendez-vous conseil', 'CLIENT À GARDER', 'À facturer', 450, 'À faire', 'Ruben HAZIZA', true]], 'tâches ajoutées (dossier inconnu refusé) ' + JSON.stringify(mt));
-  assert.equal(mt.rows, 2);
-  await page.check('table.myt27 tr:has(input[value="Rendez-vous conseil"]) td.onbChk27 input');
+  let t = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Changement de gérant'); return { id: t.id, exc: exc27().items.find(w => w.id === t.exc)?.name, manager: t.manager }; });
+  assert.equal(t.exc, 'Changement de gérant', 'tâche exceptionnelle → travail exceptionnel créé');
+  await page.evaluate(id => { plSet27(id, 'fees', '200'); plSet27(id, 'bill', 'Oui'); plSet27(id, 'time', '1.5'); plSet27(id, 'status', 'Fait'); }, t.id);
   await settle();
-  const fact = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Rendez-vous conseil'), w = exc27().items.find(x => x.id === t.exc); return { st: t.status, w: w && [w.name, w.fees, w.statut, w.lancerFact], toBill: toBill27().some(x => x.exc === t.exc && x.amount === 450) }; });
-  assert.deepEqual(fact, { st: 'Fait', w: ['Rendez-vous conseil', 450, 'Terminé', 'Oui'], toBill: true }, 'tâche facturable terminée → Prestations à facturer');
-  // Tâche non faite d'hier : reportée dans la liste du jour ; « Demain » la décale.
-  await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Révision TVA T3'); t.date = iso(addDays(new Date(), -1)); save(); render(); });
-  assert.ok(/reportée/.test(await page.textContent('table.myt27 tr:has(input[value="Révision TVA T3"])')), 'tâche d’hier non faite reportée');
-  await page.click('table.myt27 tr:has(input[value="Révision TVA T3"]) button:has-text("Demain")');
+  const ex = await page.evaluate(id => { const t = plTask27(id), w = exc27().items.find(x => x.id === t.exc), tm = state.time.find(x => x.id === t.timeId); return { w: [w.fees, w.statut, w.lancerFact], toBill: toBill27().some(x => x.key === 'X|' + w.id && x.amount === 200), time: tm && [tm.hours, tm.mission, tm.exc === w.id], done: document.querySelectorAll('[data-k="pl_exc"] tbody tr:not(.pl27add)').length }; }, t.id);
+  assert.deepEqual(ex, { w: [200, 'Terminé', 'Oui'], toBill: true, time: [1.5, 'Travail exceptionnel', true], done: 0 }, 'honoraires, statut, facturation et temps reliés ' + JSON.stringify(ex));
+  // Travail annuel : relié au Bilan de l'exercice.
+  await page.fill('#pl27_title_annual', 'Bilan 2025 à finaliser'); await page.fill('#pl27_client_annual', 'CLIENT À GARDER'); await page.click('.pl27grp:has-text("II. Travaux") .pl27add button');
   await settle();
-  assert.equal(await page.locator('table.myt27 input[value="Révision TVA T3"]').count(), 0, 'tâche décalée à demain');
+  const an = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Bilan 2025 à finaliser'), cid = t.client; plSet27(t.id, 'bill', 'Oui'); plSet27(t.id, 'status', 'Fait'); const r = row27('bilan', cid, 2025); return [t.mission, t.year, r.lancerFact, r.etat, toBill27().some(x => x.key === 'B|' + cid + '|2025')]; });
+  assert.deepEqual(an, ['Bilan', 2025, 'Oui', '9. Bilan télédéclaré', true], 'tâche annuelle : Bilan terminé et à facturer ' + JSON.stringify(an));
+  // Récurrence : prochaine occurrence créée.
+  await page.fill('#pl27_title_current', 'Saisie mensuelle'); await page.fill('#pl27_end_current', '2026-01-31'); await page.click('.pl27grp:has-text("III. Travaux") .pl27add button');
+  await settle();
+  const rec = await page.evaluate(() => { const t = myTasks27().items.find(x => x.title === 'Saisie mensuelle'); plSet27(t.id, 'status', 'Fait'); return myTasks27().items.filter(x => x.title === 'Saisie mensuelle').map(x => [x.status, x.end, x.recurrence]); });
+  assert.deepEqual(rec, [['Fait', '2026-01-31', 'Mensuelle'], ['A faire', '2026-02-28', 'Mensuelle']], 'tâche récurrente recréée ' + JSON.stringify(rec));
+  // Import d'un planning Monday : groupes, statuts, clients, doublons.
+  page.once('dialog', d => d.accept());
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(ROOT, 'test', 'fixtures', 'planning_test.xlsx'));
+  await page.waitForFunction(() => myTasks27().items.some(x => x.imported));
+  await settle();
+  const imp = await page.evaluate(() => myTasks27().items.filter(x => x.imported).map(x => [x.title, x.section, x.status, cfind(x.client)?.name || x.clientLabel || '', x.bill, x.fees]));
+  assert.deepEqual(imp, [['CLIENT À GARDER - Finaliser l’onboarding', 'onb', 'A faire', 'CLIENT À GARDER', 'À définir', ''], ['CLIENT À GARDER - AGO 2025', 'annual', 'En cours', 'CLIENT À GARDER', 'Oui', 453], ['Dossier inconnu - Conseil', 'exc', 'A faire', 'SOCIETE INCONNUE', 'À définir', 200], ['Ancienne tâche', 'exc', 'Fait', '', 'Non', '']], 'import Monday ' + JSON.stringify(imp));
+  assert.equal(await page.evaluate(() => row27('ago', state.clients.find(c => c.name === 'CLIENT À GARDER').id, 2025).lancerFact), 'Oui', 'import : AGO à facturer reporté dans le tableau');
+  let again = '';
+  page.once('dialog', d => { again = d.message(); d.accept(); });
+  await page.setInputFiles('input[type=file][accept=".xlsx"]', path.join(ROOT, 'test', 'fixtures', 'planning_test.xlsx'));
+  await page.waitForTimeout(500);
+  assert.ok(/déjà dans le planning/.test(again), 'réimport : pas de doublon');
   const srvT = await page.evaluate(async () => (await (await fetch('/api/state')).json()).state.myTasks27?.items?.length);
-  assert.equal(srvT, 2, 'tâches enregistrées sur le serveur');
+  assert.ok(srvT >= 8, 'tâches enregistrées sur le serveur');
   await page.evaluate(() => { workPrefs27().mode = 'auto'; render(); });
   assert.ok(await page.isVisible('button:has-text("Ma liste de tâches")'), 'échéances automatiques toujours accessibles');
 
   assert.deepEqual(errs, [], 'erreurs JavaScript');
   await browser.close(); srv.kill(); fs.rmSync(dataDir, { recursive: true, force: true });
-  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup, contrôle facturation, Mon travail (liste de tâches)');
+  console.log('✓ Fiche prospect : saisie, recherche par nom, préremplissage, liste, étapes, modification, relance, reprise sur le client, suppression en cascade, dossiers ajoutés directement en onboarding, statut de plusieurs étapes d’un coup, contrôle facturation, Mon travail (planning relié aux autres onglets, import Monday)');
 })().catch(e => { console.error('\n✗ ÉCHEC :', e.message); process.exit(1); });
