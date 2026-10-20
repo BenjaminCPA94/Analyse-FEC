@@ -1,0 +1,14 @@
+# Clés API / secrets — ne jamais committer
+scripts/pennylane-sync/.env
+*.env
+!.env.example
+
+# FEC téléchargés localement (données comptables, pas du code)
+scripts/pennylane-sync/FEC_*.txt
+
+# Dépendances (aucune committée pour l'instant — cf. SAAS_ARCHITECTURE.md §3.4)
+node_modules/
+
+# Fichiers locaux Supabase CLI (état de session, jamais de secret en clair mais pas utile à versionner)
+supabase/.branches
+supabase/.temp

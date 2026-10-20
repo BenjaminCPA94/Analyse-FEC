@@ -1,0 +1,23 @@
+JournalCode	JournalLib	EcritureNum	EcritureDate	CompteNum	CompteLib	CompAuxNum	CompAuxLib	PieceRef	PieceDate	EcritureLib	Debit	Credit	EcheanceDate	PieceTTC	MontantDevise	Idevise
+VE	Ventes	1	20240115	411	Client Dupont			F1	20240115	Vente marchandise	10000,00	0,00
+VE	Ventes	1	20240115	707	Ventes de marchandises			F1	20240115	Vente marchandise	0,00	10000,00
+AC	Achats	2	20240110	607	Achats de marchandises			F2	20240110	Achat marchandise	4000,00	0,00
+AC	Achats	2	20240110	401	Fournisseur Martin			F2	20240110	Achat marchandise	0,00	4000,00
+VE	Ventes	3	20240120	411	Client Dupont			F3	20240120	Vente prestation	20000,00	0,00
+VE	Ventes	3	20240120	706	Prestations de services			F3	20240120	Vente prestation	0,00	20000,00
+AC	Achats	4	20240112	601	Achats matieres premieres			F4	20240112	Achat matiere	3000,00	0,00
+AC	Achats	4	20240112	401	Fournisseur Martin			F4	20240112	Achat matiere	0,00	3000,00
+OD	Operations diverses	5	20240131	631	Impots et taxes			P5	20240131	Impots	500,00	0,00
+OD	Operations diverses	5	20240131	447	Autres impots et taxes			P5	20240131	Impots	0,00	500,00
+OD	Operations diverses	6	20240131	641	Salaires			P6	20240131	Salaires	8000,00	0,00
+OD	Operations diverses	6	20240131	421	Personnel remunerations dues			P6	20240131	Salaires	0,00	8000,00
+OD	Operations diverses	7	20240131	6811	Dotations amortissements			P7	20240131	Dotation	1000,00	0,00
+OD	Operations diverses	7	20240131	28183	Amortissements materiel			P7	20240131	Dotation	0,00	1000,00
+OD	Operations diverses	8	20240131	462	Creances sur cession immo			P8	20240131	Autre produit	200,00	0,00
+OD	Operations diverses	8	20240131	758	Autres produits gestion courante			P8	20240131	Autre produit	0,00	200,00
+OD	Operations diverses	9	20240131	661	Charges interets			P9	20240131	Interets	300,00	0,00
+OD	Operations diverses	9	20240131	512	Banque			P9	20240131	Interets	0,00	300,00
+OD	Operations diverses	10	20240131	462	Creances sur cession immo			P10	20240131	Produit except	100,00	0,00
+OD	Operations diverses	10	20240131	771	Produits exceptionnels			P10	20240131	Produit except	0,00	100,00
+OD	Operations diverses	11	20240131	695	Impot sur les societes			P11	20240131	IS	2000,00	0,00
+OD	Operations diverses	11	20240131	444	Etat impot sur les benefices			P11	20240131	IS	0,00	2000,00

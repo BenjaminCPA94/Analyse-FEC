@@ -1,0 +1,41 @@
+# Configuration Supabase CLI — cf. SETUP_SUPABASE.md pour la marche à
+# suivre complète (création de compte, création du projet, région...).
+#
+# Ce fichier ne contient AUCUN secret : project_id est un identifiant
+# public (visible dans l'URL du tableau de bord Supabase), pas une clé.
+# Les vraies clés (anon key, service_role key) ne doivent JAMAIS être
+# écrites dans ce dépôt — cf. .env.example et SETUP_SUPABASE.md §6.
+
+# À renseigner une fois le projet créé (Supabase Dashboard → Project
+# Settings → General → Reference ID), ou automatiquement via
+# `supabase link --project-ref <ref>`.
+project_id = "REMPLACER_PAR_LA_REFERENCE_DU_PROJET"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# Durée de session par défaut — cf. demande §15 (expiration des sessions).
+jwt_expiry = 3600
+enable_signup = false
+# La création de compte se fait exclusivement par invitation (§15 :
+# "L'administrateur doit pouvoir inviter un collaborateur par email"), pas
+# par inscription libre — cohérent avec un logiciel de cabinet comptable.
+enable_confirmations = true
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
