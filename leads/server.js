@@ -7,6 +7,7 @@ const proxy = require('./api/proxy');
 const digest = require('./api/digest');
 const follow = require('./api/follow');
 const jobs = require('./api/jobs');
+const site = require('./api/site');
 
 const PAGE = path.join(__dirname, 'Leads_Expert_Comptable.html');
 const PORT = Number(process.env.PORT || 3000);
@@ -17,6 +18,7 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/digest') return digest(req, res);
   if (pathname === '/api/follow') return follow(req, res);
   if (pathname === '/api/jobs') return jobs(req, res);
+  if (pathname === '/api/site') return site(req, res);
   if (pathname === '/' || pathname === '/Leads_Expert_Comptable.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return fs.createReadStream(PAGE).pipe(res);

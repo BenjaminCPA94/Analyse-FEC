@@ -43,7 +43,7 @@ function createStore(env = process.env) {
 }
 
 /* Une fiche est conservée tant qu'elle porte une information de suivi. */
-const KEPT = ['status', 'note', 'email', 'phone', 'site', 'found', 'tried', 'relance', 'contacts'];
+const KEPT = ['status', 'note', 'email', 'phone', 'site', 'found', 'tried', 'relance', 'contacts', 'socials'];
 const meaningful = e => e && KEPT.some(k => e[k] && (typeof e[k] !== 'object' || Object.keys(e[k]).length));
 
 module.exports = { createStore, meaningful };

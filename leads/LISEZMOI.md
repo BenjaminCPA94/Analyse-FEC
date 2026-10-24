@@ -43,6 +43,16 @@ Le bouton **Message** de chaque lead prépare un e-mail, un courrier à imprimer
 
 « Marquer comme envoyé » passe le lead en « Contacté » et programme une relance à 15 jours (deux relances au plus). Les relances dues apparaissent avec le badge RELANCE et le filtre « Relances à faire » ; l'e-mail du lundi les liste aussi. Chaque e-mail se termine par une mention d'origine et la possibilité de répondre « STOP ».
 
+## Site de la société et réseaux sociaux
+
+L'outil ne collecte rien sur LinkedIn, Instagram ou Facebook : ces plateformes l'interdisent et bloquent les comptes. Il s'appuie sur ce que la société publie elle-même et sur des recherches Google.
+
+- **Analyse du site** (version en ligne, gratuite) : page d'accueil et pages « contact », « mentions légales », « à propos ». Les e-mails (celui du dirigeant en priorité), téléphones et liens Instagram, Facebook, LinkedIn et TikTok publiés sont repris. Elle passe avant les fournisseurs payants dans « Trouver l'e-mail ». Sur Vercel, elle est réservée à l'équipe (`LEADS_TEAM_PASSWORD`) ; les adresses internes sont refusées.
+- **Serper** ([serper.dev](https://serper.dev), recherches Google ; crédits offerts à l'inscription puis environ 1 $ les 1 000) : « Site et réseaux » trouve le site et les pages sociales d'une société à partir de son nom et de sa ville, et le profil LinkedIn du dirigeant. Trois recherches au plus par société, une seule fois ; seuls les résultats qui citent la société sont gardés.
+- **Sales Navigator** : lien direct vers la recherche du dirigeant sur chaque lead (abonnement LinkedIn).
+
+Les pages trouvées apparaissent en gras dans la colonne Liens (« Instagram ✓ ») et dans l'export CSV ; le message LinkedIn se prépare avec le bouton « Message ».
+
 ## Résumé hebdomadaire par e-mail (automatique)
 
 Chaque lundi vers 6 h (heure de Paris en hiver), l'outil mis en ligne sur Vercel envoie un e-mail avec les leads prioritaires de la semaine : nouvelles sociétés, sociétés en changement et (si France Travail est configuré) entreprises qui recrutent un comptable, complétées avec l'annuaire. Tes clients, les sociétés cessées et celles déjà traitées par l'équipe sont écartés ; les relances de la semaine sont listées en tête.
@@ -70,6 +80,7 @@ Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé 
 
 | Fournisseur | Offre | Où trouver la clé |
 |---|---|---|
+| Serper (site et réseaux sociaux, pas d'e-mail direct) | Crédits offerts à l'inscription, puis environ 1 $ les 1 000 recherches | serper.dev › API Key |
 | Google (site et téléphone, pas d'e-mail) | Places API : quota mensuel gratuit, puis payant | console.cloud.google.com › Google Maps Platform › Clés (activer « Places API (New) ») |
 | Hunter | Gratuit : 50 crédits par mois | hunter.io › API keys |
 | Apollo | Offre gratuite (compte ouvert avec un e-mail professionnel) | apollo.io › Settings › Integrations › API |
@@ -87,4 +98,4 @@ Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà
 
 ## Test
 
-`node test/e2e.js`, `node test/features.js` et `node test/team.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages et relances.
+`node test/e2e.js`, `node test/features.js`, `node test/team.js` et `node test/social.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites et réseaux sociaux.
