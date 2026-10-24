@@ -64,6 +64,7 @@
   .s-hi{background:var(--green-l);color:var(--green);}
   .s-mid{background:var(--orange-l);color:var(--orange);}
   .s-lo{background:var(--surface2);color:var(--text2);}
+  .new{display:inline-block;font-size:10px;font-weight:700;padding:0 6px;border-radius:8px;background:var(--orange-l);color:var(--orange);margin-left:4px;vertical-align:1px;}
   .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--blue-l);color:var(--blue);white-space:nowrap;}
   .sub{font-size:12px;color:var(--text2);}
   .name{font-weight:600;}
@@ -130,8 +131,20 @@
         <div class="checks">
           <label><input type="checkbox" id="onlyPM" checked> Sociétés uniquement (pas d'EI)</label>
           <label><input type="checkbox" id="noSCI"> Exclure les SCI</label>
+          <label><input type="checkbox" id="onlyNew"> Nouveaux leads uniquement</label>
+          <label><input type="checkbox" id="auto"> À l'ouverture : rechercher et compléter avec l'annuaire</label>
         </div>
       </div>
+      <div>
+        <label class="f" for="clients">Mes clients (SIREN à exclure)</label>
+        <textarea id="clients" rows="2" placeholder="Colle des SIREN, ou importe l'export du portefeuille"></textarea>
+        <div class="hint"><span id="clientsCount">0 client</span> · <a href="#" id="clientsImport">Importer un fichier (CSV, Excel enregistré en CSV)</a><input type="file" id="clientsFile" accept=".csv,.txt" hidden></div>
+      </div>
+    </div>
+    <div class="bar" style="margin-top:10px">
+      <span class="grow"></span>
+      <button class="btn sec" id="backup" style="font-size:12px;padding:5px 10px">Sauvegarder mon suivi</button>
+      <button class="btn sec" id="restore" style="font-size:12px;padding:5px 10px">Restaurer une sauvegarde</button><input type="file" id="restoreFile" accept=".json" hidden>
     </div>
   </div>
 
@@ -176,6 +189,7 @@
         <option value="">Tous les statuts</option>
         <option value="open">À traiter</option>
         <option value="hide">Masquer « Pas intéressé »</option>
+        <option value="new">Nouveaux uniquement</option>
       </select>
       <button class="btn sec" id="csv" disabled>Exporter CSV</button>
     </div>
@@ -204,9 +218,11 @@
 
 <script>
 'use strict';
-const BODACC = 'https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records';
+/* CORE:START — lecture des annonces et score, repris tel quel par le résumé hebdomadaire (api/digest.js). */
+const BODACC_DATASET = 'https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales';
 const ANNUAIRE = 'https://recherche-entreprises.api.gouv.fr/search';
-const MAX_RECORDS = 1000;
+const BODACC_FIELDS = 'id,dateparution,familleavis,familleavis_lib,numerodepartement,commercant,ville,cp,registre,listepersonnes,listeetablissements,acte,modificationsgenerales,url_complete';
+const PATRIMONIAL = /holding|prise de participations?|d[ée]tention (et (la )?gestion )?de (toutes )?participations|civile immobili|\bSCI\b|location meubl/i;
 
 /* Événements « société existante » : motif cherché dans l'annonce, poids de base, libellé. */
 const SIGNALS = [
@@ -218,35 +234,8 @@ const SIGNALS = [
   { id: 'activite', label: "Changement d'activité", family: 'modification', re: /activit[ée]/i, base: 30 },
 ];
 const SOCIETES = /\b(SAS|SASU|SARL|EURL|SA|SNC|SELARL|SELAS|SELAFA|SCP|SCM|SCEA|EARL|GAEC)\b|soci[ée]t[ée] (par actions|à responsabilit[ée]|anonyme|en nom|d'exercice)/i;
-
-/* ---------- état ---------- */
-let tab = 'new', leads = [], sortKey = 'score', sortDir = -1, busy = false;
-const store = {
-  get(k, d) { try { const v = localStorage.getItem('leadsEC:' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('leadsEC:' + k, JSON.stringify(v)); } catch { /* navigation privée : suivi non conservé */ } },
-};
-let follow = store.get('follow', {});
-
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const words = s => String(s || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-const datefr = d => d ? d.slice(0, 10).split('-').reverse().join('/') : '';
 const pj = v => { if (!v) return null; if (typeof v === 'object') return v; try { return JSON.parse(v); } catch { return null; } };
 const arr = v => Array.isArray(v) ? v : v ? [v] : [];
-const money = n => n == null ? '' : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
-
-/* ---------- critères mémorisés ---------- */
-const FIELDS = ['deps', 'days', 'target', 'exclude', 'minCap', 'onlyPM', 'noSCI'];
-function loadCriteria() {
-  const c = store.get('criteria', null); if (!c) return;
-  for (const k of FIELDS) if (k in c) { const el = $(k); if (el.type === 'checkbox') el.checked = c[k]; else el.value = c[k]; }
-}
-function saveCriteria() {
-  const c = {}; for (const k of FIELDS) { const el = $(k); c[k] = el.type === 'checkbox' ? el.checked : el.value; }
-  c.signals = [...document.querySelectorAll('#signals input:checked')].map(x => x.value);
-  store.set('criteria', c);
-}
-
 /* ---------- lecture d'une annonce BODACC ---------- */
 function parseRecord(r) {
   const pers = pj(r.listepersonnes), p = arr(pers?.personne)[0] || {};
@@ -262,7 +251,9 @@ function parseRecord(r) {
   const isPM = p.typePersonne ? p.typePersonne === 'pm' : SOCIETES.test(forme + ' ' + (r.commercant || ''));
   const texte = [modif.descriptif, acte.descriptif, typeof r.modificationsgenerales === 'string' ? r.modificationsgenerales : ''].filter(Boolean).join(' ');
   return {
-    id: r.id || r.numeroannonce + '-' + r.dateparution,
+    // Une société = un lead (suivi rattaché au SIREN, quelle que soit l'annonce).
+    id: reg || r.id || r.numeroannonce + '-' + r.dateparution,
+    annonce: r.id || '',
     date: r.dateparution || '',
     famille: r.familleavis || '', familleLib: r.familleavis_lib || '',
     nom: p.denomination || r.commercant || [p.nom, p.prenom].filter(Boolean).join(' ') || '(sans nom)',
@@ -293,17 +284,103 @@ function qualify(l, sigs) {
   l.signal = s.label; l.base = s.base; l.sig = s.id;
   return l;
 }
+/* Score de 0 à 100 ; l.why garde le détail, affiché au survol. */
 function score(l, c) {
-  let s = l.base;
-  if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) s += 5;
-  if (l.capital >= 50000) s += 10; else if (l.capital >= 10000) s += 5; else if (l.capital != null && l.capital < 1000) s -= 5;
+  const why = [[l.signal, l.base]], add = (t, n) => why.push([t, n]);
+  if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) add('société', 5);
+  if (l.capital >= 50000) add('capital ≥ 50 000 €', 10); else if (l.capital >= 10000) add('capital ≥ 10 000 €', 5); else if (l.capital != null && l.capital < 1000) add('capital < 1 000 €', -5);
   const act = [l.activite, l.naf, l.nom].filter(Boolean).join(' ').toLowerCase();
-  if (c.target.length && c.target.some(w => act.includes(w))) s += 20;
+  if (c.target.length && c.target.some(w => act.includes(w))) add('activité ciblée', 20);
   // Structures patrimoniales (holding, SCI, location meublée) : honoraires généralement plus faibles.
-  if (/holding|prise de participations?|d[ée]tention (et (la )?gestion )?de (toutes )?participations|civile immobili|\bSCI\b|location meubl/i.test(act + ' ' + l.forme)) s -= 15;
-  if ((Date.now() - new Date(l.date).getTime()) / 864e5 <= 3) s += 5;
-  if (l.effectif && !/^(NN|00)$/.test(l.effectif)) s += 10;
-  return Math.max(0, Math.min(100, Math.round(s)));
+  if (PATRIMONIAL.test(act + ' ' + l.forme)) add('structure patrimoniale', -15);
+  if ((Date.now() - new Date(l.date).getTime()) / 864e5 <= 3) add('publiée il y a moins de 3 jours', 5);
+  if (l.effectif && !/^(NN|00)$/.test(l.effectif)) add('salariés', 10);
+  if (l.etablissement) add('société déjà existante', -20);
+  l.why = why;
+  return Math.max(0, Math.min(100, Math.round(why.reduce((t, x) => t + x[1], 0))));
+}
+/* Filtre de l'API BODACC : kind = 'new' (immatriculations) ou 'change' (événements cochés). */
+function whereClause(c, kind) {
+  const since = new Date(Date.now() - c.days * 864e5).toISOString().slice(0, 10);
+  const q = s => '"' + s.replace(/"/g, '') + '"';
+  let fam;
+  if (kind === 'new') fam = ['creation', 'immatriculation'];
+  else { fam = []; if (c.signals.includes('vente')) fam.push('vente'); if (c.signals.some(s => s !== 'vente')) fam.push('modification'); }
+  if (!fam.length) return null;
+  const parts = [`dateparution >= date'${since}'`, `familleavis in (${fam.map(q).join(',')})`];
+  if (c.deps.length) parts.push(`numerodepartement in (${c.deps.map(q).join(',')})`);
+  return parts.join(' and ');
+}
+/* Annonces brutes → leads qualifiés, dédoublonnés par société (l'annonce la plus récente l'emporte). */
+function toLeads(raw, c, kind) {
+  const seen = new Set(), out = [];
+  for (const r of raw) {
+    const l = qualify(parseRecord(r), c.signals); if (!l) continue;
+    if (kind === 'change' && l.sig && !c.signals.includes(l.sig)) continue;
+    const key = l.siren || l.nom.toLowerCase(); if (seen.has(key)) continue; seen.add(key);
+    out.push(l);
+  }
+  out.forEach(l => { l.score = score(l, c); });
+  return out;
+}
+/* Complète un lead avec une fiche de l'annuaire des entreprises. */
+function applyAnnuaire(l, x) {
+  l.naf = [x.activite_principale, x.libelle_activite_principale].filter(Boolean).join(' — ');
+  l.effectif = x.tranche_effectif_salarie || '';
+  const pp = (x.dirigeants || []).filter(d => d.nom && !d.denomination).map(d => ({ prenom: String(d.prenoms || '').split(/\s+/)[0], nom: d.nom }));
+  if (pp.length) l.personnes = pp;
+  l.dirigeantsAnnuaire = (x.dirigeants || []).slice(0, 3).map(d => d.denomination || [d.prenoms, d.nom].filter(Boolean).join(' ') + (d.qualite ? ' (' + d.qualite + ')' : '')).join(' ; ');
+  l.dateCreation = x.date_creation || '';
+  l.etat = x.etat_administratif || '';
+  if (!l.adresse && x.siege) l.adresse = x.siege.adresse || '';
+  // Annonce d'immatriculation d'une société créée il y a plus d'un an : nouvel établissement, pas une nouvelle société.
+  if ((l.famille === 'creation' || l.famille === 'immatriculation') && l.dateCreation && (new Date(l.date) - new Date(l.dateCreation)) / 864e5 > 365) {
+    l.etablissement = true; l.signal = 'Nouvel établissement';
+  }
+  l.enriched = true;
+}
+
+
+function shortForme(f) {
+  const x = String(f || ''), u = /associ[ée] unique|unipersonnelle/i.test(x);
+  if (/actions simplifi/i.test(x)) return u ? 'SASU' : 'SAS';
+  if (/responsabilit[ée] limit/i.test(x)) return u ? 'EURL' : 'SARL';
+  if (/civile immobili/i.test(x)) return 'SCI';
+  if (/soci[ée]t[ée] anonyme/i.test(x)) return 'SA';
+  if (/nom collectif/i.test(x)) return 'SNC';
+  return x;
+}
+
+/* CORE:END */
+
+/* ---------- état ---------- */
+let tab = 'new', leads = [], sortKey = 'score', sortDir = -1, busy = false;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('leadsEC:' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('leadsEC:' + k, JSON.stringify(v)); } catch { /* navigation privée : suivi non conservé */ } },
+};
+let follow = store.get('follow', {});
+// Suivi des premières versions rattaché à l'annonce : on le rattache désormais au SIREN.
+for (const [k, v] of Object.entries(follow)) { const sr = v.lead?.siren; if (sr && k !== sr) { follow[sr] = { ...(follow[sr] || {}), ...v, lead: { ...v.lead, id: sr } }; delete follow[k]; } }
+store.set('follow', follow);
+let clients = new Set(store.get('clients', []));
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const words = s => String(s || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+const datefr = d => d ? d.slice(0, 10).split('-').reverse().join('/') : '';
+const money = n => n == null ? '' : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
+
+/* ---------- critères mémorisés ---------- */
+const FIELDS = ['deps', 'days', 'target', 'exclude', 'minCap', 'onlyPM', 'noSCI', 'onlyNew', 'auto'];
+function loadCriteria() {
+  const c = store.get('criteria', null); if (!c) return;
+  for (const k of FIELDS) if (k in c) { const el = $(k); if (el.type === 'checkbox') el.checked = c[k]; else el.value = c[k]; }
+}
+function saveCriteria() {
+  const c = {}; for (const k of FIELDS) { const el = $(k); c[k] = el.type === 'checkbox' ? el.checked : el.value; }
+  c.signals = [...document.querySelectorAll('#signals input:checked')].map(x => x.value);
+  store.set('criteria', c);
 }
 
 /* ---------- requêtes ---------- */
@@ -311,20 +388,9 @@ function criteria() {
   const deps = words($('deps').value).map(d => d.toUpperCase().replace(/^(\d)$/, '0$1'));
   return {
     deps, days: Number($('days').value), target: words($('target').value), exclude: words($('exclude').value),
-    minCap: Number($('minCap').value || 0), onlyPM: $('onlyPM').checked, noSCI: $('noSCI').checked,
+    minCap: Number($('minCap').value || 0), onlyPM: $('onlyPM').checked, noSCI: $('noSCI').checked, onlyNew: $('onlyNew').checked,
     signals: [...document.querySelectorAll('#signals input:checked')].map(x => x.value),
   };
-}
-function whereClause(c) {
-  const since = new Date(Date.now() - c.days * 864e5).toISOString().slice(0, 10);
-  const q = s => '"' + s.replace(/"/g, '') + '"';
-  let fam;
-  if (tab === 'new') fam = ['creation', 'immatriculation'];
-  else { fam = []; if (c.signals.includes('vente')) fam.push('vente'); if (c.signals.some(s => s !== 'vente')) fam.push('modification'); }
-  if (!fam.length) return null;
-  const parts = [`dateparution >= date'${since}'`, `familleavis in (${fam.map(q).join(',')})`];
-  if (c.deps.length) parts.push(`numerodepartement in (${c.deps.map(q).join(',')})`);
-  return parts.join(' and ');
 }
 async function fetchJson(url, tries = 3) {
   for (let i = 0; ; i++) {
@@ -337,33 +403,45 @@ async function fetchJson(url, tries = 3) {
 async function run() {
   if (busy) return;
   const c = criteria(); saveCriteria();
-  const where = whereClause(c);
+  const where = whereClause(c, tab);
   if (!where) return setStatus('Coche au moins un événement à surveiller.', true);
   busy = true; $('run').disabled = true; leads = [];
   try {
-    let offset = 0, total = 0, raw = [];
-    do {
-      setStatus(`Lecture du BODACC… ${raw.length}${total ? ' / ' + Math.min(total, MAX_RECORDS) : ''}`);
-      const url = `${BODACC}?where=${encodeURIComponent(where)}&order_by=${encodeURIComponent('dateparution desc')}&limit=100&offset=${offset}`;
-      const j = await fetchJson(url);
-      total = j.total_count || 0; raw.push(...(j.results || [])); offset += 100;
-      if (!(j.results || []).length) break;
-    } while (offset < Math.min(total, MAX_RECORDS));
-    const seen = new Set();
-    for (const r of raw) {
-      const l = qualify(parseRecord(r), c.signals); if (!l) continue;
-      if (tab === 'change' && l.sig && !c.signals.includes(l.sig)) continue;
-      const key = l.siren || l.nom.toLowerCase(); if (seen.has(key)) continue; seen.add(key);
-      leads.push(l);
+    setStatus('Lecture du BODACC…');
+    const params = `where=${encodeURIComponent(where)}&order_by=${encodeURIComponent('dateparution desc')}&select=${BODACC_FIELDS}`;
+    let raw;
+    // L'export renvoie toutes les annonces en une fois ; repli sur la lecture par pages (10 000 au plus).
+    try { raw = await fetchJson(`${BODACC_DATASET}/exports/json?${params}&limit=-1`); if (!Array.isArray(raw)) throw new Error('format'); }
+    catch (e) {
+      if (e instanceof TypeError) throw e;
+      raw = []; let total = 0;
+      for (let offset = 0; offset < 10000; offset += 100) {
+        const j = await fetchJson(`${BODACC_DATASET}/records?${params}&limit=100&offset=${offset}`);
+        total = j.total_count || 0; raw.push(...(j.results || []));
+        setStatus(`Lecture du BODACC… ${raw.length} / ${total}`);
+        if (!(j.results || []).length || raw.length >= total) break;
+      }
     }
-    leads.forEach(l => { l.score = score(l, c); });
-    const tronque = total > MAX_RECORDS ? ` Seules les ${MAX_RECORDS} annonces les plus récentes ont été lues : réduis la période ou la zone.` : '';
-    setStatus(`${total} annonce(s) au BODACC, ${leads.length} lead(s) retenu(s).${tronque}`);
+    leads = toLeads(raw, c, tab);
+    const cache = store.get('annuaire', {});
+    leads.forEach(l => { const x = cache[l.siren]; if (x) { applyAnnuaire(l, x.d); l.score = score(l, c); } });
+    markNew();
+    const nb = leads.filter(l => l.isNew).length;
+    setStatus(`${raw.length} annonce(s) au BODACC, ${leads.length} société(s) retenue(s), dont ${nb} nouvelle(s) depuis ta dernière recherche.`);
     $('enrich').disabled = !leads.length; $('csv').disabled = !leads.length;
   } catch (e) {
     setStatus((e.message || 'Erreur') + (e instanceof TypeError ? ' Connexion au BODACC impossible : vérifie ta connexion internet.' : ''), true);
   } finally { busy = false; $('run').disabled = false; render(); }
 }
+/* « Nouveau » : société jamais vue lors d'une recherche précédente. */
+function markNew() {
+  const seen = store.get('seen', {}), now = Date.now();
+  for (const l of leads) { const k = l.siren || l.id; l.isNew = !seen[k] || seen[k] === firstSeenRun; if (!seen[k]) seen[k] = firstSeenRun; }
+  // Purge des sociétés vues il y a plus de 6 mois.
+  for (const [k, t] of Object.entries(seen)) if (now - t > 180 * 864e5) delete seen[k];
+  store.set('seen', seen);
+}
+const firstSeenRun = Date.now();
 
 /* Complète les leads affichés avec l'annuaire officiel (7 requêtes par seconde au plus). */
 async function enrich() {
@@ -378,16 +456,7 @@ async function enrich() {
       try {
         const j = await fetchJson(`${ANNUAIRE}?q=${l.siren}&per_page=1`);
         const x = (j.results || []).find(y => y.siren === l.siren);
-        if (x) {
-          l.naf = [x.activite_principale, x.libelle_activite_principale].filter(Boolean).join(' — ');
-          l.effectif = x.tranche_effectif_salarie || '';
-          const pp = (x.dirigeants || []).filter(d => d.nom && !d.denomination).map(d => ({ prenom: String(d.prenoms || '').split(/\s+/)[0], nom: d.nom }));
-          if (pp.length) l.personnes = pp;
-          l.dirigeantsAnnuaire = (x.dirigeants || []).slice(0, 3).map(d => d.denomination || [d.prenoms, d.nom].filter(Boolean).join(' ') + (d.qualite ? ' (' + d.qualite + ')' : '')).join(' ; ');
-          l.dateCreation = x.date_creation || '';
-          l.etat = x.etat_administratif || '';
-          if (!l.adresse && x.siege) l.adresse = x.siege.adresse || '';
-        }
+        if (x) { applyAnnuaire(l, x); cacheAnnuaire(l.siren, x); }
         l.enriched = true; l.score = score(l, c);
       } catch (e) { if (/Trop de requêtes/.test(e.message)) throw e; }
       await new Promise(r => setTimeout(r, 150));
@@ -396,6 +465,15 @@ async function enrich() {
     setStatus(`${todo.length} lead(s) complété(s) avec l'annuaire.`);
   } catch (e) { setStatus(e.message, true); }
   finally { busy = false; $('enrich').disabled = false; render(); }
+}
+
+/* Fiches de l'annuaire gardées 30 jours (2 000 au plus) : pas de nouvelle requête à la recherche suivante. */
+function cacheAnnuaire(siren, x) {
+  const cache = store.get('annuaire', {}), now = Date.now();
+  cache[siren] = { t: now, d: { activite_principale: x.activite_principale, libelle_activite_principale: x.libelle_activite_principale, tranche_effectif_salarie: x.tranche_effectif_salarie,
+    dirigeants: (x.dirigeants || []).slice(0, 5).map(d => ({ nom: d.nom, prenoms: d.prenoms, qualite: d.qualite, denomination: d.denomination })), date_creation: x.date_creation, etat_administratif: x.etat_administratif, siege: { adresse: x.siege?.adresse } } };
+  const keys = Object.keys(cache).filter(k => now - cache[k].t < 30 * 864e5).sort((a, b) => cache[b].t - cache[a].t).slice(0, 2000);
+  store.set('annuaire', Object.fromEntries(keys.map(k => [k, cache[k]])));
 }
 
 /* ---------- affichage ---------- */
@@ -407,6 +485,8 @@ function visible() {
     const st = follow[l.id]?.status || '';
     if (sf === 'open' && st && st !== 'À traiter') return false;
     if (sf === 'hide' && st === 'Pas intéressé') return false;
+    if ((sf === 'new' || (c.onlyNew && tab !== 'followed')) && !l.isNew) return false;
+    if (tab !== 'followed' && l.siren && clients.has(l.siren)) return false;
     if (tab === 'followed') return !f || JSON.stringify(l).toLowerCase().includes(f);
     if (c.onlyPM && !l.isPM) return false;
     if (c.noSCI && /\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom)) return false;
@@ -425,9 +505,9 @@ function render() {
   const list = visible(), box = $('results');
   $('statsBox').hidden = !list.length;
   if (list.length) {
-    const hi = list.filter(l => l.score >= 60).length, cnt = {};
+    const hi = list.filter(l => l.score >= 60).length, nw = list.filter(l => l.isNew).length, cnt = {};
     list.forEach(l => { cnt[l.signal] = (cnt[l.signal] || 0) + 1; });
-    $('stats').innerHTML = `<span><b>${list.length}</b> lead(s)</span><span><b>${hi}</b> prioritaire(s) (score ≥ 60)</span>` +
+    $('stats').innerHTML = `<span><b>${list.length}</b> lead(s)</span><span><b>${hi}</b> prioritaire(s) (score ≥ 60)</span>${tab !== 'followed' ? `<span><b>${nw}</b> nouveau(x)</span>` : ''}` +
       Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('');
   }
   if (!list.length) { box.innerHTML = `<div class="empty">${tab === 'followed' ? 'Aucun lead suivi : choisis un statut ou saisis un contact sur un lead pour le retrouver ici.' : 'Aucun résultat pour l\'instant.'}</div>`; return; }
@@ -440,15 +520,15 @@ function row(l) {
   const q = encodeURIComponent(((dir || '').split(/[;,]/)[0].replace(/^[^:]*:\s*/, '') + ' ' + l.nom).trim());
   const lieu = l.adresse || [l.cp, l.ville].filter(Boolean).join(' '), nom = encodeURIComponent(l.nom);
   return `<tr class="${f.status === 'Pas intéressé' || f.status === 'Gagné' ? 'done' : ''}">
-    <td><span class="score ${cls}">${l.score}</span></td>
+    <td><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
     <td>${datefr(l.date)}</td>
-    <td class="c-soc"><div class="name">${esc(l.nom)}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
+    <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
     <td><span class="tag">${esc(l.signal)}</span>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
     <td class="c-act"><div class="detail clamp" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
     <td>${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
     <td class="c-dir"><div class="detail clamp" title="Cliquer pour tout lire">${esc(dir || '')}</div></td>
     <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Annonce</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a>
-      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a></td>
+      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + (l.ville || '') + ' (site:instagram.com OR site:facebook.com)')}" target="_blank" rel="noopener">Instagram / Facebook</a></td>
     <td class="c-follow"><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
       <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
       <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
@@ -457,19 +537,11 @@ function row(l) {
       <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
   </tr>`;
 }
-function shortForme(f) {
-  const x = String(f || ''), u = /associ[ée] unique|unipersonnelle/i.test(x);
-  if (/actions simplifi/i.test(x)) return u ? 'SASU' : 'SAS';
-  if (/responsabilit[ée] limit/i.test(x)) return u ? 'EURL' : 'SARL';
-  if (/civile immobili/i.test(x)) return 'SCI';
-  if (/soci[ée]t[ée] anonyme/i.test(x)) return 'SA';
-  if (/nom collectif/i.test(x)) return 'SNC';
-  return x;
-}
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
 
 /* ---------- Recherche de contacts : plusieurs fournisseurs à la suite ---------- */
 const PROVIDERS = [
+  { id: 'google', name: 'Google (site et téléphone)', site: 'https://console.cloud.google.com/google/maps-apis', offer: 'Places API : quota mensuel gratuit, puis payant', label: 'Clé API Google Maps Platform', contactOnly: true },
   { id: 'hunter', name: 'Hunter', site: 'https://hunter.io', offer: 'gratuit : 50 crédits par mois', label: 'Clé API (API keys)' },
   { id: 'apollo', name: 'Apollo', site: 'https://www.apollo.io', offer: 'offre gratuite, compte ouvert avec un e-mail professionnel', label: 'Clé API (Settings › API)' },
   { id: 'icypeas', name: 'Icypeas', site: 'https://www.icypeas.com', offer: 'essai, puis environ 19 $ les 1 000 crédits', label: 'Clé API' },
@@ -512,6 +584,15 @@ const domainOf = site => String(site || '').trim().toLowerCase().replace(/^[a-z]
 
 /* Chaque fournisseur reçoit le dirigeant, le lead et le site, et renvoie { email, phone, score, domain }. */
 const FIND = {
+  /* Fiche Google de l'établissement : site web et téléphone (pas d'e-mail). Le site trouvé sert ensuite aux autres fournisseurs. */
+  async google(k, p, l) {
+    const j = await api('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'X-Goog-Api-Key': k, 'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber' }, body: { textQuery: [l.nom, l.adresse || [l.cp, l.ville].filter(Boolean).join(' ')].filter(Boolean).join(' '), languageCode: 'fr', regionCode: 'FR', pageSize: 1 } });
+    const pl = (j.places || [])[0];
+    // On ne garde la fiche que si son nom ressemble à celui de la société.
+    const norm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+    if (!pl || !(norm(pl.displayName?.text).includes(norm(l.nom).slice(0, 6)) || norm(l.nom).includes(norm(pl.displayName?.text).slice(0, 6)))) return {};
+    return { site: pl.websiteUri || '', phone: pl.nationalPhoneNumber || '' };
+  },
   async hunter(k, p, l, dom) {
     const u = new URL('https://api.hunter.io/v2/email-finder');
     Object.entries({ first_name: p.prenom, last_name: p.nom, [dom ? 'domain' : 'company']: dom || l.nom, api_key: k }).forEach(([a, b]) => u.searchParams.set(a, b));
@@ -566,7 +647,7 @@ async function saveKeys() {
   } catch (e) { setStatus('Clés enregistrées. Hunter : ' + e.message + '.', true); }
 }
 /* Fournisseurs encore à essayer pour ce lead (un fournisseur déjà interrogé avec le même site est sauté). */
-function pending(l, f) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && (f.tried || {})[p.id] !== dom); }
+function pending(l, f) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && !(p.contactOnly && f.site) && (f.tried || {})[p.id] !== dom && (p.contactOnly ? !(f.tried || {})[p.id] : true)); }
 function contactCell(l, f) {
   const found = f.found ? `<div class="sub">${f.found.email ? 'E-mail' : 'Téléphone'} : ${esc(f.found.by)}${f.found.score != null ? ' · fiabilité ' + esc(f.found.score) + ' %' : ''}</div>` : '';
   if (!hasKeys() || f.email) return found;
@@ -578,19 +659,22 @@ function contactCell(l, f) {
 }
 async function findContact(id, quiet) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead, p = l && personOf(l); if (!p) return false;
-  const f = follow[id] || {}, dom = domainOf(f.site), tried = { ...(f.tried || {}) }, notes = [];
-  let email = '', phone = '', found = f.found || null;
+  const f = follow[id] || {}, tried = { ...(f.tried || {}) }, notes = [];
+  let dom = domainOf(f.site), site = '', email = '', phone = '', found = f.found || null;
   for (const pr of pending(l, f)) {
+    if (pr.contactOnly && dom) continue;
     setStatus(`${pr.name} : recherche de ${p.prenom} ${p.nom} (${l.nom})…`);
     try {
       const r = await FIND[pr.id](keys[pr.id], p, l, dom) || {};
       tried[pr.id] = dom || '-';
+      if (r.site && !dom) { site = r.site; dom = domainOf(r.site); }
       if (r.phone && !phone && !f.phone) { phone = String(r.phone); found = found || { by: pr.name }; }
       if (r.email) { email = r.email; found = { by: pr.name, score: r.score ?? null, domain: r.domain || '' }; break; }
       notes.push(pr.name + ' : rien');
     } catch (e) { notes.push(pr.name + ' : ' + e.message); }
   }
   const patch = { tried };
+  if (site) patch.site = site;
   if (email) patch.email = email;
   if (phone) patch.phone = phone;
   if (found) patch.found = found;
@@ -684,6 +768,39 @@ $('filter').addEventListener('input', render);
 $('statusFilter').addEventListener('change', render);
 ['onlyPM', 'noSCI', 'minCap', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
 renderProviders();
+
+/* ---------- mes clients, sauvegarde, lancement automatique ---------- */
+function setClients(text) {
+  clients = new Set((String(text).match(/\b\d{3}\s?\d{3}\s?\d{3}\b/g) || []).map(x => x.replace(/\s/g, '')));
+  store.set('clients', [...clients]);
+  $('clientsCount').textContent = clients.size + ' client' + (clients.size > 1 ? 's' : '');
+  $('clients').value = [...clients].join(', ');
+  render();
+}
+$('clients').value = [...clients].join(', ');
+$('clientsCount').textContent = clients.size + ' client' + (clients.size > 1 ? 's' : '');
+$('clients').addEventListener('change', e => setClients(e.target.value));
+$('clientsImport').addEventListener('click', e => { e.preventDefault(); $('clientsFile').click(); });
+$('clientsFile').addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; setClients((await f.text()) + ' ' + $('clients').value); setStatus(`${clients.size} SIREN de clients exclus des résultats.`); e.target.value = ''; });
+$('backup').addEventListener('click', () => {
+  const data = { app: 'leads-expert-comptable', version: 1, date: new Date().toISOString(), follow, clients: [...clients], criteria: store.get('criteria', null) };
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = `leads_suivi_${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  setStatus(`Sauvegarde téléchargée : ${Object.keys(follow).length} lead(s) suivi(s). Les clés API n'y figurent pas.`);
+});
+$('restore').addEventListener('click', () => $('restoreFile').click());
+$('restoreFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.app !== 'leads-expert-comptable' || typeof d.follow !== 'object') throw new Error();
+    // Fusion : la fiche la plus récemment modifiée l'emporte.
+    for (const [k, v] of Object.entries(d.follow)) if (!follow[k] || String(v.updated || '') > String(follow[k].updated || '')) follow[k] = v;
+    store.set('follow', follow);
+    if (Array.isArray(d.clients)) setClients([...clients, ...d.clients].join(' '));
+    setStatus(`Sauvegarde restaurée : ${Object.keys(d.follow).length} lead(s) fusionné(s) avec ton suivi.`); render();
+  } catch { setStatus('Fichier de sauvegarde illisible.', true); }
+});
 $('keysSave').addEventListener('click', saveKeys);
 $('findAll').addEventListener('click', findAll);
 $('peopleCsv').addEventListener('click', peopleCsv);
@@ -694,6 +811,9 @@ $('results').addEventListener('click', e => {
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
   render();
 });
+$('auto').addEventListener('change', saveCriteria);
+$('onlyNew').addEventListener('change', () => { saveCriteria(); render(); });
+if ($('auto').checked) setTimeout(async () => { await run(); if (leads.length) await enrich(); }, 300);
 $('results').addEventListener('change', e => {
   if (e.target.classList.contains('st')) { setFollow(e.target.dataset.id, { status: e.target.value }); render(); }
   if (e.target.classList.contains('nt')) setFollow(e.target.dataset.id, { note: e.target.value });

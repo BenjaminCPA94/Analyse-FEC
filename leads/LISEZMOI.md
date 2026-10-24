@@ -18,12 +18,34 @@ Outil de détection de prospects : nouvelles sociétés et sociétés en changem
 
 Le plan gratuit de Vercel (Hobby) est réservé à un usage non commercial : pour le cabinet, utiliser le plan Pro (celui du CRM si le compte existe déjà).
 
+## Résumé hebdomadaire par e-mail (automatique)
+
+Chaque lundi vers 6 h (heure de Paris en hiver), l'outil mis en ligne sur Vercel envoie un e-mail avec les leads prioritaires de la semaine : nouvelles sociétés et sociétés en changement, complétées avec l'annuaire, sans tes clients ni les sociétés cessées.
+
+1. Crée un compte gratuit sur [resend.com](https://resend.com) et une clé API. Sans domaine vérifié, Resend n'envoie qu'à l'adresse du compte ; pour un autre destinataire, vérifie le domaine du cabinet.
+2. Dans Vercel › Settings › Environment Variables, ajoute :
+
+| Variable | Exemple |
+|---|---|
+| `RESEND_API_KEY` | `re_…` |
+| `LEADS_EMAIL_TO` | `benjamin@cabinet.fr` |
+| `CRON_SECRET` | une longue phrase au hasard |
+| `LEADS_DEPS` | `75,92,93,94` |
+| `LEADS_TARGET` | `conseil,restaurant,informatique` (facultatif) |
+| `LEADS_EXCLUDE` | `holding` (facultatif) |
+| `LEADS_CLIENTS` | SIREN de tes clients, séparés par des virgules (facultatif) |
+| `LEADS_MIN_SCORE` | `60` (facultatif) |
+| `LEADS_EMAIL_FROM` | `Leads <leads@cabinet.fr>` (facultatif, domaine vérifié chez Resend) |
+
+3. Redéploie. Pour voir l'e-mail sans l'envoyer : `https://<adresse-vercel>/api/digest?secret=<CRON_SECRET>&dry=1`.
+
 ## Fournisseurs d'e-mails
 
 Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé est renseignée sont utilisés.
 
 | Fournisseur | Offre | Où trouver la clé |
 |---|---|---|
+| Google (site et téléphone, pas d'e-mail) | Places API : quota mensuel gratuit, puis payant | console.cloud.google.com › Google Maps Platform › Clés (activer « Places API (New) ») |
 | Hunter | Gratuit : 50 crédits par mois | hunter.io › API keys |
 | Apollo | Offre gratuite (compte ouvert avec un e-mail professionnel) | apollo.io › Settings › Integrations › API |
 | Icypeas | Essai, puis environ 19 $ les 1 000 crédits | icypeas.com › tableau de bord › API |
@@ -32,8 +54,12 @@ Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé 
 
 Les clés restent dans le navigateur de chaque utilisateur. Le relais ne les conserve pas : il transmet la requête au fournisseur et renvoie la réponse, et refuse toute autre adresse.
 
-Pour augmenter les chances de trouver l'adresse : compléter les leads avec l'annuaire (nom du dirigeant) et coller le site web de la société dans le suivi.
+Pour augmenter les chances de trouver l'adresse : compléter les leads avec l'annuaire (nom du dirigeant) et renseigner le site web de la société dans le suivi (Google le trouve automatiquement si sa clé est renseignée).
+
+## Suivi
+
+Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà contactée reste suivie quand elle réapparaît dans une autre annonce. Il est conservé dans le navigateur ; « Sauvegarder mon suivi » télécharge un fichier (sans les clés API) que « Restaurer une sauvegarde » fusionne sur un autre poste.
 
 ## Test
 
-`node test/e2e.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi et export.
+`node test/e2e.js` et `node test/features.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde et lancement automatique.
