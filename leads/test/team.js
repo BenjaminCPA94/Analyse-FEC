@@ -49,19 +49,20 @@ globalThis.fetch = async (url, init = {}) => {
   const browser = await chromium.launch(), errors = [];
   const open = async () => {
     const page = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+    await page.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true'));
     page.on('pageerror', e => errors.push(e.message)); page.on('dialog', d => d.accept());
     await page.route('**/bodacc-datadila.opendatasoft.com/**', rt => rt.fulfill({ json: rt.request().url().includes('/exports/json') ? BODACC : { total_count: 0, results: [] } }));
     await page.route('**/recherche-entreprises.api.gouv.fr/**', rt => { const q = new URL(rt.request().url()).searchParams.get('q'); rt.fulfill({ json: { results: q === 'BOULANGERIE DUPAIN' ? [{ siren: '555555555', nom_complet: 'BOULANGERIE DUPAIN', dirigeants: [{ nom: 'DUPAIN', prenoms: 'Jean' }], date_creation: '2015-01-01', etat_administratif: 'A' }] : [] } }); });
     await page.goto(base + '/');
     return page;
   };
-  const login = async (page, user) => { await page.click('#teamBox summary'); await page.fill('#teamUser', user); await page.fill('#teamKey', 'equipe-secrete'); await page.click('#teamLogin'); await page.waitForFunction(u => document.getElementById('teamState').textContent.includes(u), user); };
+  const login = async (page, user) => { await page.evaluate(() => openSettings()); await page.click('#teamBox summary'); await page.fill('#teamUser', user); await page.fill('#teamKey', 'equipe-secrete'); await page.click('#teamLogin'); await page.waitForFunction(u => document.getElementById('teamState').textContent.includes(u), user); };
 
   /* ---- Alice : suivi local repris dans le suivi partagé ---- */
   const alice = await open();
   await alice.evaluate(() => { localStorage.setItem('leadsEC:follow', JSON.stringify({ '222222222': { status: 'Pas intéressé', updated: '2026-01-01T00:00:00Z', lead: { id: '222222222', siren: '222222222', nom: 'BETA', ville: 'Paris' } } })); localStorage.setItem('leadsEC:clients', JSON.stringify(['999999999'])); });
   await alice.reload();
-  await alice.click('#teamBox summary'); await alice.fill('#teamUser', 'Alice'); await alice.fill('#teamKey', 'faux'); await alice.click('#teamLogin');
+  await alice.evaluate(() => openSettings()); await alice.click('#teamBox summary'); await alice.fill('#teamUser', 'Alice'); await alice.fill('#teamKey', 'faux'); await alice.click('#teamLogin');
   await alice.waitForFunction(() => /incorrect/.test(document.getElementById('teamState').textContent));
   await alice.fill('#teamKey', 'equipe-secrete'); await alice.click('#teamLogin');
   await alice.waitForFunction(() => /Alice/.test(document.getElementById('teamState').textContent));
@@ -72,20 +73,20 @@ globalThis.fetch = async (url, init = {}) => {
   /* ---- Offres France Travail ---- */
   await alice.click('[data-tab=jobs]'); await alice.click('#run');
   await alice.waitForFunction(() => /offre\(s\) de comptable/.test(document.getElementById('status').textContent));
-  const names = await alice.$$eval('tbody tr', t => t.map(r => r.cells[2].innerText.split('\n')[0]));
+  const names = await alice.$$eval('tbody.lead tr.main', t => t.map(r => r.cells[1].innerText.split('\n')[0]));
   assert.ok(names.some(n => /BOULANGERIE DUPAIN/.test(n)));
   assert.ok(!names.some(n => /ADECCO|CABINET DURAND/.test(n)), 'intérim et cabinets comptables exclus');
   assert.strictEqual(names.length, 3, 'deux offres de la même entreprise regroupées');
-  const dupain = 'tr:has(button.msg[data-id="ft-boulangerie-dupain-75"])';
+  const dupain = 'tbody.lead[data-id="ft-boulangerie-dupain-75"]';
   assert.match(await alice.getAttribute(dupain + ' .score', 'title'), /moins de 20 salariés[\s\S]*temps partiel[\s\S]*2 offres/);
   assert.match(await alice.textContent(dupain), /recrutement@dupain\.fr/);
-  const scores = Object.fromEntries(await alice.$$eval('tbody tr', t => t.map(r => [r.cells[2].innerText.split('\n')[0].replace('NOUVEAU', ''), +r.cells[0].innerText])));
+  const scores = Object.fromEntries(await alice.$$eval('tbody.lead tr.main', t => t.map(r => [r.cells[1].innerText.split('\n')[0].replace('NOUVEAU', ''), +r.cells[0].innerText])));
   assert.ok(scores['BOULANGERIE DUPAIN'] > scores['GRANDGROUPE SA'] && scores['GRANDGROUPE SA'] > scores['Entreprise non communiquée']);
   await alice.click('#enrich'); await alice.waitForFunction(() => /complété/.test(document.getElementById('status').textContent));
   assert.match(await alice.textContent(dupain), /555 555 555/, 'société retrouvée dans l\'annuaire par son nom');
 
   /* ---- Messages et relances ---- */
-  await alice.click('#msgBox summary');
+  await alice.evaluate(() => openSettings()); await alice.click('#msgBox summary');
   await alice.fill('#cab_cabinet', 'RB Partners'); await alice.fill('#cab_signataire', 'Benjamin H.'); await alice.fill('#cab_tel', '01 02 03 04 05'); await alice.press('#cab_tel', 'Tab');
   await alice.click(dupain + ' button.msg');
   assert.strictEqual(await alice.inputValue('#m_to'), 'recrutement@dupain.fr', 'adresse du contact de l\'offre');
@@ -104,13 +105,13 @@ globalThis.fetch = async (url, init = {}) => {
   /* ---- Bob voit le travail d'Alice et fait la relance ---- */
   const bob = await open(); await login(bob, 'Bob');
   await bob.click('[data-tab=followed]');
-  assert.match(await bob.textContent('tbody'), /Par Alice/);
+  assert.match(await bob.textContent('#results'), /par Alice/i);
   assert.strictEqual(await bob.textContent('#clientsCount'), '1 client');
   await bob.fill('input[data-id="ft-boulangerie-dupain-75"][data-k="relance"]', new Date().toISOString().slice(0, 10));
   await bob.dispatchEvent('input[data-id="ft-boulangerie-dupain-75"][data-k="relance"]', 'change');
   await bob.selectOption('#statusFilter', 'relance');
-  assert.strictEqual(await bob.locator('tbody tr').count(), 1);
-  assert.match(await bob.textContent('tbody'), /RELANCE/);
+  assert.strictEqual(await bob.locator('tbody.lead').count(), 1);
+  assert.match(await bob.textContent('#results'), /RELANCE/);
   await bob.click('button.msg[data-id="ft-boulangerie-dupain-75"]');
   assert.strictEqual(await bob.$eval('.mbox .tab.on', b => b.textContent), 'Relance', 'relance proposée par défaut');
   assert.match(await bob.inputValue('#m_body'), new RegExp('suite à mon message du ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '\\/')));
@@ -126,7 +127,7 @@ globalThis.fetch = async (url, init = {}) => {
   /* ---- Alice reçoit les changements de Bob ---- */
   await alice.evaluate(() => window.dispatchEvent(new Event('focus')));
   await alice.click('[data-tab=followed]');
-  await alice.waitForFunction(() => /Par Bob/.test(document.querySelector('tbody')?.textContent || ''));
+  await alice.waitForFunction(() => /par Bob/i.test(document.querySelector('#results')?.textContent || ''));
 
   /* ---- Résumé hebdomadaire : déjà traité exclu, recrutements, relances ---- */
   const store = require('../lib/store').createStore();

@@ -45,6 +45,7 @@ globalThis.fetch = async (url, init = {}) => {
 
   /* ---- Page ---- */
   const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1400, height: 900 } }), errors = [];
+  await page.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true'));
   page.on('pageerror', e => errors.push(e.message)); page.on('dialog', d => d.accept());
   const mock = async pg => {
     await pg.route('**/bodacc-datadila.opendatasoft.com/**', rt => rt.fulfill({ json: rt.request().url().includes('/exports/json') ? RECORDS : { total_count: 0, results: [] } }));
@@ -57,12 +58,12 @@ globalThis.fetch = async (url, init = {}) => {
   await page.reload();
   assert.deepStrictEqual(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('leadsEC:follow')))), ['111111111']);
 
-  await page.click('#run'); await page.waitForSelector('tbody tr');
-  const rows = () => page.$$eval('tbody tr', t => t.map(r => r.cells[2].innerText.split('\n')[0]));
+  await page.click('#run'); await page.waitForSelector('tbody.lead');
+  const rows = () => page.$$eval('tbody.lead tr.main', t => t.map(r => r.cells[1].innerText.split('\n')[0]));
   assert.strictEqual((await rows()).length, 4);
   assert.match((await rows())[0], /NOUVEAU/);
   assert.strictEqual(await page.$eval('select.st[data-id="111111111"]', s => s.value), 'Contacté', 'suivi retrouvé par SIREN');
-  assert.match(await page.getAttribute('tr:has(select[data-id="333333333"]) .score', 'title'), /structure patrimoniale/);
+  assert.match(await page.getAttribute('tbody.lead[data-id="333333333"] .score', 'title'), /structure patrimoniale/);
 
   // Mes clients exclus.
   await page.fill('#clients', '222 222 222'); await page.press('#clients', 'Tab');
@@ -71,25 +72,26 @@ globalThis.fetch = async (url, init = {}) => {
 
   // Annuaire : société ancienne → nouvel établissement, score baissé ; cache réutilisé ensuite.
   await page.click('#enrich'); await page.waitForFunction(() => /complété/.test(document.getElementById('status').textContent));
-  assert.match(await page.textContent('tr:has(select[data-id="444444444"])'), /Nouvel établissement/);
-  assert.match(await page.getAttribute('tr:has(select[data-id="444444444"]) .score', 'title'), /société déjà existante/);
+  assert.match(await page.textContent('tbody.lead[data-id="444444444"]'), /Nouvel établissement/);
+  assert.match(await page.getAttribute('tbody.lead[data-id="444444444"] .score', 'title'), /société déjà existante/);
   let annCalls = 0; page.on('request', r => { if (r.url().includes('recherche-entreprises')) annCalls++; });
   await page.click('#run'); await page.waitForFunction(() => !document.getElementById('run').disabled);
-  assert.match(await page.textContent('tr:has(select[data-id="444444444"])'), /Nouvel établissement/, 'complément repris du cache');
+  assert.match(await page.textContent('tbody.lead[data-id="444444444"]'), /Nouvel établissement/, 'complément repris du cache');
   assert.strictEqual(annCalls, 0);
 
   // Google : site et téléphone, puis Hunter avec le domaine trouvé.
-  await page.click('#contactBox summary'); await page.fill('#key_google', 'gk'); await page.fill('#key_hunter', 'hk'); await page.click('#keysSave');
+  await page.evaluate(() => openSettings()); await page.click('#contactBox summary'); await page.fill('#key_google', 'gk'); await page.fill('#key_hunter', 'hk'); await page.click('#keysSave');
   await page.click('button.hf[data-id="111111111"]'); await page.waitForFunction(() => /trouvé pour ALPHA/.test(document.getElementById('status').textContent));
   assert.strictEqual(await page.inputValue('input[data-id="111111111"][data-k="site"]'), 'https://www.alpha-conseil.fr/');
   assert.strictEqual(await page.inputValue('input[data-id="111111111"][data-k="phone"]'), '01 40 00 00 00');
   assert.strictEqual(await page.inputValue('input[data-id="111111111"][data-k="email"]'), 'paul@alpha-conseil.fr');
 
   // Sauvegarde puis restauration dans un navigateur vierge.
+  await page.evaluate(() => openSettings()); await page.click('#backupBox summary');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#backup')]);
   const file = await dl.path(), saved = JSON.parse(require('node:fs').readFileSync(file, 'utf8'));
   assert.ok(!JSON.stringify(saved).includes('gk'), 'pas de clé API dans la sauvegarde');
-  const page2 = await (await browser.newContext()).newPage(); page2.on('pageerror', e => errors.push(e.message)); await mock(page2);
+  const page2 = await (await browser.newContext()).newPage(); await page2.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true')); page2.on('pageerror', e => errors.push(e.message)); await mock(page2);
   await page2.goto(base + '/');
   await page2.setInputFiles('#restoreFile', file);
   await page2.waitForFunction(() => /restaurée/.test(document.getElementById('status').textContent));
@@ -100,7 +102,7 @@ globalThis.fetch = async (url, init = {}) => {
   // Lancement automatique à l'ouverture.
   await page2.click('[data-tab=new]'); await page2.check('#auto');
   await page2.reload(); await page2.waitForFunction(() => /complété|Rien/.test(document.getElementById('status').textContent));
-  assert.ok((await page2.$$('tbody tr')).length >= 3);
+  assert.ok((await page2.$$('tbody.lead')).length >= 3);
 
   assert.deepStrictEqual(errors, []);
   await browser.close(); server.close();

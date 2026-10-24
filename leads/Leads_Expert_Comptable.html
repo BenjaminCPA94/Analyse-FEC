@@ -12,105 +12,236 @@
   Aucun serveur ni compte : le fichier s'ouvre dans le navigateur. Le suivi (statut, notes) reste
   dans ce navigateur ; l'export CSV permet de le partager ou de l'importer ailleurs.
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#f7f6f3; --surface:#fff; --surface2:#f2f1ee;
-    --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.14);
-    --text:#1a1916; --text2:#6b6960; --text3:#a09d96;
-    --blue:#185FA5; --blue-l:#e6f1fb;
-    --green:#3B6D11; --green-l:#eaf3de;
-    --red:#A32D2D; --red-l:#fcebeb;
-    --orange:#b4531f; --orange-l:#fbeee6;
-    --radius:10px; --radius-sm:6px;
+    --bg:#f5f6f8; --surface:#fff; --surface2:#f8f9fb; --surface3:#eef0f4;
+    --border:#e4e7ec; --border-strong:#d0d5dd;
+    --text:#101828; --text2:#475467; --text3:#98a2b3;
+    --accent:#3456e0; --accent-h:#2944c4; --accent-l:#eef2ff;
+    --blue:#3456e0; --blue-l:#eef2ff;
+    --green:#067647; --green-l:#ecfdf3; --orange:#b54708; --orange-l:#fffaeb;
+    --red:#b42318; --red-l:#fef3f2; --violet:#6941c6; --violet-l:#f4f3ff; --teal:#0e7090; --teal-l:#ecfdff;
+    --on-accent:#fff; --radius:12px; --radius-sm:8px;
+    --shadow:0 1px 2px rgba(16,24,40,.05);
+    --shadow-lg:0 12px 32px -8px rgba(16,24,40,.18);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#14161a; --surface:#1c1f24; --surface2:#24282e;
-      --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.16);
-      --text:#ecebe8; --text2:#a9a69e; --text3:#76736c;
-      --blue:#6aa9e8; --blue-l:#1b2c3e; --green:#8cc56a; --green-l:#1f2c17;
-      --red:#ec8a8a; --red-l:#3a1d1d; --orange:#f0a072; --orange-l:#3a2618;
+      --bg:#0d1117; --surface:#161b22; --surface2:#1b2129; --surface3:#232a33;
+      --border:#2a313b; --border-strong:#3a424e;
+      --text:#e6e9ee; --text2:#a8b1bd; --text3:#6e7783;
+      --accent:#7b93ff; --accent-h:#94a8ff; --accent-l:#1e2645; --blue:#7b93ff; --blue-l:#1e2645;
+      --green:#4ade80; --green-l:#13291c; --orange:#fbbf24; --orange-l:#2d2210;
+      --red:#f87171; --red-l:#2f1717; --violet:#b69cff; --violet-l:#251d3d; --teal:#5ccfe6; --teal-l:#10262c;
+      --on-accent:#0b1020; --shadow:0 1px 2px rgba(0,0,0,.3); --shadow-lg:0 12px 32px -8px rgba(0,0,0,.6);
     }
   }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1b2129; --surface3:#232a33;
+    --border:#2a313b; --border-strong:#3a424e;
+    --text:#e6e9ee; --text2:#a8b1bd; --text3:#6e7783;
+    --accent:#7b93ff; --accent-h:#94a8ff; --accent-l:#1e2645; --blue:#7b93ff; --blue-l:#1e2645;
+    --green:#4ade80; --green-l:#13291c; --orange:#fbbf24; --orange-l:#2d2210;
+    --red:#f87171; --red-l:#2f1717; --violet:#b69cff; --violet-l:#251d3d; --teal:#5ccfe6; --teal-l:#10262c; --on-accent:#0b1020;
+  }
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
-  header{background:#0f1923;color:#fff;padding:18px 24px;}
-  header h1{font-size:16px;letter-spacing:.04em;}
-  header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px;}
-  main{max-width:1800px;margin:0 auto;padding:20px 16px 60px;}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
-  label.f{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
-  input[type=text],input[type=number],select,textarea{width:100%;padding:7px 9px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;}
-  .hint{font-size:11px;color:var(--text3);margin-top:3px;}
-  .checks{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px;}
-  .checks label{font-size:13px;display:flex;gap:5px;align-items:center;cursor:pointer;}
-  .tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;}
-  .tab{border:1px solid var(--border-strong);background:var(--surface);color:var(--text2);padding:7px 14px;border-radius:20px;cursor:pointer;font:inherit;font-size:13px;}
-  .tab.on{background:var(--blue);border-color:var(--blue);color:#fff;}
-  .btn{background:var(--blue);color:#fff;border:0;padding:8px 16px;border-radius:var(--radius-sm);cursor:pointer;font:inherit;font-weight:600;}
-  .btn.sec{background:var(--surface2);color:var(--text);border:1px solid var(--border-strong);font-weight:500;}
-  .btn:disabled{opacity:.5;cursor:default;}
+  html,body{background:var(--bg);}
+  body{font-family:Inter,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  a{color:var(--accent);text-decoration:none;} a:hover{text-decoration:underline;}
+  [hidden]{display:none !important;}
+
+  /* Barre du haut */
+  .top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);}
+  .brand{display:flex;align-items:center;gap:10px;white-space:nowrap;}
+  .logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#7c5cff);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;}
+  .brand b{display:block;font-size:15px;line-height:1.1;} .brand span{font-size:12px;color:var(--text2);}
+  .tabs{display:flex;gap:2px;background:var(--surface3);padding:3px;border-radius:10px;flex-wrap:wrap;}
+  .tab{border:0;background:transparent;color:var(--text2);padding:6px 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:500;white-space:nowrap;}
+  .tab:hover{color:var(--text);} .tab.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow);}
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .chip{font-size:12px;color:var(--text2);background:var(--surface3);padding:4px 10px;border-radius:20px;white-space:nowrap;}
+  .chip.on{background:var(--green-l);color:var(--green);}
+
+  /* Mise en page */
+  .layout{display:grid;grid-template-columns:288px minmax(0,1fr);gap:20px;padding:20px;max-width:1880px;margin:0 auto;align-items:start;}
+  .layout.with-drawer{grid-template-columns:288px minmax(0,1fr) 400px;}
+  .filters{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .filters > details > summary{list-style:none;padding:14px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border);cursor:default;}
+  .filters > details > summary::-webkit-details-marker{display:none;}
+  .fgroup{padding:14px 16px;border-bottom:1px solid var(--border);}
+  .fgroup:last-child{border-bottom:0;}
+  main.main{min-width:0;display:flex;flex-direction:column;gap:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .pad{padding:14px 16px;}
+
+  /* Champs */
+  label.f{display:flex;align-items:baseline;gap:6px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;}
+  label.f .sub{font-weight:400;}
+  input[type=text],input[type=number],input[type=email],input[type=tel],input[type=password],input[type=date],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;font-size:13px;transition:border-color .15s,box-shadow .15s;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-l);}
+  textarea{resize:vertical;}
+  .hint{font-size:12px;color:var(--text3);margin-top:5px;line-height:1.4;}
+  .row2{display:flex;gap:8px;align-items:center;} .row2 .sub{flex:none;}
+  .checks{display:flex;flex-direction:column;gap:6px;margin-top:2px;}
+  .checks label{font-size:13px;display:flex;gap:8px;align-items:flex-start;cursor:pointer;color:var(--text);}
+  .checks input,.chips input{accent-color:var(--accent);margin-top:3px;}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chips label{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 10px 4px 8px;border:1px solid var(--border-strong);border-radius:20px;cursor:pointer;user-select:none;color:var(--text2);background:var(--surface);}
+  .chips label:has(input:checked){border-color:var(--accent);background:var(--accent-l);color:var(--accent);font-weight:500;}
+  .chips input{margin:0;}
+  .linkbtn{background:none;border:0;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0;}
+
+  /* Boutons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);padding:8px 14px;border-radius:var(--radius-sm);cursor:pointer;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s;}
+  .btn:hover{background:var(--accent-h);border-color:var(--accent-h);}
+  .btn.sec{background:var(--surface);color:var(--text);border-color:var(--border-strong);font-weight:500;}
+  .btn.sec:hover{background:var(--surface2);}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--text2);font-weight:500;}
+  .btn.ghost:hover{background:var(--surface3);color:var(--text);}
+  .btn.sm{padding:5px 10px;font-size:12px;}
+  .btn:disabled{opacity:.45;cursor:default;}
   .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .bar .grow{flex:1;}
-  #status{font-size:13px;color:var(--text2);}
+
+  /* Barre d'outils */
+  .toolbar{padding:12px 14px;}
+  .search{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search input{padding-left:32px;}
+  .search::before{content:"";position:absolute;left:11px;top:50%;width:11px;height:11px;border:2px solid var(--text3);border-radius:50%;transform:translateY(-62%);}
+  .search::after{content:"";position:absolute;left:21px;top:58%;width:6px;height:2px;background:var(--text3);transform:rotate(45deg);}
+  #statusFilter{width:auto;}
+  .statusline{margin-top:10px;font-size:13px;color:var(--text2);display:flex;gap:8px;align-items:center;}
+  .statusline::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;}
   #status.err{color:var(--red);}
-  .tablewrap{overflow-x:auto;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);padding:8px;border-bottom:1px solid var(--border-strong);white-space:nowrap;cursor:pointer;user-select:none;}
-  td{padding:8px;border-bottom:1px solid var(--border);vertical-align:top;}
-  tr.done td{opacity:.5;}
-  .score{display:inline-block;min-width:34px;text-align:center;font-weight:700;border-radius:12px;padding:1px 6px;}
-  .s-hi{background:var(--green-l);color:var(--green);}
-  .s-mid{background:var(--orange-l);color:var(--orange);}
-  .s-lo{background:var(--surface2);color:var(--text2);}
-  .new{display:inline-block;font-size:10px;font-weight:700;padding:0 6px;border-radius:8px;background:var(--orange-l);color:var(--orange);margin-left:4px;vertical-align:1px;}
-  .due{display:inline-block;font-size:10px;font-weight:700;padding:0 6px;border-radius:8px;background:var(--red-l);color:var(--red);margin-left:4px;vertical-align:1px;}
-  #modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow:auto;}
-  #modal[hidden]{display:none;}
-  .mbox{background:var(--surface);border-radius:var(--radius);padding:18px;width:100%;max-width:720px;box-shadow:0 10px 40px rgba(0,0,0,.25);}
-  .mbox textarea{font-size:13px;line-height:1.45;}
-  td.c-follow input[type=date]{display:block;margin-top:4px;padding:3px 6px;font-size:12px;width:100%;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);}
-  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--blue-l);color:var(--blue);white-space:nowrap;}
+  .statusline:has(#status.err)::before{background:var(--red);}
+
+  /* Indicateurs */
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--shadow);}
+  .kpi b{display:block;font-size:22px;font-weight:700;line-height:1.2;}
+  .kpi span{font-size:12px;color:var(--text2);}
+  .kpi.k-hi b{color:var(--green);} .kpi.k-new b{color:var(--orange);} .kpi.k-due b{color:var(--red);}
+  .breakdown{grid-column:1/-1;font-size:12px;color:var(--text2);display:flex;gap:6px 14px;flex-wrap:wrap;}
+
+  /* Tableau */
+  .tablewrap{overflow-x:auto;border-radius:var(--radius);}
+  table.leads{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+  table.leads th{position:sticky;top:0;z-index:2;text-align:left;font-size:11.5px;font-weight:600;color:var(--text2);padding:10px 12px;background:var(--surface2);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+  table.leads th:first-child{border-top-left-radius:var(--radius);}
+  table.leads td{padding:12px;vertical-align:top;border-bottom:1px solid var(--border);}
+  tbody.lead tr.main:hover td{background:var(--surface2);}
+  tbody.lead.done tr.main td{opacity:.55;}
+  tbody.lead tr.detail{display:none;}
+  tbody.lead.open tr.detail{display:table-row;}
+  tbody.lead.open tr.main td{border-bottom-color:transparent;background:var(--surface2);}
+  tr.detail > td{background:var(--surface2);padding:4px 12px 16px;}
+  .panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+  .panel section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;display:flex;flex-direction:column;gap:6px;}
+  .panel h4{font-size:11.5px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
+  .field-row{display:flex;gap:6px;align-items:center;} .field-row input{flex:1;}
+  .ctl{font-size:12px;white-space:nowrap;}
+  .links{display:flex;flex-wrap:wrap;gap:6px;}
+  .links a{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--surface3);color:var(--text2);white-space:nowrap;}
+  .links a:hover{background:var(--accent-l);color:var(--accent);text-decoration:none;}
+  .links a.found{background:var(--green-l);color:var(--green);font-weight:500;}
+  .history{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:2px;}
+  td.c-score{width:56px;} td.c-evt{min-width:150px;max-width:240px;}
+  td.c-soc{min-width:170px;max-width:260px;} td.c-act{min-width:160px;max-width:260px;} td.c-dir{min-width:120px;max-width:180px;} td.c-lieu{white-space:nowrap;}
+  th.c-follow,td.c-follow{position:sticky;right:0;z-index:1;background:var(--surface);box-shadow:-8px 0 8px -8px rgba(16,24,40,.12);width:200px;min-width:200px;}
+  th.c-follow{z-index:3;background:var(--surface2);}
+  td.c-follow .actions{display:flex;gap:6px;margin-top:8px;} td.c-follow .actions .btn{flex:1;}
+  .score{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;font-weight:700;font-size:13px;cursor:help;}
+  .s-hi{background:var(--green-l);color:var(--green);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--green) 35%,transparent);}
+  .s-mid{background:var(--orange-l);color:var(--orange);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--orange) 30%,transparent);}
+  .s-lo{background:var(--surface3);color:var(--text2);}
+  .name{font-weight:600;font-size:13.5px;color:var(--text);}
   .sub{font-size:12px;color:var(--text2);}
-  .name{font-weight:600;}
-  a{color:var(--blue);}
-  .links a{margin-right:8px;font-size:12px;white-space:nowrap;}
-  td select{width:auto;padding:3px 5px;font-size:12px;}
-  td textarea{height:34px;font-size:12px;padding:4px 6px;}
-  td input.ct{display:block;margin-top:4px;padding:3px 6px;font-size:12px;}
-  td a.ctl{font-size:11px;}
-  td textarea{margin-top:4px;}
-  .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--text2);}
-  .stats b{color:var(--text);font-size:16px;}
-  details summary{cursor:pointer;font-weight:600;}
-  details ul{margin:8px 0 0 18px;font-size:13px;color:var(--text2);}
-  details li{margin-bottom:4px;}
-  .detail{font-size:12px;color:var(--text2);}
-  .clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;}
+  .meta{display:flex;gap:8px;margin-top:4px;font-size:12px;color:var(--text3);}
+  .meta .ok{color:var(--green);}
+  .new,.due{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;vertical-align:2px;letter-spacing:.02em;}
+  .new{background:var(--orange-l);color:var(--orange);} .due{background:var(--red-l);color:var(--red);}
+  .tag{display:inline-block;font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:6px;background:var(--blue-l);color:var(--blue);white-space:nowrap;}
+  .tag.t-reprise{background:var(--violet-l);color:var(--violet);} .tag.t-move{background:var(--teal-l);color:var(--teal);}
+  .tag.t-dir{background:var(--orange-l);color:var(--orange);} .tag.t-job{background:var(--green-l);color:var(--green);} .tag.t-etab{background:var(--surface3);color:var(--text2);}
+  .detail{font-size:12px;color:var(--text2);margin-top:4px;}
+  .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;}
   .clamp.open{-webkit-line-clamp:unset;display:block;}
-  td.c-act{width:22%;min-width:200px;} td.c-dir{min-width:140px;max-width:180px;} td.c-soc{min-width:160px;}
-  td.links a{display:block;margin:0 0 2px;}
-  th.c-follow,td.c-follow{position:sticky;right:0;background:var(--surface);box-shadow:-6px 0 6px -6px rgba(0,0,0,.15);min-width:180px;width:180px;}
-  td.c-follow select,td.c-follow input.ct,td.c-follow textarea{width:100%;min-width:0;}
-  .empty{padding:30px;text-align:center;color:var(--text3);}
+  select.st{font-weight:500;padding:6px 8px;}
+  select.st[data-s="À traiter"]{background:var(--blue-l);color:var(--blue);border-color:transparent;}
+  select.st[data-s="Contacté"]{background:var(--orange-l);color:var(--orange);border-color:transparent;}
+  select.st[data-s="Rendez-vous"]{background:var(--violet-l);color:var(--violet);border-color:transparent;}
+  select.st[data-s="Gagné"]{background:var(--green-l);color:var(--green);border-color:transparent;}
+  select.st[data-s="Pas intéressé"]{background:var(--surface3);color:var(--text2);border-color:transparent;}
+  .toggle{background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);width:32px;flex:none !important;cursor:pointer;color:var(--text2);font-size:12px;}
+  .toggle:hover{background:var(--surface3);}
+  tbody.lead.open .toggle{transform:rotate(180deg);}
+  .empty{padding:56px 20px;text-align:center;color:var(--text3);}
+  .empty b{display:block;color:var(--text2);font-size:15px;margin-bottom:4px;}
+
+  /* Panneau des réglages */
+  .drawer{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);}
+  .drawer-head{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;}
+  .drawer-head b{flex:1;font-size:15px;}
+  .drawer details{border-bottom:1px solid var(--border);}
+  .drawer details > summary{list-style:none;padding:13px 16px;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;gap:6px;align-items:center;}
+  .drawer details > summary::-webkit-details-marker{display:none;}
+  .drawer details > summary::before{content:"›";display:inline-block;width:12px;color:var(--text3);font-size:16px;transition:transform .15s;}
+  .drawer details[open] > summary::before{transform:rotate(90deg);}
+  .drawer .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:10px;}
+  .drawer .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .drawer .grid > div[style*="grid-column"]{grid-column:1/-1;}
+  .drawer #providers{grid-template-columns:1fr;}
+  .drawer ul{margin:0 0 0 18px;font-size:12.5px;color:var(--text2);display:flex;flex-direction:column;gap:4px;}
+
+  /* Fenêtre de message */
+  #modal{position:fixed;inset:0;background:rgba(16,24,40,.45);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;z-index:50;overflow:auto;}
+  .mbox{background:var(--surface);border-radius:16px;padding:20px;width:100%;max-width:720px;box-shadow:var(--shadow-lg);}
+  .mbox textarea{font-size:13px;line-height:1.5;}
+  .mbox .tabs{display:inline-flex;}
+
+  @media (max-width:1280px){ .layout.with-drawer{grid-template-columns:260px minmax(0,1fr);} .layout.with-drawer .drawer{position:fixed;top:64px;right:12px;bottom:12px;width:min(400px,calc(100vw - 24px));max-height:none;z-index:40;} }
+  @media (max-width:1100px){ .panel{grid-template-columns:1fr 1fr;} .panel section:last-child{grid-column:1/-1;} }
+  @media (max-width:900px){
+    .top{flex-wrap:wrap;gap:10px;padding:10px 16px;} .tabs{order:3;width:100%;}
+    .layout,.layout.with-drawer{grid-template-columns:minmax(0,1fr);padding:12px 16px;}
+    .filters{position:static;max-height:none;}
+    .filters > details > summary{cursor:pointer;}
+    .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .panel{grid-template-columns:1fr;}
+    .search{max-width:none;}
+    table.leads th.c-follow,table.leads td.c-follow{position:static;box-shadow:none;width:170px;min-width:170px;}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>LEADS EXPERT-COMPTABLE</h1>
-  <p>Nouvelles sociétés et sociétés en changement, détectées dans les annonces légales (BODACC) et l'annuaire officiel des entreprises.</p>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">L</span><div><b>Leads</b><span>Expert-comptable</span></div></div>
+  <nav class="tabs" id="tabs" aria-label="Sources de leads">
+    <button class="tab on" data-tab="new">Nouvelles sociétés</button>
+    <button class="tab" data-tab="change">Sociétés en changement</button>
+    <button class="tab" data-tab="jobs">Recrutent un comptable</button>
+    <button class="tab" data-tab="followed">Mon suivi</button>
+  </nav>
+  <div class="top-right">
+    <span class="chip" id="teamChip" hidden></span>
+    <button class="btn ghost" id="settingsBtn" aria-expanded="false" aria-controls="drawer">Réglages</button>
+  </div>
 </header>
-<main>
-  <div class="card">
-    <div class="grid">
-      <div>
+
+<div class="layout" id="layout">
+  <aside class="filters" aria-label="Filtres">
+    <details open id="filtersBox">
+      <summary>Filtres</summary>
+      <div class="fgroup">
         <label class="f" for="deps">Départements</label>
         <input type="text" id="deps" value="75, 92, 93, 94">
-        <div class="hint">Séparés par des virgules (ex. 75, 92, 69).</div>
-      </div>
-      <div>
-        <label class="f" for="days">Période</label>
+        <label class="f" for="zones" style="margin-top:12px">Codes postaux ou villes</label>
+        <input type="text" id="zones" placeholder="75011, 75012, Montreuil…">
+        <div class="hint">Un début de code postal suffit (750 = Paris).</div>
+        <label class="f" for="days" style="margin-top:12px">Période</label>
         <select id="days">
           <option value="7">7 derniers jours</option>
           <option value="14" selected>14 derniers jours</option>
@@ -119,144 +250,136 @@
           <option value="90">90 derniers jours</option>
         </select>
       </div>
-      <div>
-        <label class="f" for="target">Activités recherchées (bonus de score)</label>
-        <input type="text" id="target" placeholder="conseil, restaurant, informatique, BTP…">
-        <div class="hint">Mots-clés cherchés dans l'activité déclarée.</div>
+      <div class="fgroup">
+        <label class="f">Formes juridiques <span class="grow"></span><button type="button" class="linkbtn" id="formesAll">toutes</button><span class="sub">·</span><button type="button" class="linkbtn" id="formesNone">aucune</button></label>
+        <div class="chips" id="formes"></div>
       </div>
-      <div>
-        <label class="f" for="exclude">Mots-clés à exclure</label>
+      <div class="fgroup">
+        <label class="f">Capital social (€)</label>
+        <div class="row2"><input type="number" id="capMin" min="0" step="any" placeholder="min." aria-label="Capital minimum"><span class="sub">à</span><input type="number" id="capMax" min="0" step="any" placeholder="max." aria-label="Capital maximum"></div>
+        <div class="checks" style="margin-top:8px"><label><input type="checkbox" id="capUnknown" checked> Garder les capitaux non renseignés</label></div>
+      </div>
+      <div class="fgroup">
+        <label class="f" for="target">Activités recherchées</label>
+        <input type="text" id="target" placeholder="conseil, restaurant, BTP…">
+        <div class="hint">+20 points au score si l'activité correspond.</div>
+        <label class="f" for="exclude" style="margin-top:12px">Mots-clés à exclure</label>
         <input type="text" id="exclude" placeholder="holding, location meublée…">
       </div>
-      <div>
-        <label class="f">Capital social (€)</label>
-        <div class="bar" style="flex-wrap:nowrap"><input type="number" id="capMin" min="0" step="any" placeholder="min." aria-label="Capital minimum"><span class="sub">à</span><input type="number" id="capMax" min="0" step="any" placeholder="max." aria-label="Capital maximum"></div>
-        <div class="checks"><label><input type="checkbox" id="capUnknown" checked> Garder les capitaux non renseignés</label></div>
-        <div class="hint">Ex. max. 10 000 € pour viser les petites structures.</div>
+      <div class="fgroup">
+        <label class="f" for="clients">Mes clients (SIREN exclus)</label>
+        <textarea id="clients" rows="2" placeholder="Colle des SIREN ou importe le portefeuille"></textarea>
+        <div class="hint"><span id="clientsCount">0 client</span> · <a href="#" id="clientsImport">Importer un fichier CSV</a><input type="file" id="clientsFile" accept=".csv,.txt" hidden></div>
       </div>
-      <div>
-        <label class="f" for="zones">Codes postaux ou villes</label>
-        <input type="text" id="zones" placeholder="75011, 75012, Montreuil…">
-        <div class="hint">Affine la zone à l'intérieur des départements. Un début de code postal suffit (750 = Paris).</div>
-      </div>
-      <div style="grid-column:1/-1">
-        <label class="f">Formes juridiques <a href="#" id="formesAll" class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">tout cocher</a> · <a href="#" id="formesNone" class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">tout décocher</a></label>
-        <div class="checks" id="formes"></div>
-      </div>
-      <div>
-        <label class="f">Options</label>
+      <div class="fgroup">
         <div class="checks">
           <label><input type="checkbox" id="onlyNew"> Nouveaux leads uniquement</label>
-          <label><input type="checkbox" id="auto"> À l'ouverture : rechercher et compléter avec l'annuaire</label>
+          <label><input type="checkbox" id="auto"> Rechercher et compléter à l'ouverture</label>
         </div>
       </div>
-      <div>
-        <label class="f" for="clients">Mes clients (SIREN à exclure)</label>
-        <textarea id="clients" rows="2" placeholder="Colle des SIREN, ou importe l'export du portefeuille"></textarea>
-        <div class="hint"><span id="clientsCount">0 client</span> · <a href="#" id="clientsImport">Importer un fichier (CSV, Excel enregistré en CSV)</a><input type="file" id="clientsFile" accept=".csv,.txt" hidden></div>
-      </div>
-    </div>
-    <div class="bar" style="margin-top:10px">
-      <span class="grow"></span>
-      <button class="btn sec" id="backup" style="font-size:12px;padding:5px 10px">Sauvegarder mon suivi</button>
-      <button class="btn sec" id="restore" style="font-size:12px;padding:5px 10px">Restaurer une sauvegarde</button><input type="file" id="restoreFile" accept=".json" hidden>
-    </div>
-  </div>
+    </details>
+  </aside>
 
-  <div class="card">
+  <main class="main">
+    <section class="card toolbar">
+      <div class="bar">
+        <button class="btn" id="run">Rechercher</button>
+        <button class="btn sec" id="enrich" disabled title="Dirigeants, activité, effectif, date de création">Compléter avec l'annuaire</button>
+        <span class="grow"></span>
+        <div class="search"><input type="text" id="filter" placeholder="Filtrer les résultats…" aria-label="Filtrer les résultats"></div>
+        <select id="statusFilter" aria-label="Filtrer par statut">
+          <option value="">Tous les statuts</option>
+          <option value="open">À traiter</option>
+          <option value="hide">Masquer « Pas intéressé »</option>
+          <option value="new">Nouveaux uniquement</option>
+          <option value="relance">Relances à faire</option>
+        </select>
+        <button class="btn ghost" id="expandAll" aria-pressed="false">Tout déplier</button>
+        <button class="btn sec" id="csv" disabled>Exporter</button>
+      </div>
+      <div class="statusline"><span id="status">Choisis tes critères puis clique sur « Rechercher ».</span></div>
+    </section>
+
+    <section class="card pad" id="signalsBox" hidden>
+      <label class="f">Événements à surveiller</label>
+      <div class="chips" id="signals"></div>
+      <div class="hint">Les moments où une société existante choisit ou change d'expert-comptable.</div>
+    </section>
+
+    <section class="kpis" id="statsBox" hidden><div id="stats" style="display:contents"></div></section>
+
+    <section class="card"><div class="tablewrap"><div id="results"><div class="empty"><b>Aucun résultat pour l'instant</b>Choisis tes filtres à gauche, puis clique sur « Rechercher ».</div></div></div></section>
+  </main>
+
+  <aside class="drawer" id="drawer" hidden aria-label="Réglages">
+    <div class="drawer-head"><b>Réglages</b><button class="btn ghost sm" id="drawerClose">Fermer</button></div>
+
     <details id="contactBox">
       <summary>Recherche d'e-mails et de téléphones <span class="sub" id="contactState"></span></summary>
-      <p class="hint" style="margin-top:8px">Les fournisseurs sont interrogés dans cet ordre, jusqu'à trouver l'e-mail du dirigeant. Seuls ceux dont la clé est renseignée sont utilisés. Les clés restent dans ce navigateur.</p>
-      <div class="grid" id="providers" style="margin-top:10px"></div>
-      <div class="bar" style="margin-top:12px">
-        <button class="btn sec" id="keysSave">Enregistrer et tester les clés</button>
-        <button class="btn sec" id="findAll">Chercher les e-mails des leads affichés</button>
-        <button class="btn sec" id="socialAll">Chercher sites et réseaux des leads affichés</button>
-        <button class="btn sec" id="peopleCsv">Export prénom / nom / société (CSV)</button>
+      <div class="body">
+        <p class="hint" style="margin:0">Les fournisseurs sont interrogés dans cet ordre, jusqu'à trouver l'e-mail du dirigeant. Seuls ceux dont la clé est renseignée sont utilisés. Les clés restent dans ce navigateur.</p>
+        <div class="grid" id="providers"></div>
+        <div class="bar">
+          <button class="btn sm" id="keysSave">Enregistrer et tester</button>
+          <button class="btn sec sm" id="findAll">E-mails des leads affichés</button>
+          <button class="btn sec sm" id="socialAll">Sites et réseaux des leads affichés</button>
+          <button class="btn sec sm" id="peopleCsv">Export dirigeants (CSV)</button>
+        </div>
+        <ul>
+          <li>Clique d'abord sur « Compléter avec l'annuaire » : il faut le nom du dirigeant.</li>
+          <li>Le <b>site web</b> de la société est ce qui augmente le plus les chances de trouver l'adresse.</li>
+          <li>Un fournisseur qui n'a rien trouvé n'est pas réinterrogé, sauf si le site change.</li>
+          <li>Version en ligne : le site de la société est analysé d'abord (gratuit). Avec une clé Serper, « Site et réseaux » trouve aussi le site et les pages sociales.</li>
+          <li id="proxyHint"></li>
+        </ul>
       </div>
-      <ul class="hint" style="margin:10px 0 0 18px">
-        <li>Clique d'abord sur « Compléter avec l'annuaire » : il faut le nom du dirigeant.</li>
-        <li>Colle le <b>site web</b> de la société dans le suivi (lien « Chercher le site ») : c'est ce qui augmente le plus les chances de trouver l'adresse.</li>
-        <li>Un fournisseur qui n'a rien trouvé n'est pas réinterrogé, sauf si tu ajoutes ou changes le site web.</li>
-        <li>Version en ligne : le site de la société est analysé d'abord (gratuit). L'e-mail, le téléphone et les liens Instagram, Facebook, LinkedIn qu'il publie sont repris. Avec une clé Serper, « Site et réseaux » trouve aussi le site et les pages sociales des sociétés à partir de leur nom.</li>
-        <li id="proxyHint"></li>
-      </ul>
     </details>
-  </div>
 
-  <div class="card">
     <details id="teamBox">
       <summary>Équipe : suivi partagé <span class="sub" id="teamState"></span></summary>
-      <p class="hint" style="margin-top:8px">Sur la version en ligne, le suivi (statuts, contacts, notes, relances), la liste des clients et les messages sont partagés entre les membres de l'équipe. Chaque modification indique qui l'a faite.</p>
-      <div class="grid" style="margin-top:10px">
-        <div><label class="f" for="teamUser">Ton prénom</label><input type="text" id="teamUser" autocomplete="name"></div>
-        <div><label class="f" for="teamKey">Mot de passe de l'équipe</label><input type="password" id="teamKey" autocomplete="current-password"></div>
-        <div><label class="f">&nbsp;</label><div class="bar"><button class="btn sec" id="teamLogin">Se connecter</button><button class="btn sec" id="teamLogout" hidden>Se déconnecter</button></div></div>
+      <div class="body">
+        <p class="hint" style="margin:0">Sur la version en ligne, le suivi, la liste des clients et les messages sont partagés entre les membres de l'équipe.</p>
+        <div class="grid">
+          <div><label class="f" for="teamUser">Ton prénom</label><input type="text" id="teamUser" autocomplete="name"></div>
+          <div><label class="f" for="teamKey">Mot de passe de l'équipe</label><input type="password" id="teamKey" autocomplete="current-password"></div>
+        </div>
+        <div class="bar"><button class="btn sm" id="teamLogin">Se connecter</button><button class="btn sec sm" id="teamLogout" hidden>Se déconnecter</button></div>
       </div>
     </details>
-  </div>
 
-  <div class="card">
     <details id="msgBox">
-      <summary>Mes messages et relances</summary>
-      <p class="hint" style="margin-top:8px">Le bouton « Message » de chaque lead prépare un e-mail, un courrier, une invitation LinkedIn ou une relance à partir de ces modèles. Variables : {salutation}, {prenom}, {nom}, {societe}, {ville}, {accroche} et {proposition} (adaptées à l'événement), {cabinet}, {signataire}, {fonction}, {telephone_cabinet}, {email_cabinet}, {date}, {date_contact}.</p>
-      <div class="grid" id="cabFields" style="margin-top:10px"></div>
-      <div class="grid" id="tplFields" style="margin-top:12px"></div>
-      <div class="bar" style="margin-top:10px"><span class="grow"></span><button class="btn sec" id="tplReset">Rétablir les modèles par défaut</button></div>
+      <summary>Messages et relances</summary>
+      <div class="body">
+        <p class="hint" style="margin:0">Modèles utilisés par le bouton « Message ». Variables : {salutation}, {prenom}, {nom}, {societe}, {ville}, {accroche}, {proposition}, {cabinet}, {signataire}, {fonction}, {telephone_cabinet}, {email_cabinet}, {date}, {date_contact}.</p>
+        <div class="grid" id="cabFields"></div>
+        <div class="grid" id="tplFields"></div>
+        <div class="bar"><span class="grow"></span><button class="btn sec sm" id="tplReset">Rétablir les modèles</button></div>
+      </div>
     </details>
-  </div>
 
-  <div class="tabs" id="tabs">
-    <button class="tab on" data-tab="new">Nouvelles sociétés</button>
-    <button class="tab" data-tab="change">Sociétés en changement</button>
-    <button class="tab" data-tab="jobs">Recrutent un comptable</button>
-    <button class="tab" data-tab="followed">Mon suivi</button>
-  </div>
-
-  <div class="card" id="signalsBox" hidden>
-    <label class="f">Événements à surveiller</label>
-    <div class="checks" id="signals"></div>
-    <div class="hint">Ce sont les moments où une société existante choisit ou change d'expert-comptable.</div>
-  </div>
-
-  <div class="card">
-    <div class="bar">
-      <button class="btn" id="run">Rechercher</button>
-      <button class="btn sec" id="enrich" disabled>Compléter avec l'annuaire (dirigeants, effectif)</button>
-      <span class="grow"></span>
-      <input type="text" id="filter" placeholder="Filtrer les résultats…" style="max-width:220px">
-      <select id="statusFilter" style="width:auto">
-        <option value="">Tous les statuts</option>
-        <option value="open">À traiter</option>
-        <option value="hide">Masquer « Pas intéressé »</option>
-        <option value="new">Nouveaux uniquement</option>
-        <option value="relance">Relances à faire</option>
-      </select>
-      <button class="btn sec" id="csv" disabled>Exporter CSV</button>
-    </div>
-    <div class="bar" style="margin-top:10px"><span id="status">Choisis tes critères puis clique sur « Rechercher ».</span></div>
-  </div>
-
-  <div class="card" id="statsBox" hidden><div class="stats" id="stats"></div></div>
-
-  <div class="card tablewrap"><div id="results"><div class="empty">Aucun résultat pour l'instant.</div></div></div>
-
-  <div class="card">
-    <details>
-      <summary>Trouver aussi les sociétés qui cherchent activement un expert-comptable</summary>
-      <ul>
-        <li>Les annonces légales ne disent pas qu'une société cherche un comptable. Elles montrent les moments où elle doit en choisir un : création, rachat, déménagement, nouveau dirigeant, changement de forme.</li>
-        <li><b>Demandes entrantes</b> : fiche Google Business Profile à jour, inscription sur l'annuaire de l'Ordre des experts-comptables, formulaire de demande de devis sur le site du cabinet.</li>
-        <li><b>Prescripteurs</b> : banques (conseillers professionnels), avocats d'affaires, notaires, CCI et chambres de métiers (ateliers création), incubateurs, réseaux Initiative France et Réseau Entreprendre.</li>
-        <li><b>Offres d'emploi</b> : une petite société qui recrute un comptable ou un aide-comptable peut préférer externaliser. C'est l'onglet « Recrutent un comptable » (offres France Travail, version en ligne).</li>
-        <li><b>LinkedIn, Instagram, Facebook</b> : utiles pour joindre le dirigeant, mais leur collecte automatique est interdite par ces plateformes. Utilise les liens de chaque lead, et les alertes de LinkedIn Sales Navigator pour les nouveaux dirigeants.</li>
-        <li><b>Plateformes de mise en relation</b> : des comparateurs et places de marché revendent des demandes de devis d'entrepreneurs. Elles sont payantes, à tester sur un ou deux mois avant de s'engager.</li>
-        <li><b>Coordonnées</b> : le BODACC et l’annuaire ne publient ni e-mail ni téléphone. Les liens Google Maps, PagesJaunes et « Chercher le site » de chaque lead aident à les retrouver ; saisis-les dans la colonne Suivi, ils sont repris dans l’export CSV. Pour les nouvelles sociétés, le courrier au siège reste le plus fiable.</li>
-        <li><b>Rythme conseillé</b> : lancer la recherche chaque lundi sur 7 jours, contacter les leads à score ≥ 60 dans la semaine (courrier ou LinkedIn au dirigeant), relancer à J+15.</li>
-      </ul>
+    <details id="backupBox">
+      <summary>Sauvegarde du suivi</summary>
+      <div class="body">
+        <p class="hint" style="margin:0">Le fichier contient le suivi, les clients et les filtres, sans les clés API.</p>
+        <div class="bar"><button class="btn sec sm" id="backup">Sauvegarder mon suivi</button><button class="btn sec sm" id="restore">Restaurer une sauvegarde</button><input type="file" id="restoreFile" accept=".json" hidden></div>
+      </div>
     </details>
-  </div>
-</main>
+
+    <details id="helpBox">
+      <summary>Trouver d'autres prospects</summary>
+      <div class="body">
+        <ul>
+          <li>Les annonces légales montrent les moments où une société doit choisir un comptable : création, rachat, déménagement, nouveau dirigeant, changement de forme.</li>
+          <li><b>Demandes entrantes</b> : fiche Google à jour, annuaire de l'Ordre des experts-comptables, formulaire de devis sur le site du cabinet.</li>
+          <li><b>Prescripteurs</b> : banques, avocats, notaires, CCI et chambres de métiers, incubateurs, Initiative France, Réseau Entreprendre.</li>
+          <li><b>Offres d'emploi</b> : onglet « Recrutent un comptable » (France Travail, version en ligne).</li>
+          <li><b>LinkedIn, Instagram, Facebook</b> : utiles pour joindre le dirigeant, mais leur collecte automatique est interdite. Utilise les liens de chaque lead et les alertes de Sales Navigator.</li>
+          <li><b>Rythme conseillé</b> : recherche chaque lundi sur 7 jours, contact des leads à 60 ou plus dans la semaine, relance à J+15.</li>
+        </ul>
+      </div>
+    </details>
+  </aside>
+</div>
 <div id="modal" hidden></div>
 
 <script>
@@ -651,40 +774,62 @@ function render() {
   const list = visible(), box = $('results');
   $('statsBox').hidden = !list.length;
   if (list.length) {
-    const hi = list.filter(l => l.score >= 60).length, nw = list.filter(l => l.isNew).length, cnt = {};
+    const hi = list.filter(l => l.score >= 60).length, nw = list.filter(l => l.isNew).length, due = list.filter(l => relanceDue(follow[l.id] || {})).length, cnt = {};
     list.forEach(l => { cnt[l.signal] = (cnt[l.signal] || 0) + 1; });
-    $('stats').innerHTML = `<span><b>${list.length}</b> lead(s)</span><span><b>${hi}</b> prioritaire(s) (score ≥ 60)</span>${tab !== 'followed' ? `<span><b>${nw}</b> nouveau(x)</span>` : ''}` +
-      Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('');
+    const kpi = (cls, n, t) => `<div class="kpi ${cls}"><b>${n}</b><span>${t}</span></div>`;
+    $('stats').innerHTML = kpi('', list.length, 'lead(s) affiché(s)') + kpi('k-hi', hi, 'prioritaire(s), score ≥ 60') + (tab !== 'followed' ? kpi('k-new', nw, 'nouveau(x) depuis la dernière recherche') : kpi('', list.filter(l => follow[l.id]?.status === 'Gagné').length, 'gagné(s)')) + kpi('k-due', due, 'relance(s) à faire') +
+      `<div class="breakdown">${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('')}</div>`;
   }
-  if (!list.length) { box.innerHTML = `<div class="empty">${tab === 'followed' ? 'Aucun lead suivi : choisis un statut ou saisis un contact sur un lead pour le retrouver ici.' : 'Aucun résultat pour l\'instant.'}</div>`; return; }
-  const th = (k, t) => `<th data-sort="${k}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
-  box.innerHTML = `<table><thead><tr>${th('score', 'Score')}${th('date', 'Publié')}${th('nom', 'Société')}${th('signal', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeants</th><th>Liens</th><th class="c-follow">Suivi</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+  if (!list.length) {
+    box.innerHTML = tab === 'followed' ? '<div class="empty"><b>Aucun lead suivi</b>Choisis un statut ou saisis un contact sur un lead pour le retrouver ici.</div>'
+      : '<div class="empty"><b>Aucun résultat pour l\'instant</b>Choisis tes filtres à gauche, puis clique sur « Rechercher ».</div>';
+    return;
+  }
+  const th = (k, t, cls = '') => `<th data-sort="${k}" class="${cls}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
+  box.innerHTML = `<table class="leads"><thead><tr>${th('score', 'Score')}${th('nom', 'Société')}${th('date', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeant</th><th class="c-follow">Suivi</th></tr></thead>${list.map(row).join('')}</table>`;
 }
+const TAG_CLASS = [[/Reprise|Rachat/, 't-reprise'], [/Transfert/, 't-move'], [/dirigeant|forme|capital|activité/, 't-dir'], [/Recrute/, 't-job'], [/établissement/, 't-etab']];
+let openRows = new Set(), expandAll = store.get('expandAll', false);
 function row(l) {
-  const f = follow[l.id] || {}, cls = l.score >= 60 ? 's-hi' : l.score >= 40 ? 's-mid' : 's-lo';
+  const f = follow[l.id] || {}, cls = l.score >= 60 ? 's-hi' : l.score >= 40 ? 's-mid' : 's-lo', id = esc(l.id);
   const dir = l.dirigeantsAnnuaire || l.dirigeants;
   const q = encodeURIComponent(((dir || '').split(/[;,]/)[0].replace(/^[^:]*:\s*/, '') + ' ' + l.nom).trim());
   const lieu = l.adresse || [l.cp, l.ville].filter(Boolean).join(' '), nom = encodeURIComponent(l.nom);
-  return `<tr class="${f.status === 'Pas intéressé' || f.status === 'Gagné' ? 'done' : ''}">
-    <td><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
-    <td>${datefr(l.date)}</td>
-    <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}${relanceDue(f) ? '<span class="due">RELANCE</span>' : ''}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
-    <td><span class="tag">${esc(l.signal)}</span>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
-    <td class="c-act"><div class="detail clamp" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
-    <td>${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
-    <td class="c-dir"><div class="detail clamp" title="Cliquer pour tout lire">${esc(dir || '')}</div>${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
-    <td class="links">${socialLinks(f)}${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">${l.kind === 'job' ? 'Offre' : 'Annonce'}</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a><a href="https://www.linkedin.com/sales/search/people?keywords=${q}" target="_blank" rel="noopener">Sales Navigator</a>
-      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + (l.ville || '') + ' (site:instagram.com OR site:facebook.com)')}" target="_blank" rel="noopener">Instagram / Facebook</a></td>
-    <td class="c-follow"><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
-      <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
-      <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
-      <input type="text" data-id="${esc(l.id)}" data-k="site" class="ct" placeholder="Site web" value="${esc(f.site || '')}">
-      ${contactCell(l, f)}
-      <label class="sub" style="display:block;margin-top:4px">Relance <input type="date" data-id="${esc(l.id)}" data-k="relance" class="ct" value="${esc(f.relance || '')}"></label>
-      <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea>
-      <button class="btn msg" data-id="${esc(l.id)}" style="margin-top:4px;padding:4px 10px;font-size:12px;width:100%">${relanceDue(f) ? 'Relancer' : 'Message'}</button>
-      ${f.by ? `<div class="sub">Par ${esc(f.by)} · ${datefr(f.updated)}</div>` : ''}</td>
-  </tr>`;
+  const tag = (TAG_CLASS.find(([re]) => re.test(l.signal)) || [])[1] || '';
+  const open = expandAll || openRows.has(l.id), done = f.status === 'Pas intéressé' || f.status === 'Gagné';
+  const nbSoc = Object.keys(f.socials || {}).length;
+  const link = (href, t) => `<a href="${esc(href)}" target="_blank" rel="noopener">${t}</a>`;
+  return `<tbody class="lead${open ? ' open' : ''}${done ? ' done' : ''}" data-id="${id}">
+  <tr class="main">
+    <td class="c-score"><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
+    <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}${relanceDue(f) ? '<span class="due">RELANCE</span>' : ''}</div>
+      <div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div>
+      ${f.email || f.phone || nbSoc ? `<div class="meta">${f.email ? '<span class="ok">✉ e-mail</span>' : ''}${f.phone ? '<span class="ok">☎ téléphone</span>' : ''}${nbSoc ? `<span class="ok">● ${nbSoc} réseau${nbSoc > 1 ? 'x' : ''}</span>` : ''}</div>` : ''}</td>
+    <td class="c-evt"><span class="tag ${tag}">${esc(l.signal)}</span><div class="sub" style="margin-top:4px">Publié le ${datefr(l.date)}</div>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
+    <td class="c-act"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
+    <td class="c-lieu">${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
+    <td class="c-dir"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(dir || '')}</div>${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
+    <td class="c-follow"><select data-id="${id}" class="st" data-s="${esc(f.status || '')}" aria-label="Statut">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || 'Statut…'}</option>`).join('')}</select>
+      <div class="actions"><button class="btn sm msg" data-id="${id}">${relanceDue(f) ? 'Relancer' : 'Message'}</button><button class="toggle" data-id="${id}" aria-expanded="${open}" title="Coordonnées, liens et notes">▾</button></div></td>
+  </tr>
+  <tr class="detail"><td colspan="7"><div class="panel">
+    <section><h4>Coordonnées</h4>
+      <div class="field-row"><input type="email" data-id="${id}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}</div>
+      <div class="field-row"><input type="tel" data-id="${id}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}</div>
+      <div class="field-row"><input type="text" data-id="${id}" data-k="site" class="ct" placeholder="Site web" value="${esc(f.site || '')}">${f.site ? link(/^https?:/i.test(f.site) ? f.site : 'https://' + f.site, 'Ouvrir') : ''}</div>
+      <div class="bar">${contactCell(l, f)}</div>
+    </section>
+    <section><h4>Suivi</h4>
+      <label class="sub">Relance prévue le <input type="date" data-id="${id}" data-k="relance" class="ct" value="${esc(f.relance || '')}"></label>
+      <textarea data-id="${id}" class="nt" rows="3" placeholder="Note…">${esc(f.note || '')}</textarea>
+      ${(f.contacts || []).length ? `<div class="history">${f.contacts.map(x => `<span>${esc(x.canal)} le ${datefr(x.date)}${x.by ? ' · ' + esc(x.by) : ''}</span>`).join('')}</div>` : ''}
+      ${f.by ? `<div class="sub">Modifié par ${esc(f.by)} le ${datefr(f.updated)}</div>` : ''}
+    </section>
+    <section><h4>Liens</h4>
+      <div class="links">${socialLinks(f)}${l.url ? link(l.url, l.kind === 'job' ? 'Offre' : 'Annonce') : ''}${l.siren ? link('https://annuaire-entreprises.data.gouv.fr/entreprise/' + l.siren, 'Annuaire') + link('https://www.pappers.fr/entreprise/' + l.siren, 'Pappers') : ''}${link('https://www.linkedin.com/search/results/all/?keywords=' + q, 'LinkedIn')}${link('https://www.linkedin.com/sales/search/people?keywords=' + q, 'Sales Navigator')}${link('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.nom + ' ' + lieu), 'Google Maps')}${link('https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=' + nom + '&ou=' + encodeURIComponent(l.ville || l.cp), 'PagesJaunes')}${link('https://www.google.com/search?q=' + encodeURIComponent('"' + l.nom + '" ' + l.ville), 'Chercher le site')}${link('https://www.google.com/search?q=' + encodeURIComponent('"' + l.nom + '" ' + (l.ville || '') + ' (site:instagram.com OR site:facebook.com)'), 'Instagram / Facebook')}</div>
+    </section>
+  </div></td></tr>
+</tbody>`;
 }
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
 
@@ -800,13 +945,13 @@ async function saveKeys() {
 function pending(l, f) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && !p.socialOnly && !(p.contactOnly && f.site) && (f.tried || {})[p.id] !== dom && (p.contactOnly ? !(f.tried || {})[p.id] : true)); }
 function contactCell(l, f) {
   const found = f.found ? `<div class="sub">${f.found.email ? 'E-mail' : 'Téléphone'} : ${esc(f.found.by)}${f.found.score != null ? ' · fiabilité ' + esc(f.found.score) + ' %' : ''}</div>` : '';
-  const socBtn = (keys.serper && !f.socialSearched) || canAnalyze(f) ? `<button class="btn sec sf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px">Site et réseaux</button>` : '';
+  const socBtn = (keys.serper && !f.socialSearched) || canAnalyze(f) ? `<button class="btn sec sm sf" data-id="${esc(l.id)}">Site et réseaux</button>` : '';
   if ((!hasKeys() && !canAnalyze(f)) || f.email) return found + socBtn;
   const p = personOf(l);
   if (!p) return found + socBtn + `<div class="sub" title="Clique sur « Compléter avec l'annuaire »">Dirigeant non identifié</div>`;
   const left = pending(l, f);
   if (!left.length && !canAnalyze(f)) return found + socBtn + `<div class="sub">Aucune adresse trouvée${f.site ? '' : ' : ajoute le site web et relance'}</div>`;
-  return found + socBtn + `<button class="btn sec hf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px" title="${esc(p.prenom + ' ' + p.nom + ' — ' + left.map(x => x.name).join(', '))}">Trouver l'e-mail</button>`;
+  return found + socBtn + `<button class="btn sm hf" data-id="${esc(l.id)}" title="${esc(p.prenom + ' ' + p.nom + ' — ' + left.map(x => x.name).join(', '))}">Trouver l'e-mail</button>`;
 }
 async function findContact(id, quiet) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead, p = l && personOf(l); if (!p) return false;
@@ -1027,7 +1172,10 @@ async function teamFetch(body) {
   if (!r.ok) throw Object.assign(new Error(j.error || 'erreur ' + r.status), { status: r.status });
   return j;
 }
-function teamState(t, err) { $('teamState').textContent = t ? '· ' + t : ''; $('teamState').style.color = err ? 'var(--red)' : ''; }
+function teamState(t, err) {
+  $('teamState').textContent = t ? '· ' + t : ''; $('teamState').style.color = err ? 'var(--red)' : '';
+  const chip = $('teamChip'); chip.hidden = !t; chip.textContent = teamOn && team ? 'Équipe · ' + team.user : 'Équipe : ' + t; chip.classList.toggle('on', Boolean(teamOn));
+}
 /* Le serveur fait foi ; les modifications pas encore envoyées sont réappliquées par-dessus. */
 function adoptServer(server) {
   follow = server || {};
@@ -1167,7 +1315,7 @@ async function socialAll() {
   } finally { contactBusy = false; render(); }
 }
 function socialLinks(f) {
-  return Object.entries(f.socials || {}).map(([k, v]) => `<a href="${esc(v)}" target="_blank" rel="noopener"><b>${esc(SOCIAL_LABELS[k] || k)} ✓</b></a>`).join('');
+  return Object.entries(f.socials || {}).map(([k, v]) => `<a class="found" href="${esc(v)}" target="_blank" rel="noopener">${esc(SOCIAL_LABELS[k] || k)} ✓</a>`).join('');
 }
 
 /* ---------- export ---------- */
@@ -1243,7 +1391,23 @@ $('keysSave').addEventListener('click', saveKeys);
 $('findAll').addEventListener('click', findAll);
 $('socialAll').addEventListener('click', socialAll);
 $('peopleCsv').addEventListener('click', peopleCsv);
+/* ---------- panneau des réglages, détail des leads ---------- */
+function openSettings(open = true) {
+  $('drawer').hidden = !open; $('layout').classList.toggle('with-drawer', open); $('settingsBtn').setAttribute('aria-expanded', open);
+}
+$('settingsBtn').addEventListener('click', () => openSettings($('drawer').hidden));
+$('drawerClose').addEventListener('click', () => openSettings(false));
+function setExpandAll(on) {
+  expandAll = on; store.set('expandAll', on); if (!on) openRows.clear();
+  $('expandAll').textContent = on ? 'Tout replier' : 'Tout déplier'; $('expandAll').setAttribute('aria-pressed', on); render();
+}
+$('expandAll').addEventListener('click', () => setExpandAll(!expandAll));
+$('expandAll').textContent = expandAll ? 'Tout replier' : 'Tout déplier';
+if (matchMedia('(max-width:900px)').matches) $('filtersBox').open = false;
+$('filtersBox').querySelector('summary').addEventListener('click', e => { if (!matchMedia('(max-width:900px)').matches) e.preventDefault(); });
 $('results').addEventListener('click', e => {
+  const tg = e.target.closest('button.toggle');
+  if (tg) { const body = tg.closest('tbody.lead'), on = !body.classList.contains('open'); body.classList.toggle('open', on); tg.setAttribute('aria-expanded', on); if (on) openRows.add(tg.dataset.id); else openRows.delete(tg.dataset.id); return; }
   const cl = e.target.closest('.clamp'); if (cl) return cl.classList.toggle('open');
   const h = e.target.closest('button.hf'); if (h) return findOne(h.dataset.id);
   const m = e.target.closest('button.msg'); if (m) return openMessage(m.dataset.id);
@@ -1272,7 +1436,7 @@ $('auto').addEventListener('change', saveCriteria);
 $('onlyNew').addEventListener('change', () => { saveCriteria(); render(); });
 if ($('auto').checked) setTimeout(async () => { await run(); if (leads.length) await enrich(); }, 300);
 $('results').addEventListener('change', e => {
-  if (e.target.classList.contains('st')) { setFollow(e.target.dataset.id, { status: e.target.value }); render(); }
+  if (e.target.classList.contains('st')) { e.target.dataset.s = e.target.value; setFollow(e.target.dataset.id, { status: e.target.value }); render(); }
   if (e.target.classList.contains('nt')) setFollow(e.target.dataset.id, { note: e.target.value });
   if (e.target.classList.contains('ct')) {
     const v = e.target.value.trim();

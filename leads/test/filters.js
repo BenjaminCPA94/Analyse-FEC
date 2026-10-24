@@ -31,6 +31,7 @@ const RECORDS = [
   for (const n of ['GROSSE SARL', 'IMMO SCI', 'DUPONT', 'CABINET MEDICAL']) assert.doesNotMatch(html, new RegExp(n));
 
   const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1400, height: 900 } }), errors = [];
+  await page.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true'));
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/bodacc-datadila.opendatasoft.com/**', rt => rt.fulfill({ json: RECORDS }));
   // Anciens réglages : « sociétés uniquement » décoché et capital minimum → repris dans les nouveaux filtres.
@@ -41,8 +42,8 @@ const RECORDS = [
   assert.deepStrictEqual(await checked(), ['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SNC', 'EI', 'Autre']);
   assert.strictEqual(await page.inputValue('#capMin'), '500');
 
-  await page.click('#run'); await page.waitForSelector('tbody tr');
-  const names = () => page.$$eval('tbody tr', t => t.map(r => r.cells[2].innerText.split('\n')[0].replace(/NOUVEAU|RELANCE/g, '')).sort());
+  await page.click('#run'); await page.waitForSelector('tbody.lead');
+  const names = () => page.$$eval('tbody.lead tr.main', t => t.map(r => r.cells[1].innerText.split('\n')[0].replace(/NOUVEAU|RELANCE/g, '')).sort());
   assert.deepStrictEqual(await names(), ['CABINET MEDICAL', 'DUPONT', 'GROSSE SARL', 'MYSTERE SAS', 'PETITE SAS', 'SOLO SASU', 'UNI EURL']);
 
   // Capital max 10 000 € : la grosse SARL disparaît ; capitaux inconnus gardés puis retirés.
@@ -75,8 +76,22 @@ const RECORDS = [
   assert.strictEqual((await checked()).length, 9);
   // Plus de bonus pour les gros capitaux.
   await page.fill('#zones', ''); await page.press('#zones', 'Tab'); await page.fill('#capMax', ''); await page.press('#capMax', 'Tab');
-  await page.click('#run'); await page.waitForSelector('tbody tr');
-  assert.doesNotMatch(await page.getAttribute('tr:has(select[data-id="100000003"]) .score', 'title'), /capital/);
+  await page.click('#run'); await page.waitForSelector('tbody.lead');
+  assert.doesNotMatch(await page.getAttribute('tbody.lead[data-id="100000003"] .score', 'title'), /capital/);
+
+  // Affichage : détail replié par défaut, dépliage d'une ligne ou de toutes, panneau des réglages.
+  const p3 = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage(); p3.on('pageerror', e => errors.push(e.message));
+  await p3.route('**/bodacc-datadila.opendatasoft.com/**', rt => rt.fulfill({ json: RECORDS }));
+  await p3.goto(base + '/'); await p3.click('#run'); await p3.waitForSelector('tbody.lead');
+  const email = 'input[data-id="100000001"][data-k="email"]';
+  assert.ok(!(await p3.isVisible(email)), 'détail replié');
+  await p3.click('tbody.lead[data-id="100000001"] button.toggle'); assert.ok(await p3.isVisible(email));
+  await p3.click('tbody.lead[data-id="100000001"] button.toggle'); assert.ok(!(await p3.isVisible(email)));
+  await p3.click('#expandAll'); assert.ok(await p3.isVisible(email)); assert.strictEqual(await p3.textContent('#expandAll'), 'Tout replier');
+  await p3.reload(); await p3.click('#run'); await p3.waitForSelector('tbody.lead'); assert.ok(await p3.isVisible(email), 'choix mémorisé');
+  assert.ok(!(await p3.isVisible('#drawer')));
+  await p3.click('#settingsBtn'); assert.ok(await p3.isVisible('#drawer')); assert.strictEqual(await p3.getAttribute('#settingsBtn', 'aria-expanded'), 'true');
+  await p3.click('#drawerClose'); assert.ok(!(await p3.isVisible('#drawer')));
 
   assert.deepStrictEqual(errors, []);
   await browser.close(); server.close();

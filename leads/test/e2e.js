@@ -46,16 +46,17 @@ const RECORDS = [rec('A1', 'ALPHA', 'Président : DUPONT, Marie'), rec('A2', 'DE
   assert.strictEqual(r.status, 403, 'http refusé');
 
   const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1400, height: 900 } }), errors = [];
+  await page.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true'));
   page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', d => d.accept());
   const bodacc = [];
   await page.route('**/bodacc-datadila.opendatasoft.com/**', rt => { const u = rt.request().url(); bodacc.push(decodeURIComponent(u)); rt.fulfill({ json: u.includes('/exports/json') ? RECORDS : { total_count: RECORDS.length, results: RECORDS } }); });
   await page.goto(base + '/');
-  await page.click('#run'); await page.waitForSelector('tbody tr');
+  await page.click('#run'); await page.waitForSelector('tbody.lead');
   assert.match(bodacc[0], /exports\/json\?where=.*limit=-1/, 'export complet, sans pagination');
   assert.strictEqual(bodacc.length, 1);
 
-  await page.click('#contactBox summary');
+  await page.evaluate(() => openSettings()); await page.click('#contactBox summary');
   await page.fill('#key_hunter', 'hk'); await page.fill('#key_apollo', 'ak'); await page.fill('#key_icypeas', 'ik'); await page.fill('#key_dropcontact', 'dk'); await page.fill('#key_lusha', 'lk');
   await page.click('#keysSave'); await page.waitForFunction(() => /crédit/.test(document.getElementById('status').textContent));
   assert.match(await page.textContent('#status'), /48 crédit\(s\) restant\(s\) sur 50/);
@@ -76,7 +77,7 @@ const RECORDS = [rec('A1', 'ALPHA', 'Président : DUPONT, Marie'), rec('A2', 'DE
   assert.strictEqual(await page.inputValue('input[data-id="912345672"][data-k=phone]'), '01 23 45 67 89');
   assert.strictEqual(await page.inputValue('input[data-id="912345673"][data-k=email]'), 'marco@napoli.fr');
   assert.strictEqual(await page.inputValue('input[data-id="912345674"][data-k=phone]'), '+33 6 11 22 33 44');
-  assert.match(await page.textContent('tr:has(button[data-id="912345674"]), tr:has(input[data-id="912345674"])'), /ajoute le site web/);
+  assert.match(await page.textContent('tbody.lead[data-id="912345674"]'), /ajoute le site web/);
 
   // Site web ajouté : les fournisseurs sont réinterrogés avec le domaine.
   await page.fill('input[data-id="912345674"][data-k=site]', 'https://www.zeta-conseil.fr/contact'); await page.press('input[data-id="912345674"][data-k=site]', 'Tab');
@@ -90,7 +91,7 @@ const RECORDS = [rec('A1', 'ALPHA', 'Président : DUPONT, Marie'), rec('A2', 'DE
   assert.ok(calls.some(c => c.host === 'app.icypeas.com' && c.headers.authorization === 'ik'));
   assert.ok(calls.some(c => c.host === 'api.lusha.com' && c.headers.api_key === 'lk'));
   await page.reload(); await page.click('[data-tab=followed]');
-  assert.strictEqual(await page.locator('tbody tr').count(), 4);
+  assert.strictEqual(await page.locator('tbody.lead').count(), 4);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#csv')]);
   const csv = require('node:fs').readFileSync(await dl.path(), 'utf8');
   assert.match(csv, /paul\.martin@devstudio\.fr;Dropcontact/);

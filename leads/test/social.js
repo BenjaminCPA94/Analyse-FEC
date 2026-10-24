@@ -64,22 +64,23 @@ const RECORDS = [rec('111111111', 'ALPHA CONSEIL', 'Président : Martin, Paul'),
   assert.strictEqual(a.pages.length, 2);
 
   const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1400, height: 900 } }), errors = [];
+  await page.addInitScript(() => localStorage.setItem('leadsEC:expandAll', 'true'));
   page.on('pageerror', e => errors.push(e.message)); page.on('dialog', d => d.accept());
   await page.route('**/bodacc-datadila.opendatasoft.com/**', rt => rt.fulfill({ json: RECORDS }));
   await page.goto(base + '/');
-  await page.click('#run'); await page.waitForSelector('tbody tr');
-  assert.ok(await page.$('tr:has(select[data-id="111111111"]) a[href*="linkedin.com/sales/search/people"]'), 'lien Sales Navigator');
+  await page.click('#run'); await page.waitForSelector('tbody.lead');
+  assert.ok(await page.$('tbody.lead[data-id="111111111"] a[href*="linkedin.com/sales/search/people"]'), 'lien Sales Navigator');
 
   // E-mail : le site (gratuit) passe avant Hunter.
   const siteA = `http://127.0.0.1:${sitePort}/`;
-  await page.click('#contactBox summary'); await page.fill('#key_hunter', 'hk'); await page.click('#keysSave');
+  await page.evaluate(() => openSettings()); await page.click('#contactBox summary'); await page.fill('#key_hunter', 'hk'); await page.click('#keysSave');
   await page.fill('input[data-id="111111111"][data-k="site"]', siteA); await page.press('input[data-id="111111111"][data-k="site"]', 'Tab');
   await page.click('button.hf[data-id="111111111"]');
   await page.waitForFunction(() => /trouvé pour ALPHA/.test(document.getElementById('status').textContent));
   assert.strictEqual(await page.inputValue('input[data-id="111111111"][data-k="email"]'), 'paul.martin@alpha-conseil.fr', 'adresse du dirigeant préférée');
   assert.strictEqual(await page.inputValue('input[data-id="111111111"][data-k="phone"]'), '01 40 00 00 00');
   assert.strictEqual(hunterCalls.length, 0, 'Hunter pas sollicité');
-  assert.match(await page.textContent('tr:has(select[data-id="111111111"]) td.links'), /Instagram ✓[\s\S]*Facebook ✓|Facebook ✓[\s\S]*Instagram ✓/);
+  assert.match(await page.textContent('tbody.lead[data-id="111111111"] .links'), /Instagram ✓[\s\S]*Facebook ✓|Facebook ✓[\s\S]*Instagram ✓/);
 
   // Serper : réseaux et site trouvés à partir du nom, puis analyse du site.
   siteUrl = `http://127.0.0.1:${site2Port}`;
@@ -93,7 +94,7 @@ const RECORDS = [rec('111111111', 'ALPHA CONSEIL', 'Président : Martin, Paul'),
   assert.strictEqual(soc.site, siteUrl, 'site trouvé (societe.com écarté)');
   assert.strictEqual(soc.email, 'contact@gamma-bistrot.fr');
   assert.strictEqual(serperQueries.length, 3);
-  assert.match(await page.textContent('tr:has(select[data-id="333333333"]) td.links'), /LinkedIn \(dirigeant\) ✓/);
+  assert.match(await page.textContent('tbody.lead[data-id="333333333"] .links'), /LinkedIn \(dirigeant\) ✓/);
   assert.ok(!(await page.$('button.sf[data-id="333333333"]')), 'pas de seconde recherche payante');
 
   // Export.
