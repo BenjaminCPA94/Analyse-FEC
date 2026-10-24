@@ -10,6 +10,8 @@
  *  LEADS_DEPS          départements (défaut : 75,92,93,94)
  *  LEADS_TARGET        activités recherchées, LEADS_EXCLUDE mots-clés à exclure
  *  LEADS_CLIENTS       SIREN des clients à exclure
+ *  LEADS_FORMES        formes gardées (défaut : SAS,SASU,SARL,EURL,SA,SNC,Autre ; ajouter SCI, EI)
+ *  LEADS_CAPITAL_MIN / LEADS_CAPITAL_MAX   capital social en euros ; LEADS_ZONES codes postaux ou villes
  *  LEADS_MIN_SCORE     score minimum (défaut : 60), LEADS_EMAIL_FROM expéditeur
  * Avec le suivi partagé, les sociétés déjà traitées par l'équipe sont écartées et les relances de la
  * semaine listées ; avec FT_CLIENT_ID / FT_CLIENT_SECRET, les entreprises qui recrutent un comptable.
@@ -27,7 +29,7 @@ function loadCore() {
   const block = html.match(/\/\* CORE:START[\s\S]*?\/\* CORE:END \*\//);
   if (!block) throw new Error('Bloc CORE introuvable dans la page');
   const ctx = vm.createContext({});
-  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme, jobsToLeads };', ctx);
+  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme, jobsToLeads, passesFilters, FORMES_DEFAUT };', ctx);
   return ctx.core;
 }
 
@@ -35,8 +37,10 @@ const list = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function settings(env = process.env) {
+function settings(env = process.env, core) {
   return {
+    formes: env.LEADS_FORMES ? list(env.LEADS_FORMES).map(x => x.toUpperCase() === 'AUTRE' ? 'Autre' : x.toUpperCase()) : core.FORMES_DEFAUT,
+    capMin: Number(env.LEADS_CAPITAL_MIN || 0), capMax: Number(env.LEADS_CAPITAL_MAX || 0), capUnknown: true, zones: list(env.LEADS_ZONES).map(x => x.toLowerCase()),
     deps: list(env.LEADS_DEPS || '75,92,93,94').map(d => d.toUpperCase().replace(/^(\d)$/, '0$1')),
     days: 7, target: list(env.LEADS_TARGET).map(x => x.toLowerCase()), exclude: list(env.LEADS_EXCLUDE).map(x => x.toLowerCase()),
     signals: ['vente', 'transfert', 'dirigeant', 'forme'], clients: new Set(list(env.LEADS_CLIENTS).map(x => x.replace(/\D/g, ''))),
@@ -60,8 +64,7 @@ async function collect(core, c, shared) {
   for (const kind of ['new', 'change']) {
     const q = `where=${encodeURIComponent(core.whereClause(c, kind))}&order_by=${encodeURIComponent('dateparution desc')}&select=${core.BODACC_FIELDS}&limit=-1`;
     const raw = await getJson(`${core.BODACC_DATASET}/exports/json?${q}`);
-    const keep = l => l.isPM && !/\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom) && !(l.siren && c.clients.has(l.siren)) && !treated(l)
-      && !c.exclude.some(w => [l.nom, l.activite, l.naf].join(' ').toLowerCase().includes(w));
+    const keep = l => core.passesFilters(l, c) && !(l.siren && c.clients.has(l.siren)) && !treated(l);
     // Annuaire pour les mieux notés seulement (7 requêtes par seconde au plus), puis nouveau tri.
     const leads = core.toLeads(raw, c, kind).filter(keep).sort((a, b) => b.score - a.score).slice(0, 60);
     for (const l of leads) {
@@ -72,11 +75,11 @@ async function collect(core, c, shared) {
       } catch { /* lead gardé sans complément */ }
       await sleep(150);
     }
-    out[kind] = { total: raw.length, leads: leads.filter(l => keep(l) && l.etat !== 'C' && !l.etablissement && l.score >= c.minScore).sort((a, b) => b.score - a.score).slice(0, 25) };
+    out[kind] = { total: raw.length, leads: leads.filter(l => keep(l) && !l.etablissement && l.score >= c.minScore).sort((a, b) => b.score - a.score).slice(0, 25) };
   }
   if (ft.configured()) {
     const offers = await ft.searchOffers({ deps: c.deps, days: 7 });
-    const jobs = core.jobsToLeads(offers, c).filter(l => !l.anonymous && !treated(l));
+    const jobs = core.jobsToLeads(offers, c).filter(l => !l.anonymous && !treated(l) && core.passesFilters(l, c));
     out.jobs = { total: offers.length, leads: jobs.filter(l => l.score >= c.minScore).sort((a, b) => b.score - a.score).slice(0, 20) };
   }
   // Relances prévues d'ici dimanche.
@@ -111,7 +114,7 @@ module.exports = async function digest(req, res) {
   if (!secret) return send(503, { error: 'CRON_SECRET non configuré' });
   if (req.headers.authorization !== 'Bearer ' + secret && url.searchParams.get('secret') !== secret) return send(401, { error: 'Accès refusé' });
   try {
-    const core = loadCore(), c = settings(), store = createStore();
+    const core = loadCore(), c = settings(process.env, core), store = createStore();
     // Suivi partagé : sociétés déjà traitées, relances, clients ajoutés dans l'outil.
     const shared = store && process.env.LEADS_TEAM_PASSWORD ? { follow: await store.all().catch(() => ({})), settings: await store.settings().catch(() => ({})) } : {};
     for (const sr of shared.settings?.clients || []) c.clients.add(String(sr));

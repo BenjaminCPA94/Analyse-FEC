@@ -70,6 +70,9 @@ Chaque lundi vers 6 h (heure de Paris en hiver), l'outil mis en ligne sur Vercel
 | `LEADS_EXCLUDE` | `holding` (facultatif) |
 | `LEADS_CLIENTS` | SIREN de tes clients, séparés par des virgules (facultatif) |
 | `LEADS_MIN_SCORE` | `60` (facultatif) |
+| `LEADS_FORMES` | `SAS,SASU,EURL` (facultatif ; défaut : SAS, SASU, SARL, EURL, SA, SNC, Autre ; ajouter `SCI`, `EI`) |
+| `LEADS_CAPITAL_MIN` / `LEADS_CAPITAL_MAX` | `0` / `10000` (facultatif, en euros) |
+| `LEADS_ZONES` | `75011,75012,Montreuil` (facultatif : débuts de codes postaux ou villes) |
 | `LEADS_EMAIL_FROM` | `Leads <leads@cabinet.fr>` (facultatif, domaine vérifié chez Resend) |
 
 3. Redéploie. Pour voir l'e-mail sans l'envoyer : `https://<adresse-vercel>/api/digest?secret=<CRON_SECRET>&dry=1`.
@@ -98,4 +101,4 @@ Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà
 
 ## Test
 
-`node test/e2e.js`, `node test/features.js`, `node test/team.js` et `node test/social.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites et réseaux sociaux.
+`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js` et `node test/filters.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).

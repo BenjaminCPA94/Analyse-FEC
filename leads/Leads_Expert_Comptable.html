@@ -129,14 +129,23 @@
         <input type="text" id="exclude" placeholder="holding, location meublée…">
       </div>
       <div>
-        <label class="f" for="minCap">Capital minimum (€)</label>
-        <input type="number" id="minCap" min="0" value="0">
+        <label class="f">Capital social (€)</label>
+        <div class="bar" style="flex-wrap:nowrap"><input type="number" id="capMin" min="0" step="any" placeholder="min." aria-label="Capital minimum"><span class="sub">à</span><input type="number" id="capMax" min="0" step="any" placeholder="max." aria-label="Capital maximum"></div>
+        <div class="checks"><label><input type="checkbox" id="capUnknown" checked> Garder les capitaux non renseignés</label></div>
+        <div class="hint">Ex. max. 10 000 € pour viser les petites structures.</div>
+      </div>
+      <div>
+        <label class="f" for="zones">Codes postaux ou villes</label>
+        <input type="text" id="zones" placeholder="75011, 75012, Montreuil…">
+        <div class="hint">Affine la zone à l'intérieur des départements. Un début de code postal suffit (750 = Paris).</div>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="f">Formes juridiques <a href="#" id="formesAll" class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">tout cocher</a> · <a href="#" id="formesNone" class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">tout décocher</a></label>
+        <div class="checks" id="formes"></div>
       </div>
       <div>
         <label class="f">Options</label>
         <div class="checks">
-          <label><input type="checkbox" id="onlyPM" checked> Sociétés uniquement (pas d'EI)</label>
-          <label><input type="checkbox" id="noSCI"> Exclure les SCI</label>
           <label><input type="checkbox" id="onlyNew"> Nouveaux leads uniquement</label>
           <label><input type="checkbox" id="auto"> À l'ouverture : rechercher et compléter avec l'annuaire</label>
         </div>
@@ -323,7 +332,6 @@ function score(l, c) {
   if (l.kind === 'job') return scoreJob(l, c);
   const why = [[l.signal, l.base]], add = (t, n) => why.push([t, n]);
   if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) add('société', 5);
-  if (l.capital >= 50000) add('capital ≥ 50 000 €', 10); else if (l.capital >= 10000) add('capital ≥ 10 000 €', 5); else if (l.capital != null && l.capital < 1000) add('capital < 1 000 €', -5);
   const act = [l.activite, l.naf, l.nom].filter(Boolean).join(' ').toLowerCase();
   if (c.target.length && c.target.some(w => act.includes(w))) add('activité ciblée', 20);
   // Structures patrimoniales (holding, SCI, location meublée) : honoraires généralement plus faibles.
@@ -377,6 +385,31 @@ function applyAnnuaire(l, x) {
 }
 
 
+/* Filtres de recherche (formes, capital, zone, mots-clés), communs à la page et au résumé hebdomadaire. */
+const FORMES = [['SAS', 'SAS'], ['SASU', 'SASU'], ['SARL', 'SARL'], ['EURL', 'EURL'], ['SA', 'SA'], ['SNC', 'SNC'], ['SCI', 'SCI'], ['EI', 'Entreprise individuelle'], ['Autre', 'Autres (SELARL, SCP, association…)']];
+const FORMES_DEFAUT = ['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SNC', 'Autre'];
+function formeKey(l) {
+  if (l.kind === 'job' && !l.forme) return ''; // offre d'emploi : forme inconnue, pas filtrée
+  if (!l.isPM) return 'EI';
+  if (/exercice lib[ée]ral|\bSEL(ARL|AS|AFA)?\b/i.test(l.forme)) return 'Autre';
+  const f = shortForme(l.forme).toUpperCase();
+  return FORMES.some(([k]) => k === f) ? f : 'Autre';
+}
+function passesFilters(l, c) {
+  const fk = formeKey(l);
+  if (c.formes && fk && !c.formes.includes(fk)) return false;
+  // Entreprise individuelle et offre d'emploi : pas de capital à comparer.
+  if (fk === 'EI' || l.kind === 'job') { /* capital sans objet */ }
+  else if (l.capital == null) { if (c.capUnknown === false) return false; }
+  else if ((c.capMin && l.capital < c.capMin) || (c.capMax && l.capital > c.capMax)) return false;
+  if (c.zones?.length) {
+    const cp = String(l.cp || ''), ville = String(l.ville || '').toLowerCase();
+    if (!c.zones.some(z => /^\d+$/.test(z) ? cp.startsWith(z) : ville.includes(z))) return false;
+  }
+  const txt = [l.nom, l.activite, l.naf, l.forme].filter(Boolean).join(' ').toLowerCase();
+  if (c.exclude?.some(w => txt.includes(w))) return false;
+  return l.etat !== 'C';
+}
 function shortForme(f) {
   const x = String(f || ''), u = /associ[ée] unique|unipersonnelle/i.test(x);
   if (/actions simplifi/i.test(x)) return u ? 'SASU' : 'SAS';
@@ -453,14 +486,21 @@ const datefr = d => d ? d.slice(0, 10).split('-').reverse().join('/') : '';
 const money = n => n == null ? '' : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
 
 /* ---------- critères mémorisés ---------- */
-const FIELDS = ['deps', 'days', 'target', 'exclude', 'minCap', 'onlyPM', 'noSCI', 'onlyNew', 'auto'];
+const FIELDS = ['deps', 'days', 'target', 'exclude', 'capMin', 'capMax', 'capUnknown', 'zones', 'onlyNew', 'auto'];
 function loadCriteria() {
-  const c = store.get('criteria', null); if (!c) return;
-  for (const k of FIELDS) if (k in c) { const el = $(k); if (el.type === 'checkbox') el.checked = c[k]; else el.value = c[k]; }
+  const c = store.get('criteria', null) || {};
+  // Anciennes options : capital minimum, « sociétés uniquement », « exclure les SCI ».
+  if (c.minCap && !('capMin' in c)) c.capMin = c.minCap;
+  let formes = c.formes || FORMES_DEFAUT.filter(k => !(k === 'SCI' && c.noSCI === true));
+  if (!c.formes && c.onlyPM === false) formes = [...formes, 'EI'];
+  if (!c.formes && c.noSCI === false) formes = [...new Set([...formes, 'SCI'])];
+  $('formes').innerHTML = FORMES.map(([k, t]) => `<label><input type="checkbox" value="${k}" ${formes.includes(k) ? 'checked' : ''}> ${esc(t)}</label>`).join('');
+  for (const k of FIELDS) if (k in c) { const el = $(k); if (el.type === 'checkbox') el.checked = c[k]; else el.value = c[k] || ''; }
 }
 function saveCriteria() {
   const c = {}; for (const k of FIELDS) { const el = $(k); c[k] = el.type === 'checkbox' ? el.checked : el.value; }
   c.signals = [...document.querySelectorAll('#signals input:checked')].map(x => x.value);
+  c.formes = [...document.querySelectorAll('#formes input:checked')].map(x => x.value);
   store.set('criteria', c);
 }
 
@@ -469,7 +509,8 @@ function criteria() {
   const deps = words($('deps').value).map(d => d.toUpperCase().replace(/^(\d)$/, '0$1'));
   return {
     deps, days: Number($('days').value), target: words($('target').value), exclude: words($('exclude').value),
-    minCap: Number($('minCap').value || 0), onlyPM: $('onlyPM').checked, noSCI: $('noSCI').checked, onlyNew: $('onlyNew').checked,
+    capMin: Number($('capMin').value || 0), capMax: Number($('capMax').value || 0), capUnknown: $('capUnknown').checked, zones: words($('zones').value),
+    formes: [...document.querySelectorAll('#formes input:checked')].map(x => x.value), onlyNew: $('onlyNew').checked,
     signals: [...document.querySelectorAll('#signals input:checked')].map(x => x.value),
   };
 }
@@ -597,12 +638,8 @@ function visible() {
     if (sf === 'relance' && !relanceDue(follow[l.id] || {})) return false;
     if (tab !== 'followed' && l.siren && clients.has(l.siren)) return false;
     if (tab === 'followed') return !f || JSON.stringify(l).toLowerCase().includes(f);
-    if (c.onlyPM && !l.isPM) return false;
-    if (c.noSCI && /\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom)) return false;
-    if (c.minCap && l.kind !== 'job' && !(l.capital >= c.minCap)) return false;
+    if (!passesFilters(l, c)) return false;
     const txt = [l.nom, l.activite, l.naf, l.forme].filter(Boolean).join(' ').toLowerCase();
-    if (c.exclude.some(w => txt.includes(w))) return false;
-    if (l.etat === 'C') return false;
     return !f || txt.includes(f) || l.ville.toLowerCase().includes(f) || l.siren.includes(f);
   }).sort((a, b) => {
     const va = a[sortKey] ?? '', vb = b[sortKey] ?? '';
@@ -1166,7 +1203,8 @@ $('enrich').addEventListener('click', enrich);
 $('csv').addEventListener('click', exportCsv);
 $('filter').addEventListener('input', render);
 $('statusFilter').addEventListener('change', render);
-['onlyPM', 'noSCI', 'minCap', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
+['capMin', 'capMax', 'capUnknown', 'zones', 'formes', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
+for (const [id, on] of [['formesAll', true], ['formesNone', false]]) $(id).addEventListener('click', e => { e.preventDefault(); document.querySelectorAll('#formes input').forEach(x => { x.checked = on; }); saveCriteria(); render(); });
 renderProviders();
 
 /* ---------- mes clients, sauvegarde, lancement automatique ---------- */
