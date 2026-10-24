@@ -11,19 +11,23 @@
  *  LEADS_TARGET        activités recherchées, LEADS_EXCLUDE mots-clés à exclure
  *  LEADS_CLIENTS       SIREN des clients à exclure
  *  LEADS_MIN_SCORE     score minimum (défaut : 60), LEADS_EMAIL_FROM expéditeur
+ * Avec le suivi partagé, les sociétés déjà traitées par l'équipe sont écartées et les relances de la
+ * semaine listées ; avec FT_CLIENT_ID / FT_CLIENT_SECRET, les entreprises qui recrutent un comptable.
  * Aperçu sans envoi : /api/digest?secret=<CRON_SECRET>&dry=1
  */
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createStore } = require('../lib/store');
+const ft = require('../lib/francetravail');
 
 function loadCore() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'Leads_Expert_Comptable.html'), 'utf8');
   const block = html.match(/\/\* CORE:START[\s\S]*?\/\* CORE:END \*\//);
   if (!block) throw new Error('Bloc CORE introuvable dans la page');
   const ctx = vm.createContext({});
-  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme };', ctx);
+  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme, jobsToLeads };', ctx);
   return ctx.core;
 }
 
@@ -49,12 +53,14 @@ async function getJson(url) {
   }
 }
 
-async function collect(core, c) {
-  const out = {};
+const DONE = ['Contacté', 'Rendez-vous', 'Gagné', 'Pas intéressé'];
+async function collect(core, c, shared) {
+  const out = {}, follow = shared.follow || {};
+  const treated = l => DONE.includes(follow[l.id]?.status) || (l.siren && DONE.includes(follow[l.siren]?.status));
   for (const kind of ['new', 'change']) {
     const q = `where=${encodeURIComponent(core.whereClause(c, kind))}&order_by=${encodeURIComponent('dateparution desc')}&select=${core.BODACC_FIELDS}&limit=-1`;
     const raw = await getJson(`${core.BODACC_DATASET}/exports/json?${q}`);
-    const keep = l => l.isPM && !/\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom) && !(l.siren && c.clients.has(l.siren))
+    const keep = l => l.isPM && !/\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom) && !(l.siren && c.clients.has(l.siren)) && !treated(l)
       && !c.exclude.some(w => [l.nom, l.activite, l.naf].join(' ').toLowerCase().includes(w));
     // Annuaire pour les mieux notés seulement (7 requêtes par seconde au plus), puis nouveau tri.
     const leads = core.toLeads(raw, c, kind).filter(keep).sort((a, b) => b.score - a.score).slice(0, 60);
@@ -68,6 +74,15 @@ async function collect(core, c) {
     }
     out[kind] = { total: raw.length, leads: leads.filter(l => keep(l) && l.etat !== 'C' && !l.etablissement && l.score >= c.minScore).sort((a, b) => b.score - a.score).slice(0, 25) };
   }
+  if (ft.configured()) {
+    const offers = await ft.searchOffers({ deps: c.deps, days: 7 });
+    const jobs = core.jobsToLeads(offers, c).filter(l => !l.anonymous && !treated(l));
+    out.jobs = { total: offers.length, leads: jobs.filter(l => l.score >= c.minScore).sort((a, b) => b.score - a.score).slice(0, 20) };
+  }
+  // Relances prévues d'ici dimanche.
+  const end = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  out.relances = Object.entries(follow).filter(([, f]) => f.relance && f.relance <= end && !['Gagné', 'Pas intéressé'].includes(f.status))
+    .map(([id, f]) => ({ id, relance: f.relance, by: f.by, nom: f.lead?.nom || id, email: f.email || '', ville: f.lead?.ville || '' })).sort((a, b) => a.relance.localeCompare(b.relance));
   return out;
 }
 
@@ -85,8 +100,9 @@ function renderEmail(core, res, appUrl) {
     : '<p style="color:#6b6960">Aucun lead au-dessus du score minimum cette semaine.</p>');
   return `<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1a1916;max-width:1000px">
     <h1 style="font-size:18px">Leads expert-comptable de la semaine</h1>
-    <p style="color:#6b6960">${res.new.total + res.change.total} annonce(s) lues au BODACC sur 7 jours. Tes clients, les sociétés cessées et les simples ouvertures d'établissement sont exclus.${appUrl ? ` <a href="${esc(appUrl)}">Ouvrir l'outil</a> pour le suivi et la recherche d'e-mails.` : ''}</p>
-    ${section('Nouvelles sociétés', res.new)}${section('Sociétés en changement', res.change)}</div>`;
+    <p style="color:#6b6960">${res.new.total + res.change.total} annonce(s) lues au BODACC sur 7 jours${res.jobs ? `, ${res.jobs.total} offre(s) de comptable sur France Travail` : ''}. Tes clients, les sociétés déjà contactées, les sociétés cessées et les simples ouvertures d'établissement sont exclus.${appUrl ? ` <a href="${esc(appUrl)}">Ouvrir l'outil</a> pour le suivi et la recherche d'e-mails.` : ''}</p>
+    ${res.relances.length ? `<h2 style="font-size:16px;margin:24px 0 8px">Relances de la semaine — ${res.relances.length}</h2><ul style="font-size:13px">${res.relances.map(r => `<li>${r.relance.split('-').reverse().join('/')} : <b>${esc(r.nom)}</b>${r.ville ? ' (' + esc(r.ville) + ')' : ''}${r.email ? ' · ' + esc(r.email) : ''}${r.by ? ' · suivi par ' + esc(r.by) : ''}</li>`).join('')}</ul>` : ''}
+    ${section('Nouvelles sociétés', res.new)}${section('Sociétés en changement', res.change)}${res.jobs ? section('Entreprises qui recrutent un comptable', res.jobs) : ''}</div>`;
 }
 
 module.exports = async function digest(req, res) {
@@ -95,19 +111,23 @@ module.exports = async function digest(req, res) {
   if (!secret) return send(503, { error: 'CRON_SECRET non configuré' });
   if (req.headers.authorization !== 'Bearer ' + secret && url.searchParams.get('secret') !== secret) return send(401, { error: 'Accès refusé' });
   try {
-    const core = loadCore(), c = settings(), res2 = await collect(core, c);
+    const core = loadCore(), c = settings(), store = createStore();
+    // Suivi partagé : sociétés déjà traitées, relances, clients ajoutés dans l'outil.
+    const shared = store && process.env.LEADS_TEAM_PASSWORD ? { follow: await store.all().catch(() => ({})), settings: await store.settings().catch(() => ({})) } : {};
+    for (const sr of shared.settings?.clients || []) c.clients.add(String(sr));
+    const res2 = await collect(core, c, shared);
     const appUrl = process.env.LEADS_APP_URL || (req.headers.host ? 'https://' + req.headers.host : '');
     const html = renderEmail(core, res2, appUrl);
     if (url.searchParams.get('dry')) return send(200, html, 'text/html; charset=utf-8');
     const to = list(process.env.LEADS_EMAIL_TO);
     if (!process.env.RESEND_API_KEY || !to.length) return send(503, { error: 'RESEND_API_KEY ou LEADS_EMAIL_TO manquant' });
-    const n = res2.new.leads.length + res2.change.leads.length;
+    const n = res2.new.leads.length + res2.change.leads.length + (res2.jobs?.leads.length || 0);
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: process.env.LEADS_EMAIL_FROM || 'Leads <onboarding@resend.dev>', to, subject: `${n} lead(s) expert-comptable cette semaine`, html }),
     });
     if (!r.ok) return send(502, { error: 'Envoi refusé par Resend : ' + (await r.text()).slice(0, 300) });
-    return send(200, { sent: true, to, nouvelles: res2.new.leads.length, changements: res2.change.leads.length });
+    return send(200, { sent: true, to, nouvelles: res2.new.leads.length, changements: res2.change.leads.length, recrutements: res2.jobs?.leads.length || 0, relances: res2.relances.length });
   } catch (e) {
     return send(502, { error: e.message });
   }

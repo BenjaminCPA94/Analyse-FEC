@@ -65,6 +65,12 @@
   .s-mid{background:var(--orange-l);color:var(--orange);}
   .s-lo{background:var(--surface2);color:var(--text2);}
   .new{display:inline-block;font-size:10px;font-weight:700;padding:0 6px;border-radius:8px;background:var(--orange-l);color:var(--orange);margin-left:4px;vertical-align:1px;}
+  .due{display:inline-block;font-size:10px;font-weight:700;padding:0 6px;border-radius:8px;background:var(--red-l);color:var(--red);margin-left:4px;vertical-align:1px;}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow:auto;}
+  #modal[hidden]{display:none;}
+  .mbox{background:var(--surface);border-radius:var(--radius);padding:18px;width:100%;max-width:720px;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .mbox textarea{font-size:13px;line-height:1.45;}
+  td.c-follow input[type=date]{display:block;margin-top:4px;padding:3px 6px;font-size:12px;width:100%;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);}
   .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--blue-l);color:var(--blue);white-space:nowrap;}
   .sub{font-size:12px;color:var(--text2);}
   .name{font-weight:600;}
@@ -167,9 +173,32 @@
     </details>
   </div>
 
+  <div class="card">
+    <details id="teamBox">
+      <summary>Équipe : suivi partagé <span class="sub" id="teamState"></span></summary>
+      <p class="hint" style="margin-top:8px">Sur la version en ligne, le suivi (statuts, contacts, notes, relances), la liste des clients et les messages sont partagés entre les membres de l'équipe. Chaque modification indique qui l'a faite.</p>
+      <div class="grid" style="margin-top:10px">
+        <div><label class="f" for="teamUser">Ton prénom</label><input type="text" id="teamUser" autocomplete="name"></div>
+        <div><label class="f" for="teamKey">Mot de passe de l'équipe</label><input type="password" id="teamKey" autocomplete="current-password"></div>
+        <div><label class="f">&nbsp;</label><div class="bar"><button class="btn sec" id="teamLogin">Se connecter</button><button class="btn sec" id="teamLogout" hidden>Se déconnecter</button></div></div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details id="msgBox">
+      <summary>Mes messages et relances</summary>
+      <p class="hint" style="margin-top:8px">Le bouton « Message » de chaque lead prépare un e-mail, un courrier, une invitation LinkedIn ou une relance à partir de ces modèles. Variables : {salutation}, {prenom}, {nom}, {societe}, {ville}, {accroche} et {proposition} (adaptées à l'événement), {cabinet}, {signataire}, {fonction}, {telephone_cabinet}, {email_cabinet}, {date}, {date_contact}.</p>
+      <div class="grid" id="cabFields" style="margin-top:10px"></div>
+      <div class="grid" id="tplFields" style="margin-top:12px"></div>
+      <div class="bar" style="margin-top:10px"><span class="grow"></span><button class="btn sec" id="tplReset">Rétablir les modèles par défaut</button></div>
+    </details>
+  </div>
+
   <div class="tabs" id="tabs">
     <button class="tab on" data-tab="new">Nouvelles sociétés</button>
     <button class="tab" data-tab="change">Sociétés en changement</button>
+    <button class="tab" data-tab="jobs">Recrutent un comptable</button>
     <button class="tab" data-tab="followed">Mon suivi</button>
   </div>
 
@@ -190,6 +219,7 @@
         <option value="open">À traiter</option>
         <option value="hide">Masquer « Pas intéressé »</option>
         <option value="new">Nouveaux uniquement</option>
+        <option value="relance">Relances à faire</option>
       </select>
       <button class="btn sec" id="csv" disabled>Exporter CSV</button>
     </div>
@@ -207,7 +237,8 @@
         <li>Les annonces légales ne disent pas qu'une société cherche un comptable. Elles montrent les moments où elle doit en choisir un : création, rachat, déménagement, nouveau dirigeant, changement de forme.</li>
         <li><b>Demandes entrantes</b> : fiche Google Business Profile à jour, inscription sur l'annuaire de l'Ordre des experts-comptables, formulaire de demande de devis sur le site du cabinet.</li>
         <li><b>Prescripteurs</b> : banques (conseillers professionnels), avocats d'affaires, notaires, CCI et chambres de métiers (ateliers création), incubateurs, réseaux Initiative France et Réseau Entreprendre.</li>
-        <li><b>Offres d'emploi</b> : une petite société qui recrute un comptable ou un aide-comptable peut préférer externaliser. Les sites d'emploi permettent de créer une alerte « comptable » sur ta zone.</li>
+        <li><b>Offres d'emploi</b> : une petite société qui recrute un comptable ou un aide-comptable peut préférer externaliser. C'est l'onglet « Recrutent un comptable » (offres France Travail, version en ligne).</li>
+        <li><b>LinkedIn, Instagram, Facebook</b> : utiles pour joindre le dirigeant, mais leur collecte automatique est interdite par ces plateformes. Utilise les liens de chaque lead, et les alertes de LinkedIn Sales Navigator pour les nouveaux dirigeants.</li>
         <li><b>Plateformes de mise en relation</b> : des comparateurs et places de marché revendent des demandes de devis d'entrepreneurs. Elles sont payantes, à tester sur un ou deux mois avant de s'engager.</li>
         <li><b>Coordonnées</b> : le BODACC et l’annuaire ne publient ni e-mail ni téléphone. Les liens Google Maps, PagesJaunes et « Chercher le site » de chaque lead aident à les retrouver ; saisis-les dans la colonne Suivi, ils sont repris dans l’export CSV. Pour les nouvelles sociétés, le courrier au siège reste le plus fiable.</li>
         <li><b>Rythme conseillé</b> : lancer la recherche chaque lundi sur 7 jours, contacter les leads à score ≥ 60 dans la semaine (courrier ou LinkedIn au dirigeant), relancer à J+15.</li>
@@ -215,6 +246,7 @@
     </details>
   </div>
 </main>
+<div id="modal" hidden></div>
 
 <script>
 'use strict';
@@ -286,6 +318,7 @@ function qualify(l, sigs) {
 }
 /* Score de 0 à 100 ; l.why garde le détail, affiché au survol. */
 function score(l, c) {
+  if (l.kind === 'job') return scoreJob(l, c);
   const why = [[l.signal, l.base]], add = (t, n) => why.push([t, n]);
   if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) add('société', 5);
   if (l.capital >= 50000) add('capital ≥ 50 000 €', 10); else if (l.capital >= 10000) add('capital ≥ 10 000 €', 5); else if (l.capital != null && l.capital < 1000) add('capital < 1 000 €', -5);
@@ -326,7 +359,8 @@ function toLeads(raw, c, kind) {
 /* Complète un lead avec une fiche de l'annuaire des entreprises. */
 function applyAnnuaire(l, x) {
   l.naf = [x.activite_principale, x.libelle_activite_principale].filter(Boolean).join(' — ');
-  l.effectif = x.tranche_effectif_salarie || '';
+  if (l.kind !== 'job') l.effectif = x.tranche_effectif_salarie || '';
+  if (l.kind === 'job') l.siren = x.siren || l.siren;
   const pp = (x.dirigeants || []).filter(d => d.nom && !d.denomination).map(d => ({ prenom: String(d.prenoms || '').split(/\s+/)[0], nom: d.nom }));
   if (pp.length) l.personnes = pp;
   l.dirigeantsAnnuaire = (x.dirigeants || []).slice(0, 3).map(d => d.denomination || [d.prenoms, d.nom].filter(Boolean).join(' ') + (d.qualite ? ' (' + d.qualite + ')' : '')).join(' ; ');
@@ -351,6 +385,51 @@ function shortForme(f) {
   return x;
 }
 
+/* Offres d'emploi France Travail → leads « Recrute un comptable ». Cabinets comptables, intérim et
+ * cabinets de recrutement sont écartés : ce sont des concurrents ou des intermédiaires. */
+const JOB_EXCLUDE = /int[ée]rim|travail temporaire|recrutement|placement|expertise comptable|expert[- ]comptable|cabinet comptable|commissa|fiduciaire|fiducial|in extenso|kpmg|deloitte|mazars|forvis|grant thornton|\bpwc\b|\bbdo\b|\bey\b|adecco|manpower|randstad|synergie|proman|start people|page personnel|michael page|robert half|\bhays\b|walters people|activit[ée]s comptables/i;
+const slug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+function normalizeOffer(o) {
+  const nom = String(o.entreprise?.nom || '').trim(), cp = o.lieuTravail?.codePostal || '';
+  return {
+    id: nom ? 'ft-' + slug(nom + '-' + cp.slice(0, 2)) : 'ft-o-' + slug(o.id), kind: 'job', famille: 'emploi', anonymous: !nom,
+    date: String(o.dateCreation || '').slice(0, 10), nom: nom || 'Entreprise non communiquée', siren: '', forme: '', capital: null, isPM: true,
+    signal: 'Recrute un comptable', texte: [o.intitule, o.typeContratLibelle, o.dureeTravailLibelleConverti].filter(Boolean).join(' · '),
+    activite: o.secteurActiviteLibelle || '', effectif: o.trancheEffectifEtab || '', typeContrat: o.typeContrat || '', duree: o.dureeTravailLibelleConverti || '',
+    ville: String(o.lieuTravail?.libelle || '').replace(/^\d+[AB]?\s*-\s*/, ''), cp, dep: cp.slice(0, 2), adresse: '', dirigeants: '', personnes: [],
+    contact: o.contact && (o.contact.courriel || o.contact.telephone || o.contact.nom) ? o.contact : null,
+    url: o.origineOffre?.urlOrigine || 'https://candidat.francetravail.fr/offres/recherche/detail/' + encodeURIComponent(o.id), offres: 1,
+    _texte: [nom, o.entreprise?.description, o.secteurActiviteLibelle].filter(Boolean).join(' '),
+  };
+}
+function scoreJob(l, c) {
+  const why = [['recrute un profil comptable', 50]], add = (t, n) => why.push([t, n]);
+  const n = Number((String(l.effectif).match(/\d+/) || [])[0]);
+  if (/^0 salari/i.test(l.effectif) || (n >= 1 && n < 20)) add('moins de 20 salariés', 20); else if (n >= 20 && n < 50) add('20 à 49 salariés', 10); else if (n >= 250) add('250 salariés ou plus', -25);
+  if (/partiel/i.test(l.duree)) add('temps partiel', 10);
+  if (/^(CDD|MIS|SAI)$/.test(l.typeContrat)) add('contrat court', 5);
+  if (l.offres > 1) add(l.offres + ' offres', 5);
+  const act = [l.activite, l.naf, l.nom].filter(Boolean).join(' ').toLowerCase();
+  if (c.target.length && c.target.some(w => act.includes(w))) add('activité ciblée', 20);
+  if ((Date.now() - new Date(l.date).getTime()) / 864e5 <= 3) add('publiée il y a moins de 3 jours', 5);
+  if (l.anonymous) add('entreprise non communiquée : impossible à contacter', -50);
+  l.why = why;
+  return Math.max(0, Math.min(100, Math.round(why.reduce((t, x) => t + x[1], 0))));
+}
+function jobsToLeads(offers, c) {
+  const byId = new Map(), seen = new Set();
+  for (const o of offers) {
+    if (seen.has(o.id)) continue; seen.add(o.id);
+    const l = normalizeOffer(o);
+    if (JOB_EXCLUDE.test(l.nom + ' ' + l.activite)) continue;
+    const prev = byId.get(l.id);
+    if (prev) { prev.offres++; if (l.date > prev.date) Object.assign(prev, { date: l.date, texte: l.texte, url: l.url }); if (!prev.contact) prev.contact = l.contact; }
+    else byId.set(l.id, l);
+  }
+  const out = [...byId.values()];
+  out.forEach(l => { l.score = score(l, c); });
+  return out;
+}
 /* CORE:END */
 
 /* ---------- état ---------- */
@@ -403,6 +482,7 @@ async function fetchJson(url, tries = 3) {
 async function run() {
   if (busy) return;
   const c = criteria(); saveCriteria();
+  if (tab === 'jobs') return runJobs(c);
   const where = whereClause(c, tab);
   if (!where) return setStatus('Coche au moins un événement à surveiller.', true);
   busy = true; $('run').disabled = true; leads = [];
@@ -433,6 +513,24 @@ async function run() {
     setStatus((e.message || 'Erreur') + (e instanceof TypeError ? ' Connexion au BODACC impossible : vérifie ta connexion internet.' : ''), true);
   } finally { busy = false; $('run').disabled = false; render(); }
 }
+/* Offres de comptable publiées sur France Travail (relayées par le serveur de l'outil). */
+async function runJobs(c) {
+  if (!proxy) return setStatus('Les offres France Travail ne sont disponibles que sur la version en ligne de l\'outil (voir LISEZMOI).', true);
+  if (!c.deps.length) return setStatus('Indique au moins un département.', true);
+  busy = true; $('run').disabled = true; leads = [];
+  try {
+    setStatus('Lecture des offres France Travail…');
+    const r = await fetch(`api/jobs?deps=${encodeURIComponent(c.deps.join(','))}&days=${c.days}`, { headers: teamHeaders() }), j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'France Travail indisponible (erreur ' + r.status + ').');
+    leads = jobsToLeads(j.offers || [], c);
+    const cache = store.get('annuaire', {});
+    leads.forEach(l => { const x = cache['n:' + l.id]; if (x) { applyAnnuaire(l, x.d); l.score = score(l, c); } });
+    markNew();
+    setStatus(`${(j.offers || []).length} offre(s) de comptable, ${leads.length} entreprise(s) retenue(s) (cabinets comptables, intérim et recrutement exclus).`);
+    $('enrich').disabled = !leads.length; $('csv').disabled = !leads.length;
+  } catch (e) { setStatus(e.message, true); }
+  finally { busy = false; $('run').disabled = false; render(); }
+}
 /* « Nouveau » : société jamais vue lors d'une recherche précédente. */
 function markNew() {
   const seen = store.get('seen', {}), now = Date.now();
@@ -446,7 +544,7 @@ const firstSeenRun = Date.now();
 /* Complète les leads affichés avec l'annuaire officiel (7 requêtes par seconde au plus). */
 async function enrich() {
   if (busy) return;
-  const todo = visible().filter(l => l.siren && !l.enriched).slice(0, 200);
+  const todo = visible().filter(l => (l.siren || (l.kind === 'job' && !l.anonymous)) && !l.enriched).slice(0, 200);
   if (!todo.length) return setStatus('Rien à compléter.');
   busy = true; $('enrich').disabled = true;
   const c = criteria();
@@ -454,9 +552,17 @@ async function enrich() {
     for (let i = 0; i < todo.length; i++) {
       const l = todo[i]; setStatus(`Annuaire des entreprises… ${i + 1} / ${todo.length}`);
       try {
-        const j = await fetchJson(`${ANNUAIRE}?q=${l.siren}&per_page=1`);
-        const x = (j.results || []).find(y => y.siren === l.siren);
-        if (x) { applyAnnuaire(l, x); cacheAnnuaire(l.siren, x); }
+        if (l.kind === 'job' && !l.siren) {
+          // Offre d'emploi : société retrouvée par son nom dans le département.
+          const norm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+          const j = await fetchJson(`${ANNUAIRE}?q=${encodeURIComponent(l.nom)}${l.dep ? '&departement=' + l.dep : ''}&per_page=3`);
+          const x = (j.results || []).find(y => [y.nom_complet, y.nom_raison_sociale, y.sigle].some(n => n && (norm(n) === norm(l.nom) || norm(n).startsWith(norm(l.nom)))));
+          if (x) { applyAnnuaire(l, x); cacheAnnuaire('n:' + l.id, x); }
+        } else {
+          const j = await fetchJson(`${ANNUAIRE}?q=${l.siren}&per_page=1`);
+          const x = (j.results || []).find(y => y.siren === l.siren);
+          if (x) { applyAnnuaire(l, x); cacheAnnuaire(l.siren, x); }
+        }
         l.enriched = true; l.score = score(l, c);
       } catch (e) { if (/Trop de requêtes/.test(e.message)) throw e; }
       await new Promise(r => setTimeout(r, 150));
@@ -470,7 +576,7 @@ async function enrich() {
 /* Fiches de l'annuaire gardées 30 jours (2 000 au plus) : pas de nouvelle requête à la recherche suivante. */
 function cacheAnnuaire(siren, x) {
   const cache = store.get('annuaire', {}), now = Date.now();
-  cache[siren] = { t: now, d: { activite_principale: x.activite_principale, libelle_activite_principale: x.libelle_activite_principale, tranche_effectif_salarie: x.tranche_effectif_salarie,
+  cache[siren] = { t: now, d: { siren: x.siren, activite_principale: x.activite_principale, libelle_activite_principale: x.libelle_activite_principale, tranche_effectif_salarie: x.tranche_effectif_salarie,
     dirigeants: (x.dirigeants || []).slice(0, 5).map(d => ({ nom: d.nom, prenoms: d.prenoms, qualite: d.qualite, denomination: d.denomination })), date_creation: x.date_creation, etat_administratif: x.etat_administratif, siege: { adresse: x.siege?.adresse } } };
   const keys = Object.keys(cache).filter(k => now - cache[k].t < 30 * 864e5).sort((a, b) => cache[b].t - cache[a].t).slice(0, 2000);
   store.set('annuaire', Object.fromEntries(keys.map(k => [k, cache[k]])));
@@ -486,11 +592,12 @@ function visible() {
     if (sf === 'open' && st && st !== 'À traiter') return false;
     if (sf === 'hide' && st === 'Pas intéressé') return false;
     if ((sf === 'new' || (c.onlyNew && tab !== 'followed')) && !l.isNew) return false;
+    if (sf === 'relance' && !relanceDue(follow[l.id] || {})) return false;
     if (tab !== 'followed' && l.siren && clients.has(l.siren)) return false;
     if (tab === 'followed') return !f || JSON.stringify(l).toLowerCase().includes(f);
     if (c.onlyPM && !l.isPM) return false;
     if (c.noSCI && /\bSCI\b|civile immobili/i.test(l.forme + ' ' + l.nom)) return false;
-    if (c.minCap && !(l.capital >= c.minCap)) return false;
+    if (c.minCap && l.kind !== 'job' && !(l.capital >= c.minCap)) return false;
     const txt = [l.nom, l.activite, l.naf, l.forme].filter(Boolean).join(' ').toLowerCase();
     if (c.exclude.some(w => txt.includes(w))) return false;
     if (l.etat === 'C') return false;
@@ -522,19 +629,22 @@ function row(l) {
   return `<tr class="${f.status === 'Pas intéressé' || f.status === 'Gagné' ? 'done' : ''}">
     <td><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
     <td>${datefr(l.date)}</td>
-    <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
+    <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}${relanceDue(f) ? '<span class="due">RELANCE</span>' : ''}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
     <td><span class="tag">${esc(l.signal)}</span>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
     <td class="c-act"><div class="detail clamp" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
     <td>${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
-    <td class="c-dir"><div class="detail clamp" title="Cliquer pour tout lire">${esc(dir || '')}</div></td>
-    <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Annonce</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a>
+    <td class="c-dir"><div class="detail clamp" title="Cliquer pour tout lire">${esc(dir || '')}</div>${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
+    <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">${l.kind === 'job' ? 'Offre' : 'Annonce'}</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a>
       <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + (l.ville || '') + ' (site:instagram.com OR site:facebook.com)')}" target="_blank" rel="noopener">Instagram / Facebook</a></td>
     <td class="c-follow"><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
       <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
       <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
       <input type="text" data-id="${esc(l.id)}" data-k="site" class="ct" placeholder="Site web" value="${esc(f.site || '')}">
       ${contactCell(l, f)}
-      <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
+      <label class="sub" style="display:block;margin-top:4px">Relance <input type="date" data-id="${esc(l.id)}" data-k="relance" class="ct" value="${esc(f.relance || '')}"></label>
+      <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea>
+      <button class="btn msg" data-id="${esc(l.id)}" style="margin-top:4px;padding:4px 10px;font-size:12px;width:100%">${relanceDue(f) ? 'Relancer' : 'Message'}</button>
+      ${f.by ? `<div class="sub">Par ${esc(f.by)} · ${datefr(f.updated)}</div>` : ''}</td>
   </tr>`;
 }
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
@@ -728,9 +838,196 @@ function personOf(l) {
 function setFollow(id, patch) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const { _texte, ...keep } = l;
-  follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString() };
-  if (!['status', 'note', 'email', 'phone', 'site', 'found', 'tried'].some(k => follow[id][k] && (typeof follow[id][k] !== 'object' || Object.keys(follow[id][k]).length))) delete follow[id];
+  follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString(), ...(team && teamOn ? { by: team.user } : {}) };
+  if (!['status', 'note', 'email', 'phone', 'site', 'found', 'tried', 'relance', 'contacts'].some(k => follow[id][k] && (typeof follow[id][k] !== 'object' || Object.keys(follow[id][k]).length))) delete follow[id];
   store.set('follow', follow);
+  pushPatch(id, patch, keep);
+}
+
+/* ---------- Messages et relances ---------- */
+const DEFAULT_TEMPLATES = {
+  emailSubject: '{societe} : accompagnement comptable',
+  email: '{salutation}\n\n{accroche}\n\n{proposition}\n\nSeriez-vous disponible pour un échange de 20 minutes la semaine prochaine, par téléphone ou au cabinet ?\n\nBien cordialement,\n\n{signataire}\n{fonction} – {cabinet}\n{telephone_cabinet}\n\n—\nVous recevez ce message car votre société a fait l\'objet d\'une publication légale ou d\'une annonce publique. Pour ne plus être contacté(e), répondez simplement « STOP ».',
+  courrier: '{salutation_courrier}\n\n{accroche}\n\n{proposition}\n\nJe serais heureux de vous présenter le cabinet lors d\'un premier rendez-vous, sans engagement. Vous pouvez me joindre au {telephone_cabinet} ou par e-mail à {email_cabinet}.\n\nJe vous prie d\'agréer, {formule}, l\'expression de mes salutations distinguées.\n\n{signataire}\n{fonction} – {cabinet}',
+  linkedin: 'Bonjour {prenom}, {accroche} {fonction} chez {cabinet}, j\'accompagne les dirigeants de TPE et PME. Au plaisir d\'échanger !',
+  relanceSubject: 'Re : {societe} : accompagnement comptable',
+  relance: '{salutation}\n\nJe me permets de revenir vers vous suite à mon message du {date_contact} au sujet de l\'accompagnement comptable de {societe}.\n\nAvez-vous déjà un expert-comptable, ou seriez-vous ouvert(e) à un premier échange ? Quelques minutes suffisent pour voir si nous pouvons vous être utiles.\n\nBien cordialement,\n\n{signataire}\n{fonction} – {cabinet}\n{telephone_cabinet}',
+};
+const ACCROCHES = [
+  [/Création d’entreprise/, 'J\'ai appris le lancement de votre activité : félicitations !', 'Les premiers mois sont décisifs : régime fiscal et social, TVA, rémunération, outils de facturation. Nous accompagnons les créateurs dès le démarrage, avec un budget adapté.'],
+  [/Création de société/, 'J\'ai appris la création de {societe} : félicitations pour ce lancement !', 'Les premiers mois sont décisifs : régime fiscal et social, TVA, rémunération du dirigeant, outils de facturation. Nous accompagnons les créateurs dès le démarrage, avec un budget adapté.'],
+  [/Reprise|Rachat/, 'J\'ai vu que {societe} venait de reprendre un fonds de commerce : félicitations pour cette acquisition.', 'Une reprise soulève des sujets précis : bilan d\'ouverture, reprise des contrats et du personnel, financement, TVA. Nous pouvons vous aider à les sécuriser dès maintenant.'],
+  [/Transfert/, 'J\'ai vu que {societe} venait de transférer son siège à {ville} : bienvenue !', 'Un déménagement est souvent l\'occasion de revoir son accompagnement comptable, avec un cabinet proche et disponible.'],
+  [/dirigeant/, 'J\'ai vu que vous preniez la direction de {societe} : félicitations pour cette nomination.', 'Une prise de fonctions est le bon moment pour faire le point sur la comptabilité, la fiscalité et les tableaux de bord de la société.'],
+  [/forme/, 'J\'ai vu que {societe} venait de changer de forme juridique.', 'Un changement de forme a des conséquences fiscales et sociales, pour la société comme pour le dirigeant. Nous pouvons vous aider à les anticiper.'],
+  [/établissement/, 'J\'ai vu que {societe} ouvrait un nouvel établissement à {ville} : félicitations pour ce développement.', 'Une croissance s\'accompagne de nouveaux besoins : suivi par établissement, paie, prévisionnel. Nous pouvons vous accompagner dans cette étape.'],
+  [/Recrute/, 'J\'ai vu que {societe} recrutait un profil comptable.', 'Avant de recruter, externaliser tout ou partie de la comptabilité est souvent plus simple et moins coûteux. Nous pouvons vous proposer une solution complète, ou un appui le temps du recrutement.'],
+  [/./, 'J\'ai vu passer l\'actualité récente de {societe}.', 'Nous accompagnons les dirigeants de TPE et PME en comptabilité, fiscalité, paie et conseil, avec un interlocuteur dédié.'],
+];
+const CABINET_FIELDS = [['cabinet', 'Nom du cabinet'], ['signataire', 'Signataire (prénom nom)'], ['fonction', 'Fonction'], ['tel', 'Téléphone'], ['email', 'E-mail'], ['adresse', 'Adresse (courrier)'], ['ville', 'Ville']];
+let cabinet = { cabinet: '', signataire: '', fonction: 'Expert-comptable', tel: '', email: '', adresse: '', ville: '', ...store.get('cabinet', {}) };
+let templates = { ...DEFAULT_TEMPLATES, ...store.get('templates', {}) };
+const today = () => new Date().toISOString().slice(0, 10);
+const addDays = (d, n) => new Date(new Date(d).getTime() + n * 864e5).toISOString().slice(0, 10);
+const relanceDue = f => f.relance && f.relance <= today() && !['Gagné', 'Pas intéressé'].includes(f.status);
+
+function messageVars(l, f) {
+  const p = personOf(l), acc = ACCROCHES.find(([re]) => re.test(l.signal)) || ACCROCHES[ACCROCHES.length - 1];
+  const last = (f.contacts || []).filter(x => x.canal !== 'Relance').slice(-1)[0];
+  const v = {
+    prenom: p?.prenom || '', nom: p?.nom || '', societe: l.nom, ville: l.ville || '', adresse_societe: l.adresse || [l.cp, l.ville].filter(Boolean).join(' '),
+    cabinet: cabinet.cabinet || '[cabinet]', signataire: cabinet.signataire || '[signataire]', fonction: cabinet.fonction || 'Expert-comptable',
+    telephone_cabinet: cabinet.tel || '[téléphone]', email_cabinet: cabinet.email || '[e-mail]', ville_cabinet: cabinet.ville || '',
+    date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), date_contact: last ? datefr(last.date) : 'il y a quelques jours',
+  };
+  v.salutation = p ? `Bonjour ${p.prenom} ${p.nom},` : 'Bonjour,';
+  v.salutation_courrier = 'Madame, Monsieur,'; v.formule = 'Madame, Monsieur';
+  const fill = t => String(t).replace(/\{(\w+)\}/g, (m, k) => k in v ? v[k] : m);
+  v.accroche = fill(acc[1]); v.proposition = fill(acc[2]);
+  return { v, fill: t => fill(t) };
+}
+function renderMsgSettings() {
+  $('cabFields').innerHTML = CABINET_FIELDS.map(([k, t]) => `<div><label class="f" for="cab_${k}">${t}</label><input type="text" id="cab_${k}" value="${esc(cabinet[k] || '')}"></div>`).join('');
+  const ta = (k, t, rows) => `<div style="grid-column:1/-1"><label class="f" for="tpl_${k}">${t}</label>${rows === 1 ? `<input type="text" id="tpl_${k}" value="${esc(templates[k])}">` : `<textarea id="tpl_${k}" rows="${rows}">${esc(templates[k])}</textarea>`}</div>`;
+  $('tplFields').innerHTML = ta('emailSubject', 'E-mail : objet', 1) + ta('email', 'E-mail : texte', 8) + ta('courrier', 'Courrier : texte', 8) + ta('linkedin', 'LinkedIn : invitation (300 caractères au plus)', 3) + ta('relanceSubject', 'Relance : objet', 1) + ta('relance', 'Relance : texte', 6);
+}
+function saveMsgSettings() {
+  for (const [k] of CABINET_FIELDS) cabinet[k] = $('cab_' + k).value.trim();
+  for (const k of Object.keys(DEFAULT_TEMPLATES)) templates[k] = $('tpl_' + k).value;
+  store.set('cabinet', cabinet); store.set('templates', templates); pushSettings({ cabinet, templates });
+}
+
+let msg = null; // { id, canal }
+const CANAUX = ['E-mail', 'Courrier', 'LinkedIn', 'Relance'];
+function openMessage(id, canal) {
+  const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
+  const f = follow[id] || {};
+  canal = canal || (relanceDue(f) ? 'Relance' : (f.email || l.contact?.courriel) ? 'E-mail' : 'Courrier');
+  msg = { id, canal };
+  const { fill } = messageVars(l, f), email = f.email || l.contact?.courriel || '';
+  const subject = canal === 'E-mail' ? fill(templates.emailSubject) : canal === 'Relance' ? fill(templates.relanceSubject) : '';
+  const body = fill(canal === 'E-mail' ? templates.email : canal === 'Courrier' ? templates.courrier : canal === 'LinkedIn' ? templates.linkedin : templates.relance);
+  const nbRel = (f.contacts || []).filter(x => x.canal === 'Relance').length;
+  $('modal').innerHTML = `<div class="mbox" role="dialog" aria-modal="true" aria-label="Message">
+    <div class="bar"><b class="grow">${esc(l.nom)}</b><button class="btn sec" data-m="close">Fermer</button></div>
+    <div class="tabs" style="margin:10px 0">${CANAUX.map(c => `<button class="tab ${c === canal ? 'on' : ''}" data-canal="${c}">${c}</button>`).join('')}</div>
+    ${(f.contacts || []).length ? `<div class="sub" style="margin-bottom:8px">Déjà contacté : ${(f.contacts || []).map(x => `${esc(x.canal)} le ${datefr(x.date)}${x.by ? ' (' + esc(x.by) + ')' : ''}`).join(' · ')}</div>` : ''}
+    ${canal === 'E-mail' || canal === 'Relance' ? `<label class="f" for="m_to">À</label><input type="email" id="m_to" value="${esc(email)}" placeholder="Adresse du dirigeant"><label class="f" for="m_subject" style="margin-top:8px">Objet</label><input type="text" id="m_subject" value="${esc(subject)}">` : ''}
+    <label class="f" for="m_body" style="margin-top:8px">Message ${canal === 'LinkedIn' ? '<span id="m_count"></span>' : ''}</label>
+    <textarea id="m_body" rows="${canal === 'LinkedIn' ? 4 : 14}">${esc(body)}</textarea>
+    ${/\[(cabinet|signataire|téléphone|e-mail)\]/.test(body) ? '<div class="hint" style="color:var(--orange)">Renseigne les informations du cabinet dans « Mes messages et relances ».</div>' : ''}
+    <div class="bar" style="margin-top:12px">
+      ${canal === 'E-mail' || canal === 'Relance' ? '<button class="btn" data-m="mail">Ouvrir dans ma messagerie</button>' : ''}
+      ${canal === 'Courrier' ? '<button class="btn" data-m="print">Imprimer le courrier</button>' : ''}
+      ${canal === 'LinkedIn' ? '<button class="btn" data-m="linkedin">Copier et ouvrir LinkedIn</button>' : ''}
+      <button class="btn sec" data-m="copy">Copier</button><span class="grow"></span>
+      <button class="btn sec" data-m="sent">Marquer comme envoyé${canal === 'Relance' ? ` (relance n° ${nbRel + 1})` : ''}</button>
+    </div>
+    <div class="hint">« Marquer comme envoyé » passe le lead en « Contacté » et programme une relance dans 15 jours (pas de nouvelle relance après la deuxième).</div>
+  </div>`;
+  $('modal').hidden = false;
+  const count = () => { const n = $('m_body').value.length; if ($('m_count')) { $('m_count').textContent = `(${n} / 300)`; $('m_count').style.color = n > 300 ? 'var(--red)' : ''; } };
+  $('m_body').addEventListener('input', count); count(); $('m_body').focus();
+}
+function closeMessage() { $('modal').hidden = true; $('modal').innerHTML = ''; msg = null; }
+async function copyText(t) { try { await navigator.clipboard.writeText(t); setStatus('Message copié.'); } catch { setStatus('Copie impossible : sélectionne le texte et copie-le.', true); } }
+function printLetter(l) {
+  const w = window.open('', '_blank'); if (!w) return setStatus('Fenêtre bloquée : autorise les fenêtres pour imprimer.', true);
+  const p = personOf(l), dest = [p ? `${p.prenom} ${p.nom}` : 'À l\'attention du dirigeant', l.nom, l.adresse || [l.cp, l.ville].filter(Boolean).join(' ')].filter(Boolean);
+  const exp = [cabinet.cabinet, cabinet.adresse, [cabinet.tel, cabinet.email].filter(Boolean).join(' · ')].filter(Boolean);
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Courrier ${esc(l.nom)}</title><style>body{font:12pt/1.5 Georgia,serif;margin:2.2cm 2cm;color:#000}.exp{font-size:10pt}.dest{margin:1.5cm 0 1cm 9cm}.date{text-align:right;margin-bottom:1cm}p{white-space:pre-wrap}</style></head><body>
+    <div class="exp">${exp.map(esc).join('<br>')}</div><div class="dest">${dest.map(esc).join('<br>')}</div>
+    <div class="date">${esc(cabinet.ville ? cabinet.ville + ', le ' : 'Le ')}${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+    <p><b>Objet : accompagnement comptable de ${esc(l.nom)}</b></p><p>${esc($('m_body').value)}</p></body></html>`);
+  w.document.close(); w.focus(); w.print();
+}
+function markSent(id, canal) {
+  const f = follow[id] || {}, contacts = [...(f.contacts || []), { date: today(), canal, by: team?.user || '' }];
+  const nbRel = contacts.filter(x => x.canal === 'Relance').length;
+  const patch = { contacts, relance: canal === 'Relance' && nbRel >= 2 ? '' : addDays(today(), 15), note: [f.note, `${canal} envoyé le ${datefr(today())}`].filter(Boolean).join('\n') };
+  if (!f.status || f.status === 'À traiter') patch.status = 'Contacté';
+  const to = $('m_to')?.value.trim(); if (to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) && !f.email) patch.email = to;
+  setFollow(id, patch); closeMessage(); render();
+  setStatus(patch.relance ? `${canal} noté. Relance prévue le ${datefr(patch.relance)}.` : `${canal} noté. Plus de relance prévue.`);
+}
+$('modal').addEventListener('click', e => {
+  if (e.target === $('modal')) return closeMessage();
+  const c = e.target.closest('[data-canal]'); if (c) return openMessage(msg.id, c.dataset.canal);
+  const b = e.target.closest('[data-m]'); if (!b || !msg) return;
+  const l = leads.find(x => x.id === msg.id) || follow[msg.id]?.lead, body = $('m_body').value, act = b.dataset.m;
+  if (act === 'close') closeMessage();
+  else if (act === 'copy') copyText(($('m_subject') ? $('m_subject').value + '\n\n' : '') + body);
+  else if (act === 'mail') { const to = $('m_to').value.trim(); location.href = `mailto:${encodeURIComponent(to).replace('%40', '@')}?subject=${encodeURIComponent($('m_subject').value)}&body=${encodeURIComponent(body)}`; }
+  else if (act === 'print') printLetter(l);
+  else if (act === 'linkedin') { copyText(body); const p = personOf(l); window.open('https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent([p?.prenom, p?.nom, l.nom].filter(Boolean).join(' ')), '_blank', 'noopener'); }
+  else if (act === 'sent') markSent(msg.id, msg.canal);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && msg) closeMessage(); });
+
+/* ---------- Suivi partagé de l'équipe (version en ligne) ---------- */
+let team = store.get('team', null), teamOn = false, outbox = store.get('outbox', []);
+const teamHeaders = () => team ? { 'x-leads-key': team.key, 'x-leads-user': encodeURIComponent(team.user) } : {};
+async function teamFetch(body) {
+  const init = body ? { method: 'POST', headers: { 'Content-Type': 'application/json', ...teamHeaders() }, body: JSON.stringify(body) } : { headers: teamHeaders() };
+  const r = await fetch('api/follow', init), j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || 'erreur ' + r.status), { status: r.status });
+  return j;
+}
+function teamState(t, err) { $('teamState').textContent = t ? '· ' + t : ''; $('teamState').style.color = err ? 'var(--red)' : ''; }
+/* Le serveur fait foi ; les modifications pas encore envoyées sont réappliquées par-dessus. */
+function adoptServer(server) {
+  follow = server || {};
+  for (const p of outbox) follow[p.id] = { ...(follow[p.id] || {}), ...p.patch, lead: p.lead };
+  store.set('follow', follow);
+}
+async function teamConnect(firstTime) {
+  if (!team || !proxy) return;
+  try {
+    let j = await teamFetch();
+    if (firstTime && Object.keys(follow).length) { const imp = await teamFetch({ op: 'import', follow }); j = { ...j, follow: imp.follow }; }
+    teamOn = true; adoptServer(j.follow); applySettings(j.settings || {}, firstTime);
+    teamState(`connecté(e) : ${team.user}`); $('teamLogout').hidden = false;
+    await flushPending(); render();
+    if (firstTime) setStatus(`Suivi partagé activé : ${Object.keys(follow).length} lead(s) suivi(s) par l'équipe.`);
+  } catch (e) {
+    teamOn = false;
+    teamState(e.status === 401 ? 'mot de passe incorrect' : e.status === 503 ? 'non configuré sur le serveur' : 'serveur injoignable', true);
+    if (firstTime) setStatus(e.message, true);
+  }
+}
+async function flushPending() {
+  while (teamOn && outbox.length) {
+    const p = outbox[0];
+    try { const r = await teamFetch({ op: 'patch', id: p.id, patch: p.patch, lead: p.lead }); if (r.entry) follow[p.id] = r.entry; else delete follow[p.id]; }
+    catch (e) { if (e.status && e.status < 500) outbox.shift(); break; }
+    outbox.shift();
+  }
+  store.set('outbox', outbox); store.set('follow', follow);
+}
+function pushPatch(id, patch, lead) {
+  if (!teamOn) return;
+  outbox.push({ id, patch, lead }); store.set('outbox', outbox);
+  flushPending().then(() => { if (outbox.length) setStatus('Modification gardée sur ce poste : elle sera envoyée à l\'équipe dès que le serveur répondra.', true); });
+}
+async function teamRefresh() {
+  if (!teamOn || document.hidden) return;
+  try {
+    const j = await teamFetch(); adoptServer(j.follow); applySettings(j.settings || {});
+    // Pas de réaffichage pendant une saisie dans le tableau.
+    if (!$('results').contains(document.activeElement)) render();
+  } catch { /* nouvel essai au prochain passage */ }
+}
+function pushSettings(patch) { if (teamOn) teamFetch({ op: 'settings', settings: patch }).catch(e => setStatus('Réglages non partagés : ' + e.message, true)); }
+/* Réglages communs : clients, cabinet, modèles de messages. */
+function applySettings(s, firstTime) {
+  if (Array.isArray(s.clients)) {
+    if (firstTime && clients.size) { const all = [...new Set([...s.clients, ...clients])]; if (all.length !== s.clients.length) pushSettings({ clients: all }); s.clients = all; }
+    clients = new Set(s.clients); store.set('clients', [...clients]);
+    $('clients').value = [...clients].join(', '); $('clientsCount').textContent = clients.size + ' client' + (clients.size > 1 ? 's' : '');
+  } else if (firstTime && clients.size) pushSettings({ clients: [...clients] });
+  if (s.cabinet) { cabinet = { ...cabinet, ...s.cabinet }; store.set('cabinet', cabinet); renderMsgSettings(); }
+  else if (firstTime && cabinet.cabinet) pushSettings({ cabinet });
+  if (s.templates) { templates = { ...DEFAULT_TEMPLATES, ...s.templates }; store.set('templates', templates); renderMsgSettings(); }
 }
 
 /* ---------- export ---------- */
@@ -738,7 +1035,7 @@ function exportCsv() {
   const list = visible();
   const cols = [['Score', 'score'], ['Publié le', l => datefr(l.date)], ['Société', 'nom'], ['SIREN', 'siren'], ['Forme', 'forme'], ['Capital', 'capital'], ['Événement', 'signal'], ['Détail', 'texte'],
     ['Activité', l => l.activite || l.naf], ['Adresse', 'adresse'], ['Ville', 'ville'], ['Département', 'dep'], ['Dirigeants', l => l.dirigeantsAnnuaire || l.dirigeants],
-    ['E-mail', l => follow[l.id]?.email || ''], ['Trouvé par', l => follow[l.id]?.found?.by || ''], ['Site web', l => follow[l.id]?.site || ''], ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
+    ['E-mail', l => follow[l.id]?.email || ''], ['Trouvé par', l => follow[l.id]?.found?.by || ''], ['Site web', l => follow[l.id]?.site || ''], ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Relance', l => datefr(follow[l.id]?.relance || '')], ['Contacts', l => (follow[l.id]?.contacts || []).map(x => x.canal + ' ' + datefr(x.date)).join(', ')], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
   const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [cols.map(c => c[0]).join(';'), ...list.map(l => cols.map(([, k]) => cell(typeof k === 'function' ? k(l) : l[k])).join(';'))];
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -807,10 +1104,27 @@ $('peopleCsv').addEventListener('click', peopleCsv);
 $('results').addEventListener('click', e => {
   const cl = e.target.closest('.clamp'); if (cl) return cl.classList.toggle('open');
   const h = e.target.closest('button.hf'); if (h) return findOne(h.dataset.id);
+  const m = e.target.closest('button.msg'); if (m) return openMessage(m.dataset.id);
   const t = e.target.closest('th[data-sort]'); if (!t) return;
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
   render();
 });
+/* ---------- équipe, messages, relances ---------- */
+renderMsgSettings();
+$('msgBox').addEventListener('change', e => { if (e.target.matches('input, textarea')) saveMsgSettings(); });
+$('tplReset').addEventListener('click', () => { if (!confirm('Remplacer tes modèles par ceux d\'origine ?')) return; templates = { ...DEFAULT_TEMPLATES }; renderMsgSettings(); saveMsgSettings(); });
+if (team) { $('teamUser').value = team.user; $('teamKey').value = team.key; }
+$('teamLogin').addEventListener('click', () => {
+  if (!proxy) return setStatus('Le suivi partagé n\'est disponible que sur la version en ligne de l\'outil.', true);
+  const user = $('teamUser').value.trim(), key = $('teamKey').value;
+  if (!user || !key) return setStatus('Indique ton prénom et le mot de passe de l\'équipe.', true);
+  team = { user, key }; store.set('team', team); teamConnect(true);
+});
+$('teamLogout').addEventListener('click', () => { team = null; teamOn = false; store.set('team', null); $('teamKey').value = ''; $('teamLogout').hidden = true; teamState('déconnecté(e) : suivi gardé sur ce poste'); });
+if (team) teamConnect(false).then(() => { const n = Object.values(follow).filter(relanceDue).length; if (n && !$('auto').checked) setStatus(`${n} relance(s) à faire : onglet « Mon suivi », filtre « Relances à faire ».`); });
+else { const n = Object.values(follow).filter(relanceDue).length; if (n) setStatus(`${n} relance(s) à faire : onglet « Mon suivi », filtre « Relances à faire ».`); }
+setInterval(teamRefresh, 60000);
+window.addEventListener('focus', teamRefresh);
 $('auto').addEventListener('change', saveCriteria);
 $('onlyNew').addEventListener('change', () => { saveCriteria(); render(); });
 if ($('auto').checked) setTimeout(async () => { await run(); if (leads.length) await enrich(); }, 300);

@@ -18,9 +18,34 @@ Outil de détection de prospects : nouvelles sociétés et sociétés en changem
 
 Le plan gratuit de Vercel (Hobby) est réservé à un usage non commercial : pour le cabinet, utiliser le plan Pro (celui du CRM si le compte existe déjà).
 
+## Suivi partagé de l'équipe
+
+Sur la version en ligne, le suivi (statuts, contacts, notes, relances), la liste des clients et les modèles de messages sont communs à toute l'équipe ; chaque fiche indique qui l'a modifiée en dernier.
+
+1. Dans Vercel › onglet **Storage**, connecte **Upstash for Redis** au projet (gratuit à ce volume). Vercel ajoute seul `KV_REST_API_URL` et `KV_REST_API_TOKEN`.
+2. Ajoute la variable `LEADS_TEAM_PASSWORD` (le mot de passe commun de l'équipe), puis redéploie.
+3. Dans l'outil, ouvre **Équipe : suivi partagé**, saisis ton prénom et le mot de passe. Le suivi déjà présent sur ton poste est envoyé au serveur à la première connexion.
+
+En local (`node server.js`), le suivi partagé est enregistré dans `leads/data/`.
+
+## Sociétés qui recrutent un comptable (France Travail)
+
+L'onglet **Recrutent un comptable** liste les entreprises de ta zone qui publient une offre de comptable ou d'aide-comptable sur France Travail : une TPE qui recrute peut préférer externaliser. Cabinets comptables, intérim et cabinets de recrutement sont écartés. Le score favorise les entreprises de moins de 20 salariés, le temps partiel et les contrats courts.
+
+1. Crée un compte sur [francetravail.io](https://francetravail.io), puis une application avec l'API **Offres d'emploi v2** (gratuite).
+2. Ajoute dans Vercel `FT_CLIENT_ID` et `FT_CLIENT_SECRET` (identifiant et clé secrète de l'application), puis redéploie.
+
+« Compléter avec l'annuaire » retrouve la société (SIREN, dirigeants) à partir de son nom. Quand l'offre donne un contact (nom, e-mail, téléphone), il est affiché et repris dans le message.
+
+## Messages et relances
+
+Le bouton **Message** de chaque lead prépare un e-mail, un courrier à imprimer, une invitation LinkedIn (300 caractères au plus) ou une relance, adaptés à l'événement (création, rachat, transfert, nouveau dirigeant, recrutement…). Les informations du cabinet et les modèles se règlent dans **Mes messages et relances**.
+
+« Marquer comme envoyé » passe le lead en « Contacté » et programme une relance à 15 jours (deux relances au plus). Les relances dues apparaissent avec le badge RELANCE et le filtre « Relances à faire » ; l'e-mail du lundi les liste aussi. Chaque e-mail se termine par une mention d'origine et la possibilité de répondre « STOP ».
+
 ## Résumé hebdomadaire par e-mail (automatique)
 
-Chaque lundi vers 6 h (heure de Paris en hiver), l'outil mis en ligne sur Vercel envoie un e-mail avec les leads prioritaires de la semaine : nouvelles sociétés et sociétés en changement, complétées avec l'annuaire, sans tes clients ni les sociétés cessées.
+Chaque lundi vers 6 h (heure de Paris en hiver), l'outil mis en ligne sur Vercel envoie un e-mail avec les leads prioritaires de la semaine : nouvelles sociétés, sociétés en changement et (si France Travail est configuré) entreprises qui recrutent un comptable, complétées avec l'annuaire. Tes clients, les sociétés cessées et celles déjà traitées par l'équipe sont écartés ; les relances de la semaine sont listées en tête.
 
 1. Crée un compte gratuit sur [resend.com](https://resend.com) et une clé API. Sans domaine vérifié, Resend n'envoie qu'à l'adresse du compte ; pour un autre destinataire, vérifie le domaine du cabinet.
 2. Dans Vercel › Settings › Environment Variables, ajoute :
@@ -62,4 +87,4 @@ Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà
 
 ## Test
 
-`node test/e2e.js` et `node test/features.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde et lancement automatique.
+`node test/e2e.js`, `node test/features.js` et `node test/team.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages et relances.
