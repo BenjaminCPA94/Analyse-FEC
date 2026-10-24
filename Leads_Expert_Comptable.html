@@ -129,6 +129,28 @@
     </div>
   </div>
 
+  <div class="card">
+    <details id="hunterBox">
+      <summary>Recherche d'e-mail avec Hunter <span class="sub" id="hunterState"></span></summary>
+      <div class="grid" style="margin-top:10px">
+        <div>
+          <label class="f" for="hunterKey">Clé API Hunter</label>
+          <input type="text" id="hunterKey" placeholder="Colle ta clé ici" autocomplete="off" spellcheck="false">
+          <div class="hint">Elle reste dans ce navigateur et n'est envoyée qu'à Hunter.</div>
+        </div>
+        <div>
+          <label class="f">&nbsp;</label>
+          <div class="bar"><button class="btn sec" id="hunterTest">Enregistrer et tester</button><button class="btn sec" id="hunterCsv">Export pour Hunter (CSV)</button></div>
+        </div>
+      </div>
+      <ul class="hint" style="margin:10px 0 0 18px">
+        <li>Compte gratuit sur <a href="https://hunter.io/users/sign_up" target="_blank" rel="noopener">hunter.io</a> : 50 crédits par mois, sans carte bancaire. La clé se trouve dans <a href="https://hunter.io/api-keys" target="_blank" rel="noopener">API keys</a>.</li>
+        <li>Le bouton « Trouver l'e-mail » de chaque lead cherche l'adresse du dirigeant à partir de son nom et de la société : un crédit par adresse trouvée. Clique d'abord sur « Compléter avec l'annuaire » pour avoir le nom des dirigeants.</li>
+        <li>« Export pour Hunter » produit un fichier prénom, nom, société à déposer dans l'outil « Bulk » de Hunter, utile pour traiter beaucoup de leads d'un coup.</li>
+      </ul>
+    </details>
+  </div>
+
   <div class="tabs" id="tabs">
     <button class="tab on" data-tab="new">Nouvelles sociétés</button>
     <button class="tab" data-tab="change">Sociétés en changement</button>
@@ -245,6 +267,7 @@ function parseRecord(r) {
     activite: etab.activite || p.activite || '',
     origine: etab.origineFonds || '',
     dirigeants: p.administration || '',
+    personnes: p.typePersonne === 'pp' && p.nom ? [{ prenom: String(p.prenom || '').split(/[\s,]+/)[0], nom: p.nom }] : [],
     adresse, cp: a.codePostal || r.cp || '', ville: a.ville || r.ville || '', dep: r.numerodepartement || '',
     texte: modif.descriptif || acte.descriptif || '',
     _texte: texte,
@@ -354,6 +377,8 @@ async function enrich() {
         if (x) {
           l.naf = [x.activite_principale, x.libelle_activite_principale].filter(Boolean).join(' — ');
           l.effectif = x.tranche_effectif_salarie || '';
+          const pp = (x.dirigeants || []).filter(d => d.nom && !d.denomination).map(d => ({ prenom: String(d.prenoms || '').split(/\s+/)[0], nom: d.nom }));
+          if (pp.length) l.personnes = pp;
           l.dirigeantsAnnuaire = (x.dirigeants || []).slice(0, 3).map(d => d.denomination || [d.prenoms, d.nom].filter(Boolean).join(' ') + (d.qualite ? ' (' + d.qualite + ')' : '')).join(' ; ');
           l.dateCreation = x.date_creation || '';
           l.etat = x.etat_administratif || '';
@@ -423,16 +448,88 @@ function row(l) {
     <td><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
       <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
       <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
+      ${hunterCell(l, f)}
       <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
   </tr>`;
 }
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
 
+/* ---------- Hunter : e-mail du dirigeant ---------- */
+const HUNTER = 'https://api.hunter.io/v2';
+let hunterKey = store.get('hunterKey', ''), hunterBusy = false;
+/* Premier dirigeant personne physique : annuaire, sinon annonce BODACC (« Président : DUPONT Marie »). */
+function personOf(l) {
+  if (l.personnes?.length) return l.personnes[0];
+  for (const part of String(l.dirigeants || '').split(/[;,]|\.\s/)) {
+    const v = part.replace(/^[^:]*:\s*/, '').trim();
+    if (!v || SOCIETES.test(v) || /soci[ée]t[ée]|\bSCI\b|repr[ée]sent/i.test(v)) continue;
+    const t = v.split(/\s+/).filter(Boolean), nom = t.filter(w => w.length > 1 && w === w.toUpperCase() && /[A-ZÀ-Ý]/.test(w)), prenom = t.find(w => w !== w.toUpperCase());
+    if (nom.length && prenom) return { prenom, nom: nom.join(' ') };
+  }
+  return null;
+}
+function hunterCell(l, f) {
+  if (f.hunter) return `<div class="sub">${f.hunter.email ? `Hunter : fiabilité ${esc(f.hunter.score ?? '?')} %${f.hunter.domain ? ' · ' + esc(f.hunter.domain) : ''}` : 'Hunter : aucune adresse trouvée'}</div>`;
+  if (!hunterKey || f.email) return '';
+  const p = personOf(l);
+  return p ? `<button class="btn sec hf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px" title="${esc(p.prenom + ' ' + p.nom)}">Trouver l'e-mail</button>`
+    : `<div class="sub">Dirigeant inconnu : « Compléter avec l'annuaire »</div>`;
+}
+async function hunterGet(path, params) {
+  const u = new URL(HUNTER + path); Object.entries({ ...params, api_key: hunterKey }).forEach(([k, v]) => v && u.searchParams.set(k, v));
+  let r;
+  try { r = await fetch(u, { headers: { Accept: 'application/json' } }); }
+  catch { throw new Error("Hunter injoignable depuis cette page (connexion, ou appel bloqué par le navigateur). Utilise « Export pour Hunter » à la place."); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = (j.errors || [])[0]?.details || '';
+    if (r.status === 401) throw new Error('Clé API Hunter refusée : vérifie-la.');
+    if (r.status === 429 || r.status === 403) throw new Error('Hunter : crédits épuisés ou trop de requêtes. ' + d);
+    throw new Error('Hunter : ' + (d || 'erreur ' + r.status));
+  }
+  return j.data || {};
+}
+function creditsText(d) {
+  const c = d.requests?.credits || d.credits || d.requests?.searches;
+  return c && c.available != null ? `${Math.max(0, c.available - (c.used || 0))} crédit(s) restant(s) sur ${c.available}` : 'connectée';
+}
+async function hunterTest() {
+  hunterKey = $('hunterKey').value.trim(); store.set('hunterKey', hunterKey);
+  if (!hunterKey) { $('hunterState').textContent = ''; render(); return setStatus('Clé Hunter retirée.'); }
+  try { const d = await hunterGet('/account', {}); $('hunterState').textContent = '· ' + creditsText(d); setStatus(`Hunter ${creditsText(d)}${d.plan_name ? ' (offre ' + d.plan_name + ')' : ''}.`); }
+  catch (e) { $('hunterState').textContent = '· erreur'; setStatus(e.message, true); }
+  render();
+}
+async function hunterFind(id) {
+  if (hunterBusy) return;
+  const l = leads.find(x => x.id === id) || follow[id]?.lead, p = l && personOf(l); if (!p) return;
+  hunterBusy = true; setStatus(`Hunter : recherche de l'e-mail de ${p.prenom} ${p.nom} (${l.nom})…`);
+  try {
+    const d = await hunterGet('/email-finder', { company: l.nom, first_name: p.prenom, last_name: p.nom });
+    const patch = { hunter: { email: d.email || '', score: d.score, domain: d.domain || '', date: new Date().toISOString() } };
+    if (d.email) patch.email = d.email;
+    if (d.phone_number && !follow[id]?.phone) patch.phone = d.phone_number;
+    if (!follow[id]?.status) patch.status = 'À traiter';
+    setFollow(id, patch);
+    setStatus(d.email ? `E-mail trouvé pour ${l.nom} : ${d.email} (fiabilité ${d.score ?? '?'} %).` : `Hunter n'a pas trouvé d'adresse pour ${p.prenom} ${p.nom} chez ${l.nom}.`);
+  } catch (e) { setStatus(e.message, true); }
+  finally { hunterBusy = false; render(); }
+}
+function hunterCsv() {
+  const list = visible().filter(l => !follow[l.id]?.email && !follow[l.id]?.hunter).map(l => [l, personOf(l)]).filter(([, p]) => p);
+  if (!list.length) return setStatus("Aucun lead avec un dirigeant connu et sans e-mail : clique d'abord sur « Compléter avec l'annuaire ».", true);
+  const cell = v => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['First name', 'Last name', 'Company', 'City', 'SIREN'].join(','), ...list.map(([l, p]) => [p.prenom, p.nom, l.nom, l.ville, l.siren].map(cell).join(','))];
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = `hunter_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  setStatus(`${list.length} dirigeant(s) exporté(s) pour Hunter.`);
+}
+
 function setFollow(id, patch) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const { _texte, ...keep } = l;
   follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString() };
-  if (!follow[id].status && !follow[id].note && !follow[id].email && !follow[id].phone) delete follow[id];
+  if (!follow[id].status && !follow[id].note && !follow[id].email && !follow[id].phone && !follow[id].hunter) delete follow[id];
   store.set('follow', follow);
 }
 
@@ -470,7 +567,12 @@ $('csv').addEventListener('click', exportCsv);
 $('filter').addEventListener('input', render);
 $('statusFilter').addEventListener('change', render);
 ['onlyPM', 'noSCI', 'minCap', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
+$('hunterKey').value = hunterKey;
+if (hunterKey) $('hunterState').textContent = '· clé enregistrée';
+$('hunterTest').addEventListener('click', hunterTest);
+$('hunterCsv').addEventListener('click', hunterCsv);
 $('results').addEventListener('click', e => {
+  const h = e.target.closest('button.hf'); if (h) return hunterFind(h.dataset.id);
   const t = e.target.closest('th[data-sort]'); if (!t) return;
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
   render();
