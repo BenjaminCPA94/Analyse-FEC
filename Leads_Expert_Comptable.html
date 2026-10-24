@@ -37,7 +37,7 @@
   header{background:#0f1923;color:#fff;padding:18px 24px;}
   header h1{font-size:16px;letter-spacing:.04em;}
   header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px;}
-  main{max-width:1400px;margin:0 auto;padding:20px 16px 60px;}
+  main{max-width:1800px;margin:0 auto;padding:20px 16px 60px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
   label.f{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
@@ -70,8 +70,8 @@
   a{color:var(--blue);}
   .links a{margin-right:8px;font-size:12px;white-space:nowrap;}
   td select{width:auto;padding:3px 5px;font-size:12px;}
-  td textarea{min-width:160px;height:34px;font-size:12px;padding:4px 6px;}
-  td input.ct{display:block;min-width:160px;margin-top:4px;padding:3px 6px;font-size:12px;}
+  td textarea{height:34px;font-size:12px;padding:4px 6px;}
+  td input.ct{display:block;margin-top:4px;padding:3px 6px;font-size:12px;}
   td a.ctl{font-size:11px;}
   td textarea{margin-top:4px;}
   .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--text2);}
@@ -79,7 +79,13 @@
   details summary{cursor:pointer;font-weight:600;}
   details ul{margin:8px 0 0 18px;font-size:13px;color:var(--text2);}
   details li{margin-bottom:4px;}
-  .detail{font-size:12px;color:var(--text2);max-width:420px;}
+  .detail{font-size:12px;color:var(--text2);}
+  .clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;}
+  .clamp.open{-webkit-line-clamp:unset;display:block;}
+  td.c-act{width:22%;min-width:200px;} td.c-dir{min-width:140px;max-width:180px;} td.c-soc{min-width:160px;}
+  td.links a{display:block;margin:0 0 2px;}
+  th.c-follow,td.c-follow{position:sticky;right:0;background:var(--surface);box-shadow:-6px 0 6px -6px rgba(0,0,0,.15);min-width:180px;width:180px;}
+  td.c-follow select,td.c-follow input.ct,td.c-follow textarea{width:100%;min-width:0;}
   .empty{padding:30px;text-align:center;color:var(--text3);}
 </style>
 </head>
@@ -281,7 +287,7 @@ function qualify(l, sigs) {
   if (l.famille === 'creation' || l.famille === 'immatriculation') {
     const rachat = /achat|acquisition|apport|reprise|location.g[ée]rance/i.test(l.origine);
     l.signal = rachat ? 'Reprise d’activité' : l.isPM ? 'Création de société' : 'Création d’entreprise individuelle';
-    l.base = rachat ? 60 : l.isPM ? 50 : 25;
+    l.base = rachat ? 55 : l.isPM ? 45 : 25;
     return l;
   }
   if (l.famille === 'vente') { l.signal = 'Rachat de fonds de commerce'; l.base = 60; l.sig = 'vente'; return l; }
@@ -292,12 +298,13 @@ function qualify(l, sigs) {
 }
 function score(l, c) {
   let s = l.base;
-  if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) s += 10;
-  if (l.capital >= 50000) s += 20; else if (l.capital >= 10000) s += 10; else if (l.capital != null && l.capital < 1000) s -= 5;
-  const act = (l.activite + ' ' + l.nom).toLowerCase();
-  if (c.target.length && c.target.some(w => act.includes(w))) s += 15;
-  const age = (Date.now() - new Date(l.date).getTime()) / 864e5;
-  if (age <= 7) s += 10;
+  if (l.isPM && !/SCI|civile immobili/i.test(l.forme)) s += 5;
+  if (l.capital >= 50000) s += 10; else if (l.capital >= 10000) s += 5; else if (l.capital != null && l.capital < 1000) s -= 5;
+  const act = [l.activite, l.naf, l.nom].filter(Boolean).join(' ').toLowerCase();
+  if (c.target.length && c.target.some(w => act.includes(w))) s += 20;
+  // Structures patrimoniales (holding, SCI, location meublée) : honoraires généralement plus faibles.
+  if (/holding|prise de participations?|d[ée]tention (et (la )?gestion )?de (toutes )?participations|civile immobili|\bSCI\b|location meubl/i.test(act + ' ' + l.forme)) s -= 15;
+  if ((Date.now() - new Date(l.date).getTime()) / 864e5 <= 3) s += 5;
   if (l.effectif && !/^(NN|00)$/.test(l.effectif)) s += 10;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
@@ -428,7 +435,7 @@ function render() {
   }
   if (!list.length) { box.innerHTML = `<div class="empty">${tab === 'followed' ? 'Aucun lead suivi : choisis un statut ou saisis un contact sur un lead pour le retrouver ici.' : 'Aucun résultat pour l\'instant.'}</div>`; return; }
   const th = (k, t) => `<th data-sort="${k}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
-  box.innerHTML = `<table><thead><tr>${th('score', 'Score')}${th('date', 'Publié')}${th('nom', 'Société')}${th('signal', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeants</th><th>Liens</th><th>Suivi</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
+  box.innerHTML = `<table><thead><tr>${th('score', 'Score')}${th('date', 'Publié')}${th('nom', 'Société')}${th('signal', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeants</th><th>Liens</th><th class="c-follow">Suivi</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
 }
 function row(l) {
   const f = follow[l.id] || {}, cls = l.score >= 60 ? 's-hi' : l.score >= 40 ? 's-mid' : 's-lo';
@@ -438,19 +445,28 @@ function row(l) {
   return `<tr class="${f.status === 'Pas intéressé' || f.status === 'Gagné' ? 'done' : ''}">
     <td><span class="score ${cls}">${l.score}</span></td>
     <td>${datefr(l.date)}</td>
-    <td><div class="name">${esc(l.nom)}</div><div class="sub">${esc([l.forme, l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
-    <td><span class="tag">${esc(l.signal)}</span>${l.texte ? `<div class="detail" title="${esc(l.texte)}">${esc(l.texte.length > 140 ? l.texte.slice(0, 140) + '…' : l.texte)}</div>` : ''}</td>
-    <td><div class="detail">${esc(l.activite || l.naf || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
+    <td class="c-soc"><div class="name">${esc(l.nom)}</div><div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div></td>
+    <td><span class="tag">${esc(l.signal)}</span>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
+    <td class="c-act"><div class="detail clamp" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
     <td>${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
-    <td><div class="detail">${esc(dir || '')}</div></td>
+    <td class="c-dir"><div class="detail clamp" title="Cliquer pour tout lire">${esc(dir || '')}</div></td>
     <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Annonce</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a>
-      <br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a></td>
-    <td><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
+      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a></td>
+    <td class="c-follow"><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
       <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
       <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
       ${hunterCell(l, f)}
       <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
   </tr>`;
+}
+function shortForme(f) {
+  const x = String(f || ''), u = /associ[ée] unique|unipersonnelle/i.test(x);
+  if (/actions simplifi/i.test(x)) return u ? 'SASU' : 'SAS';
+  if (/responsabilit[ée] limit/i.test(x)) return u ? 'EURL' : 'SARL';
+  if (/civile immobili/i.test(x)) return 'SCI';
+  if (/soci[ée]t[ée] anonyme/i.test(x)) return 'SA';
+  if (/nom collectif/i.test(x)) return 'SNC';
+  return x;
 }
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
 
@@ -460,6 +476,10 @@ let hunterKey = store.get('hunterKey', ''), hunterBusy = false;
 /* Premier dirigeant personne physique : annuaire, sinon annonce BODACC (« Président : DUPONT Marie »). */
 function personOf(l) {
   if (l.personnes?.length) return l.personnes[0];
+  for (const seg of String(l.dirigeants || '').split(/;|\.\s/)) {
+    const v = seg.replace(/^[^:]*?:\s*/, '').trim(), [nom, prenoms] = v.split(',').map(x => x.trim());
+    if (nom && prenoms && !/:/.test(prenoms) && !SOCIETES.test(nom) && !/soci[ée]t[ée]|\bSCI\b|repr[ée]sent/i.test(v)) return { prenom: prenoms.split(/\s+/)[0], nom };
+  }
   for (const part of String(l.dirigeants || '').split(/[;,]|\.\s/)) {
     const v = part.replace(/^[^:]*:\s*/, '').trim();
     if (!v || SOCIETES.test(v) || /soci[ée]t[ée]|\bSCI\b|repr[ée]sent/i.test(v)) continue;
@@ -473,7 +493,7 @@ function hunterCell(l, f) {
   if (!hunterKey || f.email) return '';
   const p = personOf(l);
   return p ? `<button class="btn sec hf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px" title="${esc(p.prenom + ' ' + p.nom)}">Trouver l'e-mail</button>`
-    : `<div class="sub">Dirigeant inconnu : « Compléter avec l'annuaire »</div>`;
+    : `<div class="sub" title="Clique sur « Compléter avec l'annuaire »">Dirigeant non identifié</div>`;
 }
 async function hunterGet(path, params) {
   const u = new URL(HUNTER + path); Object.entries({ ...params, api_key: hunterKey }).forEach(([k, v]) => v && u.searchParams.set(k, v));
@@ -572,6 +592,7 @@ if (hunterKey) $('hunterState').textContent = '· clé enregistrée';
 $('hunterTest').addEventListener('click', hunterTest);
 $('hunterCsv').addEventListener('click', hunterCsv);
 $('results').addEventListener('click', e => {
+  const cl = e.target.closest('.clamp'); if (cl) return cl.classList.toggle('open');
   const h = e.target.closest('button.hf'); if (h) return hunterFind(h.dataset.id);
   const t = e.target.closest('th[data-sort]'); if (!t) return;
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
