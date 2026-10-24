@@ -112,7 +112,7 @@
   .search input{padding-left:32px;}
   .search::before{content:"";position:absolute;left:11px;top:50%;width:11px;height:11px;border:2px solid var(--text3);border-radius:50%;transform:translateY(-62%);}
   .search::after{content:"";position:absolute;left:21px;top:58%;width:6px;height:2px;background:var(--text3);transform:rotate(45deg);}
-  #statusFilter{width:auto;}
+  #statusFilter,#contactFilter{width:auto;}
   .statusline{margin-top:10px;font-size:13px;color:var(--text2);display:flex;gap:8px;align-items:center;}
   .statusline::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;}
   #status.err{color:var(--red);}
@@ -295,6 +295,13 @@
           <option value="hide">Masquer « Pas intéressé »</option>
           <option value="new">Nouveaux uniquement</option>
           <option value="relance">Relances à faire</option>
+        </select>
+        <select id="contactFilter" aria-label="Filtrer par e-mail">
+          <option value="">E-mail : tous</option>
+          <option value="email">Avec e-mail</option>
+          <option value="noemail">Sans e-mail</option>
+          <option value="phone">Avec téléphone</option>
+          <option value="any">Avec e-mail ou téléphone</option>
         </select>
         <button class="btn ghost" id="expandAll" aria-pressed="false">Tout déplier</button>
         <button class="btn sec" id="csv" disabled>Exporter</button>
@@ -765,6 +772,8 @@ function visible() {
     if (sf === 'hide' && st === 'Pas intéressé') return false;
     if ((sf === 'new' || (c.onlyNew && tab !== 'followed')) && !l.isNew) return false;
     if (sf === 'relance' && !relanceDue(follow[l.id] || {})) return false;
+    const fu = follow[l.id] || {}, cf = $('contactFilter').value;
+    if ((cf === 'email' && !fu.email) || (cf === 'noemail' && fu.email) || (cf === 'phone' && !fu.phone) || (cf === 'any' && !fu.email && !fu.phone)) return false;
     if (tab !== 'followed' && l.siren && clients.has(l.siren)) return false;
     if (tab === 'followed') return !f || JSON.stringify(l).toLowerCase().includes(f);
     if (!passesFilters(l, c)) return false;
@@ -784,7 +793,7 @@ function render() {
     list.forEach(l => { cnt[l.signal] = (cnt[l.signal] || 0) + 1; });
     const kpi = (cls, n, t) => `<div class="kpi ${cls}"><b>${n}</b><span>${t}</span></div>`;
     $('stats').innerHTML = kpi('', list.length, 'lead(s) affiché(s)') + kpi('k-hi', hi, 'prioritaire(s), score ≥ 60') + (tab !== 'followed' ? kpi('k-new', nw, 'nouveau(x) depuis la dernière recherche') : kpi('', list.filter(l => follow[l.id]?.status === 'Gagné').length, 'gagné(s)')) + kpi('k-due', due, 'relance(s) à faire') +
-      `<div class="breakdown">${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('')}</div>`;
+      `<div class="breakdown"><span><b>${list.filter(l => follow[l.id]?.email).length}</b> avec e-mail</span><span><b>${list.filter(l => follow[l.id]?.phone).length}</b> avec téléphone</span>${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('')}</div>`;
   }
   if (!list.length) {
     box.innerHTML = tab === 'followed' ? '<div class="empty"><b>Aucun lead suivi</b>Choisis un statut ou saisis un contact sur un lead pour le retrouver ici.</div>'
@@ -1392,6 +1401,7 @@ $('enrich').addEventListener('click', enrich);
 $('csv').addEventListener('click', exportCsv);
 $('filter').addEventListener('input', render);
 $('statusFilter').addEventListener('change', render);
+$('contactFilter').addEventListener('change', render);
 ['capMin', 'capMax', 'capUnknown', 'zones', 'formes', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
 for (const [id, on] of [['formesAll', true], ['formesNone', false]]) $(id).addEventListener('click', e => { e.preventDefault(); document.querySelectorAll('#formes input').forEach(x => { x.checked = on; }); saveCriteria(); render(); });
 renderProviders();

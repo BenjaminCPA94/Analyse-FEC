@@ -55,6 +55,15 @@ const ANN = { '111111111': [{ nom: 'DUPONT', prenoms: 'Marie' }], '222222222': [
   assert.ok(!(await page.isVisible('input[data-id="111111111"][data-k="email"]')), 'pas besoin de déplier');
   assert.strictEqual(await page.textContent('#findEmails'), 'Trouver les e-mails');
 
+  // Filtre e-mail trouvé ou non.
+  const shown = () => page.$$eval('tbody.lead', t => t.map(x => x.dataset.id).sort());
+  await page.selectOption('#contactFilter', 'email'); assert.deepStrictEqual(await shown(), ['111111111']);
+  await page.selectOption('#contactFilter', 'noemail'); assert.deepStrictEqual(await shown(), ['222222222', '333333333']);
+  await page.selectOption('#contactFilter', 'phone'); assert.deepStrictEqual(await shown(), ['222222222']);
+  await page.selectOption('#contactFilter', 'any'); assert.deepStrictEqual(await shown(), ['111111111', '222222222']);
+  assert.match(await page.textContent('#stats'), /1 avec e-mail/);
+  await page.selectOption('#contactFilter', '');
+
   // Deuxième clic : plus rien à chercher pour ALPHA ; les autres ne sont pas réinterrogés inutilement.
   const n = calls.length;
   await page.click('#findEmails');
