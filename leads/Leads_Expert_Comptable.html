@@ -136,23 +136,20 @@
   </div>
 
   <div class="card">
-    <details id="hunterBox">
-      <summary>Recherche d'e-mail avec Hunter <span class="sub" id="hunterState"></span></summary>
-      <div class="grid" style="margin-top:10px">
-        <div>
-          <label class="f" for="hunterKey">Clé API Hunter</label>
-          <input type="text" id="hunterKey" placeholder="Colle ta clé ici" autocomplete="off" spellcheck="false">
-          <div class="hint">Elle reste dans ce navigateur et n'est envoyée qu'à Hunter.</div>
-        </div>
-        <div>
-          <label class="f">&nbsp;</label>
-          <div class="bar"><button class="btn sec" id="hunterTest">Enregistrer et tester</button><button class="btn sec" id="hunterCsv">Export pour Hunter (CSV)</button></div>
-        </div>
+    <details id="contactBox">
+      <summary>Recherche d'e-mails et de téléphones <span class="sub" id="contactState"></span></summary>
+      <p class="hint" style="margin-top:8px">Les fournisseurs sont interrogés dans cet ordre, jusqu'à trouver l'e-mail du dirigeant. Seuls ceux dont la clé est renseignée sont utilisés. Les clés restent dans ce navigateur.</p>
+      <div class="grid" id="providers" style="margin-top:10px"></div>
+      <div class="bar" style="margin-top:12px">
+        <button class="btn sec" id="keysSave">Enregistrer et tester les clés</button>
+        <button class="btn sec" id="findAll">Chercher les e-mails des leads affichés</button>
+        <button class="btn sec" id="peopleCsv">Export prénom / nom / société (CSV)</button>
       </div>
       <ul class="hint" style="margin:10px 0 0 18px">
-        <li>Compte gratuit sur <a href="https://hunter.io/users/sign_up" target="_blank" rel="noopener">hunter.io</a> : 50 crédits par mois, sans carte bancaire. La clé se trouve dans <a href="https://hunter.io/api-keys" target="_blank" rel="noopener">API keys</a>.</li>
-        <li>Le bouton « Trouver l'e-mail » de chaque lead cherche l'adresse du dirigeant à partir de son nom et de la société : un crédit par adresse trouvée. Clique d'abord sur « Compléter avec l'annuaire » pour avoir le nom des dirigeants.</li>
-        <li>« Export pour Hunter » produit un fichier prénom, nom, société à déposer dans l'outil « Bulk » de Hunter, utile pour traiter beaucoup de leads d'un coup.</li>
+        <li>Clique d'abord sur « Compléter avec l'annuaire » : il faut le nom du dirigeant.</li>
+        <li>Colle le <b>site web</b> de la société dans le suivi (lien « Chercher le site ») : c'est ce qui augmente le plus les chances de trouver l'adresse.</li>
+        <li>Un fournisseur qui n'a rien trouvé n'est pas réinterrogé, sauf si tu ajoutes ou changes le site web.</li>
+        <li id="proxyHint"></li>
       </ul>
     </details>
   </div>
@@ -455,7 +452,8 @@ function row(l) {
     <td class="c-follow"><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
       <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
       <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
-      ${hunterCell(l, f)}
+      <input type="text" data-id="${esc(l.id)}" data-k="site" class="ct" placeholder="Site web" value="${esc(f.site || '')}">
+      ${contactCell(l, f)}
       <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
   </tr>`;
 }
@@ -470,9 +468,164 @@ function shortForme(f) {
 }
 const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999' };
 
-/* ---------- Hunter : e-mail du dirigeant ---------- */
-const HUNTER = 'https://api.hunter.io/v2';
-let hunterKey = store.get('hunterKey', ''), hunterBusy = false;
+/* ---------- Recherche de contacts : plusieurs fournisseurs à la suite ---------- */
+const PROVIDERS = [
+  { id: 'hunter', name: 'Hunter', site: 'https://hunter.io', offer: 'gratuit : 50 crédits par mois', label: 'Clé API (API keys)' },
+  { id: 'apollo', name: 'Apollo', site: 'https://www.apollo.io', offer: 'offre gratuite, compte ouvert avec un e-mail professionnel', label: 'Clé API (Settings › API)' },
+  { id: 'icypeas', name: 'Icypeas', site: 'https://www.icypeas.com', offer: 'essai, puis environ 19 $ les 1 000 crédits', label: 'Clé API' },
+  { id: 'dropcontact', name: 'Dropcontact', site: 'https://www.dropcontact.com', offer: 'essai, puis abonnement ; débite seulement les adresses trouvées', label: 'Clé API' },
+  { id: 'lusha', name: 'Lusha', site: 'https://www.lusha.com', offer: 'API réservée aux offres payantes ; donne aussi des téléphones', label: 'Clé API' },
+];
+let keys = store.get('keys', null), contactBusy = false;
+if (!keys) { keys = {}; const old = store.get('hunterKey', ''); if (old) keys.hunter = old; }
+const hasKeys = () => PROVIDERS.some(p => keys[p.id]);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* Page servie par son serveur (Vercel ou serveur local) : les appels passent par le relais /api/proxy,
+ * car la plupart de ces services refusent les appels lancés directement depuis une page web. */
+let proxy = /^https?:$/.test(location.protocol) ? 'api/proxy' : '';
+async function api(url, opt = {}) {
+  const init = { method: opt.method || 'GET', headers: { Accept: 'application/json', ...(opt.body ? { 'Content-Type': 'application/json' } : {}), ...opt.headers }, body: opt.body ? JSON.stringify(opt.body) : undefined };
+  let r;
+  try {
+    r = await fetch(proxy ? proxy + '?url=' + encodeURIComponent(url) : url, init);
+    if (proxy && r.status === 404 && !r.headers.get('x-leads-proxy')) { proxy = ''; r = await fetch(url, init); }
+  } catch { throw Object.assign(new Error('appel bloqué par le navigateur ou service injoignable'), { blocked: true }); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = String(j.errors?.[0]?.details || j.error || j.message || j.reason || '');
+    const e = new Error(r.status === 401 ? 'clé refusée' : r.status === 402 || r.status === 429 ? 'crédits épuisés ou trop de requêtes' : r.status === 403 ? 'accès refusé (offre ou clé)' + (d ? ' : ' + d : '') : d || 'erreur ' + r.status);
+    e.status = r.status; throw e;
+  }
+  return j;
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+function deepFind(o, test, out = [], key = '') {
+  if (o == null) return out;
+  if (typeof o === 'string' || typeof o === 'number') { if (test(String(o), key)) out.push(String(o)); }
+  else if (typeof o === 'object') for (const [k, v] of Object.entries(o)) deepFind(v, test, out, Array.isArray(o) ? key : k);
+  return out;
+}
+const emailsIn = j => deepFind(j, s => EMAIL_RE.test(s) && !/not_unlocked|@example\.|@domain\.com$/i.test(s));
+const phonesIn = j => deepFind(j, (s, k) => /phone|mobile|number|tel/i.test(k) && /^\+?[\d\s().-]{8,}$/.test(s));
+const domainOf = site => String(site || '').trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0];
+
+/* Chaque fournisseur reçoit le dirigeant, le lead et le site, et renvoie { email, phone, score, domain }. */
+const FIND = {
+  async hunter(k, p, l, dom) {
+    const u = new URL('https://api.hunter.io/v2/email-finder');
+    Object.entries({ first_name: p.prenom, last_name: p.nom, [dom ? 'domain' : 'company']: dom || l.nom, api_key: k }).forEach(([a, b]) => u.searchParams.set(a, b));
+    const d = (await api(u.href)).data || {};
+    return { email: d.email, score: d.score, domain: d.domain, phone: d.phone_number };
+  },
+  async apollo(k, p, l, dom) {
+    const u = new URL('https://api.apollo.io/api/v1/people/match');
+    Object.entries({ first_name: p.prenom, last_name: p.nom, organization_name: l.nom, domain: dom, reveal_personal_emails: 'false' }).forEach(([a, b]) => b && u.searchParams.set(a, b));
+    const pe = (await api(u.href, { method: 'POST', headers: { 'x-api-key': k, 'Cache-Control': 'no-cache' }, body: {} })).person || {};
+    return { email: emailsIn({ email: pe.email })[0], score: pe.email_status === 'verified' ? 90 : null, domain: pe.organization?.primary_domain, phone: phonesIn(pe.phone_numbers || [])[0] };
+  },
+  async icypeas(k, p, l, dom) {
+    const j = await api('https://app.icypeas.com/api/sync/email-search', { method: 'POST', headers: { Authorization: k }, body: { firstname: p.prenom, lastname: p.nom, domainOrCompany: dom || l.nom } });
+    return { email: emailsIn(j)[0] };
+  },
+  async dropcontact(k, p, l, dom) {
+    const h = { 'X-Access-Token': k };
+    const j = await api('https://api.dropcontact.com/v1/enrich/all', { method: 'POST', headers: h, body: { data: [{ first_name: p.prenom, last_name: p.nom, company: l.nom, website: dom || undefined, num_siren: l.siren || undefined }], siren: true, language: 'fr' } });
+    if (!j.request_id) throw new Error(j.reason || 'demande refusée');
+    for (let i = 0; i < 24; i++) {
+      await sleep(5000); setStatus(`Dropcontact : traitement en cours (${(i + 1) * 5} s)…`);
+      const r = await api('https://api.dropcontact.com/v1/enrich/all/' + j.request_id, { headers: h });
+      if (r.success && r.data) { const d = r.data[0] || {}; return { email: emailsIn(d.email || [])[0], phone: d.mobile_phone || d.phone, domain: domainOf(d.website) }; }
+    }
+    throw new Error('pas de réponse après 2 minutes');
+  },
+  async lusha(k, p, l, dom) {
+    const u = new URL('https://api.lusha.com/v2/person');
+    Object.entries({ firstName: p.prenom, lastName: p.nom, companyName: l.nom, companyDomain: dom }).forEach(([a, b]) => b && u.searchParams.set(a, b));
+    const j = await api(u.href, { headers: { api_key: k } });
+    return { email: emailsIn(j)[0], phone: phonesIn(j)[0] };
+  },
+};
+
+function renderProviders() {
+  $('providers').innerHTML = PROVIDERS.map((p, i) => `<div><label class="f" for="key_${p.id}">${i + 1}. ${p.name}</label>
+    <input type="text" id="key_${p.id}" value="${esc(keys[p.id] || '')}" placeholder="${esc(p.label)}" autocomplete="off" spellcheck="false">
+    <div class="hint"><a href="${p.site}" target="_blank" rel="noopener">${p.site.replace(/^https:\/\/(www\.)?/, '')}</a> · ${esc(p.offer)}</div></div>`).join('');
+  $('proxyHint').innerHTML = proxy ? 'Appels relayés par le serveur de l\'outil.'
+    : 'Fichier ouvert directement : si un fournisseur répond « appel bloqué par le navigateur », ouvre l\'outil depuis son adresse Vercel ou avec le serveur local (voir le fichier LISEZMOI dans le dossier « leads »).';
+  $('contactState').textContent = hasKeys() ? '· ' + PROVIDERS.filter(p => keys[p.id]).map(p => p.name).join(', ') : '';
+}
+async function saveKeys() {
+  for (const p of PROVIDERS) { const v = $('key_' + p.id).value.trim(); if (v) keys[p.id] = v; else delete keys[p.id]; }
+  store.set('keys', keys); renderProviders(); render();
+  if (!keys.hunter) return setStatus(hasKeys() ? 'Clés enregistrées.' : 'Aucune clé enregistrée.');
+  try {
+    const d = (await api('https://api.hunter.io/v2/account?api_key=' + encodeURIComponent(keys.hunter))).data || {};
+    const c = d.requests?.credits || d.credits || d.requests?.searches;
+    setStatus(`Clés enregistrées. Hunter : ${c && c.available != null ? Math.max(0, c.available - (c.used || 0)) + ' crédit(s) restant(s) sur ' + c.available : 'clé valide'}.`);
+  } catch (e) { setStatus('Clés enregistrées. Hunter : ' + e.message + '.', true); }
+}
+/* Fournisseurs encore à essayer pour ce lead (un fournisseur déjà interrogé avec le même site est sauté). */
+function pending(l, f) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && (f.tried || {})[p.id] !== dom); }
+function contactCell(l, f) {
+  const found = f.found ? `<div class="sub">${f.found.email ? 'E-mail' : 'Téléphone'} : ${esc(f.found.by)}${f.found.score != null ? ' · fiabilité ' + esc(f.found.score) + ' %' : ''}</div>` : '';
+  if (!hasKeys() || f.email) return found;
+  const p = personOf(l);
+  if (!p) return found + `<div class="sub" title="Clique sur « Compléter avec l'annuaire »">Dirigeant non identifié</div>`;
+  const left = pending(l, f);
+  if (!left.length) return found + `<div class="sub">Aucune adresse trouvée${f.site ? '' : ' : ajoute le site web et relance'}</div>`;
+  return found + `<button class="btn sec hf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px" title="${esc(p.prenom + ' ' + p.nom + ' — ' + left.map(x => x.name).join(', '))}">Trouver l'e-mail</button>`;
+}
+async function findContact(id, quiet) {
+  const l = leads.find(x => x.id === id) || follow[id]?.lead, p = l && personOf(l); if (!p) return false;
+  const f = follow[id] || {}, dom = domainOf(f.site), tried = { ...(f.tried || {}) }, notes = [];
+  let email = '', phone = '', found = f.found || null;
+  for (const pr of pending(l, f)) {
+    setStatus(`${pr.name} : recherche de ${p.prenom} ${p.nom} (${l.nom})…`);
+    try {
+      const r = await FIND[pr.id](keys[pr.id], p, l, dom) || {};
+      tried[pr.id] = dom || '-';
+      if (r.phone && !phone && !f.phone) { phone = String(r.phone); found = found || { by: pr.name }; }
+      if (r.email) { email = r.email; found = { by: pr.name, score: r.score ?? null, domain: r.domain || '' }; break; }
+      notes.push(pr.name + ' : rien');
+    } catch (e) { notes.push(pr.name + ' : ' + e.message); }
+  }
+  const patch = { tried };
+  if (email) patch.email = email;
+  if (phone) patch.phone = phone;
+  if (found) patch.found = found;
+  if (!f.status) patch.status = 'À traiter';
+  setFollow(id, patch);
+  if (!quiet) setStatus(email ? `E-mail trouvé pour ${l.nom} : ${email} (${found.by}).` : `Pas d'e-mail pour ${p.prenom} ${p.nom} (${l.nom}). ${notes.join(' · ')}`, !email && notes.some(n => !/rien$/.test(n)));
+  return Boolean(email);
+}
+async function findOne(id) {
+  if (contactBusy) return;
+  contactBusy = true;
+  try { await findContact(id); } finally { contactBusy = false; render(); }
+}
+async function findAll() {
+  if (contactBusy) return;
+  if (!hasKeys()) return setStatus('Renseigne au moins une clé de fournisseur.', true);
+  const todo = visible().filter(l => { const f = follow[l.id] || {}; return !f.email && personOf(l) && pending(l, f).length; }).slice(0, 50);
+  if (!todo.length) return setStatus("Aucun lead à chercher : il faut un dirigeant identifié (« Compléter avec l'annuaire ») et pas encore d'e-mail.", true);
+  if (!confirm(`Chercher l'e-mail de ${todo.length} dirigeant(s) ? Chaque adresse trouvée consomme en général un crédit chez le fournisseur qui la trouve.`)) return;
+  contactBusy = true; let ok = 0;
+  try {
+    for (let i = 0; i < todo.length; i++) { if (await findContact(todo[i].id, true)) ok++; setStatus(`Recherche des e-mails… ${i + 1} / ${todo.length} (${ok} trouvé(s))`); if (i % 5 === 4) render(); }
+    setStatus(`${ok} e-mail(s) trouvé(s) sur ${todo.length} dirigeant(s).`);
+  } finally { contactBusy = false; render(); }
+}
+function peopleCsv() {
+  const list = visible().filter(l => !follow[l.id]?.email).map(l => [l, personOf(l)]).filter(([, p]) => p);
+  if (!list.length) return setStatus("Aucun lead avec un dirigeant connu et sans e-mail : clique d'abord sur « Compléter avec l'annuaire ».", true);
+  const cell = v => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [['First name', 'Last name', 'Company', 'Website', 'City', 'SIREN'].join(','), ...list.map(([l, p]) => [p.prenom, p.nom, l.nom, domainOf(follow[l.id]?.site), l.ville, l.siren].map(cell).join(','))];
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = `dirigeants_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  setStatus(`${list.length} dirigeant(s) exporté(s) : fichier prêt pour l'import en masse de Hunter, Dropcontact ou Icypeas.`);
+}
+
 /* Premier dirigeant personne physique : annuaire, sinon annonce BODACC (« Président : DUPONT Marie »). */
 function personOf(l) {
   if (l.personnes?.length) return l.personnes[0];
@@ -488,68 +641,11 @@ function personOf(l) {
   }
   return null;
 }
-function hunterCell(l, f) {
-  if (f.hunter) return `<div class="sub">${f.hunter.email ? `Hunter : fiabilité ${esc(f.hunter.score ?? '?')} %${f.hunter.domain ? ' · ' + esc(f.hunter.domain) : ''}` : 'Hunter : aucune adresse trouvée'}</div>`;
-  if (!hunterKey || f.email) return '';
-  const p = personOf(l);
-  return p ? `<button class="btn sec hf" data-id="${esc(l.id)}" style="margin-top:4px;padding:3px 8px;font-size:12px" title="${esc(p.prenom + ' ' + p.nom)}">Trouver l'e-mail</button>`
-    : `<div class="sub" title="Clique sur « Compléter avec l'annuaire »">Dirigeant non identifié</div>`;
-}
-async function hunterGet(path, params) {
-  const u = new URL(HUNTER + path); Object.entries({ ...params, api_key: hunterKey }).forEach(([k, v]) => v && u.searchParams.set(k, v));
-  let r;
-  try { r = await fetch(u, { headers: { Accept: 'application/json' } }); }
-  catch { throw new Error("Hunter injoignable depuis cette page (connexion, ou appel bloqué par le navigateur). Utilise « Export pour Hunter » à la place."); }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const d = (j.errors || [])[0]?.details || '';
-    if (r.status === 401) throw new Error('Clé API Hunter refusée : vérifie-la.');
-    if (r.status === 429 || r.status === 403) throw new Error('Hunter : crédits épuisés ou trop de requêtes. ' + d);
-    throw new Error('Hunter : ' + (d || 'erreur ' + r.status));
-  }
-  return j.data || {};
-}
-function creditsText(d) {
-  const c = d.requests?.credits || d.credits || d.requests?.searches;
-  return c && c.available != null ? `${Math.max(0, c.available - (c.used || 0))} crédit(s) restant(s) sur ${c.available}` : 'connectée';
-}
-async function hunterTest() {
-  hunterKey = $('hunterKey').value.trim(); store.set('hunterKey', hunterKey);
-  if (!hunterKey) { $('hunterState').textContent = ''; render(); return setStatus('Clé Hunter retirée.'); }
-  try { const d = await hunterGet('/account', {}); $('hunterState').textContent = '· ' + creditsText(d); setStatus(`Hunter ${creditsText(d)}${d.plan_name ? ' (offre ' + d.plan_name + ')' : ''}.`); }
-  catch (e) { $('hunterState').textContent = '· erreur'; setStatus(e.message, true); }
-  render();
-}
-async function hunterFind(id) {
-  if (hunterBusy) return;
-  const l = leads.find(x => x.id === id) || follow[id]?.lead, p = l && personOf(l); if (!p) return;
-  hunterBusy = true; setStatus(`Hunter : recherche de l'e-mail de ${p.prenom} ${p.nom} (${l.nom})…`);
-  try {
-    const d = await hunterGet('/email-finder', { company: l.nom, first_name: p.prenom, last_name: p.nom });
-    const patch = { hunter: { email: d.email || '', score: d.score, domain: d.domain || '', date: new Date().toISOString() } };
-    if (d.email) patch.email = d.email;
-    if (d.phone_number && !follow[id]?.phone) patch.phone = d.phone_number;
-    if (!follow[id]?.status) patch.status = 'À traiter';
-    setFollow(id, patch);
-    setStatus(d.email ? `E-mail trouvé pour ${l.nom} : ${d.email} (fiabilité ${d.score ?? '?'} %).` : `Hunter n'a pas trouvé d'adresse pour ${p.prenom} ${p.nom} chez ${l.nom}.`);
-  } catch (e) { setStatus(e.message, true); }
-  finally { hunterBusy = false; render(); }
-}
-function hunterCsv() {
-  const list = visible().filter(l => !follow[l.id]?.email && !follow[l.id]?.hunter).map(l => [l, personOf(l)]).filter(([, p]) => p);
-  if (!list.length) return setStatus("Aucun lead avec un dirigeant connu et sans e-mail : clique d'abord sur « Compléter avec l'annuaire ».", true);
-  const cell = v => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [['First name', 'Last name', 'Company', 'City', 'SIREN'].join(','), ...list.map(([l, p]) => [p.prenom, p.nom, l.nom, l.ville, l.siren].map(cell).join(','))];
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-  a.download = `hunter_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  setStatus(`${list.length} dirigeant(s) exporté(s) pour Hunter.`);
-}
-
 function setFollow(id, patch) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const { _texte, ...keep } = l;
   follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString() };
-  if (!follow[id].status && !follow[id].note && !follow[id].email && !follow[id].phone && !follow[id].hunter) delete follow[id];
+  if (!['status', 'note', 'email', 'phone', 'site', 'found', 'tried'].some(k => follow[id][k] && (typeof follow[id][k] !== 'object' || Object.keys(follow[id][k]).length))) delete follow[id];
   store.set('follow', follow);
 }
 
@@ -558,7 +654,7 @@ function exportCsv() {
   const list = visible();
   const cols = [['Score', 'score'], ['Publié le', l => datefr(l.date)], ['Société', 'nom'], ['SIREN', 'siren'], ['Forme', 'forme'], ['Capital', 'capital'], ['Événement', 'signal'], ['Détail', 'texte'],
     ['Activité', l => l.activite || l.naf], ['Adresse', 'adresse'], ['Ville', 'ville'], ['Département', 'dep'], ['Dirigeants', l => l.dirigeantsAnnuaire || l.dirigeants],
-    ['E-mail', l => follow[l.id]?.email || ''], ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
+    ['E-mail', l => follow[l.id]?.email || ''], ['Trouvé par', l => follow[l.id]?.found?.by || ''], ['Site web', l => follow[l.id]?.site || ''], ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
   const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [cols.map(c => c[0]).join(';'), ...list.map(l => cols.map(([, k]) => cell(typeof k === 'function' ? k(l) : l[k])).join(';'))];
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -587,13 +683,13 @@ $('csv').addEventListener('click', exportCsv);
 $('filter').addEventListener('input', render);
 $('statusFilter').addEventListener('change', render);
 ['onlyPM', 'noSCI', 'minCap', 'exclude', 'target'].forEach(k => $(k).addEventListener('change', () => { saveCriteria(); const c = criteria(); leads.forEach(l => { l.score = score(l, c); }); render(); }));
-$('hunterKey').value = hunterKey;
-if (hunterKey) $('hunterState').textContent = '· clé enregistrée';
-$('hunterTest').addEventListener('click', hunterTest);
-$('hunterCsv').addEventListener('click', hunterCsv);
+renderProviders();
+$('keysSave').addEventListener('click', saveKeys);
+$('findAll').addEventListener('click', findAll);
+$('peopleCsv').addEventListener('click', peopleCsv);
 $('results').addEventListener('click', e => {
   const cl = e.target.closest('.clamp'); if (cl) return cl.classList.toggle('open');
-  const h = e.target.closest('button.hf'); if (h) return hunterFind(h.dataset.id);
+  const h = e.target.closest('button.hf'); if (h) return findOne(h.dataset.id);
   const t = e.target.closest('th[data-sort]'); if (!t) return;
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
   render();
