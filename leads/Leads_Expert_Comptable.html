@@ -108,7 +108,7 @@
 
   /* Barre d'outils */
   .toolbar{padding:12px 14px;}
-  .search{position:relative;flex:1;min-width:180px;max-width:320px;}
+  .search{position:relative;flex:1;min-width:160px;max-width:240px;}
   .search input{padding-left:32px;}
   .search::before{content:"";position:absolute;left:11px;top:50%;width:11px;height:11px;border:2px solid var(--text3);border-radius:50%;transform:translateY(-62%);}
   .search::after{content:"";position:absolute;left:21px;top:58%;width:6px;height:2px;background:var(--text3);transform:rotate(45deg);}
@@ -149,7 +149,8 @@
   .links a.found{background:var(--green-l);color:var(--green);font-weight:500;}
   .history{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:2px;}
   td.c-score{width:56px;} td.c-evt{min-width:150px;max-width:240px;}
-  td.c-soc{min-width:170px;max-width:260px;} td.c-act{min-width:160px;max-width:260px;} td.c-dir{min-width:120px;max-width:180px;} td.c-lieu{white-space:nowrap;}
+  td.c-soc{min-width:170px;max-width:260px;} td.c-act{min-width:160px;max-width:260px;} td.c-dir{min-width:150px;max-width:230px;}
+  .contact-line{display:block;margin-top:5px;font-size:12px;font-weight:500;color:var(--green);overflow-wrap:anywhere;} td.c-lieu{white-space:nowrap;}
   th.c-follow,td.c-follow{position:sticky;right:0;z-index:1;background:var(--surface);box-shadow:-8px 0 8px -8px rgba(16,24,40,.12);width:200px;min-width:200px;}
   th.c-follow{z-index:3;background:var(--surface2);}
   td.c-follow .actions{display:flex;gap:6px;margin-top:8px;} td.c-follow .actions .btn{flex:1;}
@@ -285,6 +286,7 @@
       <div class="bar">
         <button class="btn" id="run">Rechercher</button>
         <button class="btn sec" id="enrich" disabled title="Dirigeants, activité, effectif, date de création">Compléter avec l'annuaire</button>
+        <button class="btn" id="findEmails" title="Annuaire, site de la société, réseaux et fournisseurs, pour tous les leads affichés">Trouver les e-mails</button>
         <span class="grow"></span>
         <div class="search"><input type="text" id="filter" placeholder="Filtrer les résultats…" aria-label="Filtrer les résultats"></div>
         <select id="statusFilter" aria-label="Filtrer par statut">
@@ -708,15 +710,21 @@ function markNew() {
 const firstSeenRun = Date.now();
 
 /* Complète les leads affichés avec l'annuaire officiel (7 requêtes par seconde au plus). */
+const needsAnnuaire = l => (l.siren || (l.kind === 'job' && !l.anonymous)) && !l.enriched;
 async function enrich() {
   if (busy) return;
-  const todo = visible().filter(l => (l.siren || (l.kind === 'job' && !l.anonymous)) && !l.enriched).slice(0, 200);
+  const todo = visible().filter(needsAnnuaire).slice(0, 200);
   if (!todo.length) return setStatus('Rien à compléter.');
   busy = true; $('enrich').disabled = true;
+  try { await enrichLeads(todo); setStatus(`${todo.length} lead(s) complété(s) avec l'annuaire.`); }
+  catch (e) { setStatus(e.message, true); }
+  finally { busy = false; $('enrich').disabled = false; render(); }
+}
+async function enrichLeads(todo, label = 'Annuaire des entreprises') {
   const c = criteria();
-  try {
+  {
     for (let i = 0; i < todo.length; i++) {
-      const l = todo[i]; setStatus(`Annuaire des entreprises… ${i + 1} / ${todo.length}`);
+      const l = todo[i]; setStatus(`${label}… ${i + 1} / ${todo.length}`);
       try {
         if (l.kind === 'job' && !l.siren) {
           // Offre d'emploi : société retrouvée par son nom dans le département.
@@ -734,9 +742,7 @@ async function enrich() {
       await new Promise(r => setTimeout(r, 150));
       if (i % 10 === 9) render();
     }
-    setStatus(`${todo.length} lead(s) complété(s) avec l'annuaire.`);
-  } catch (e) { setStatus(e.message, true); }
-  finally { busy = false; $('enrich').disabled = false; render(); }
+  }
 }
 
 /* Fiches de l'annuaire gardées 30 jours (2 000 au plus) : pas de nouvelle requête à la recherche suivante. */
@@ -786,7 +792,7 @@ function render() {
     return;
   }
   const th = (k, t, cls = '') => `<th data-sort="${k}" class="${cls}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
-  box.innerHTML = `<table class="leads"><thead><tr>${th('score', 'Score')}${th('nom', 'Société')}${th('date', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeant</th><th class="c-follow">Suivi</th></tr></thead>${list.map(row).join('')}</table>`;
+  box.innerHTML = `<table class="leads"><thead><tr>${th('score', 'Score')}${th('nom', 'Société')}${th('date', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeant et contact</th><th class="c-follow">Suivi</th></tr></thead>${list.map(row).join('')}</table>`;
 }
 const TAG_CLASS = [[/Reprise|Rachat/, 't-reprise'], [/Transfert/, 't-move'], [/dirigeant|forme|capital|activité/, 't-dir'], [/Recrute/, 't-job'], [/établissement/, 't-etab']];
 let openRows = new Set(), expandAll = store.get('expandAll', false);
@@ -804,11 +810,11 @@ function row(l) {
     <td class="c-score"><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
     <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}${relanceDue(f) ? '<span class="due">RELANCE</span>' : ''}</div>
       <div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div>
-      ${f.email || f.phone || nbSoc ? `<div class="meta">${f.email ? '<span class="ok">✉ e-mail</span>' : ''}${f.phone ? '<span class="ok">☎ téléphone</span>' : ''}${nbSoc ? `<span class="ok">● ${nbSoc} réseau${nbSoc > 1 ? 'x' : ''}</span>` : ''}</div>` : ''}</td>
+      ${nbSoc ? `<div class="meta"><span class="ok">● ${nbSoc} réseau${nbSoc > 1 ? 'x' : ''}</span></div>` : ''}</td>
     <td class="c-evt"><span class="tag ${tag}">${esc(l.signal)}</span><div class="sub" style="margin-top:4px">Publié le ${datefr(l.date)}</div>${l.texte ? `<div class="detail clamp" title="Cliquer pour tout lire">${esc(l.texte)}</div>` : ''}</td>
     <td class="c-act"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(l.naf || l.activite || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
     <td class="c-lieu">${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
-    <td class="c-dir"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(dir || '')}</div>${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
+    <td class="c-dir"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(dir || '')}</div>${f.email ? `<a class="contact-line" href="mailto:${esc(f.email)}" title="${esc(f.found?.by ? 'Trouvé par ' + f.found.by : '')}">✉ ${esc(f.email)}</a>` : ''}${f.phone ? `<a class="contact-line" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">☎ ${esc(f.phone)}</a>` : ''}${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
     <td class="c-follow"><select data-id="${id}" class="st" data-s="${esc(f.status || '')}" aria-label="Statut">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || 'Statut…'}</option>`).join('')}</select>
       <div class="actions"><button class="btn sm msg" data-id="${id}">${relanceDue(f) ? 'Relancer' : 'Message'}</button><button class="toggle" data-id="${id}" aria-expanded="${open}" title="Coordonnées, liens et notes">▾</button></div></td>
   </tr>
@@ -1008,6 +1014,41 @@ async function findAll() {
     for (let i = 0; i < todo.length; i++) { if (await findContact(todo[i].id, true)) ok++; setStatus(`Recherche des e-mails… ${i + 1} / ${todo.length} (${ok} trouvé(s))`); if (i % 5 === 4) render(); }
     setStatus(`${ok} e-mail(s) trouvé(s) sur ${todo.length} dirigeant(s).`);
   } finally { contactBusy = false; render(); }
+}
+/* Un seul bouton pour tous les leads affichés : annuaire (dirigeants), site et réseaux, puis
+ * fournisseurs d'e-mails, du meilleur score au moins bon. Un second clic arrête la recherche. */
+let stopAll = false;
+async function findEverything() {
+  if (contactBusy) { stopAll = true; return setStatus('Arrêt demandé : fin du lead en cours…'); }
+  if (busy) return;
+  const paid = hasKeys() || Boolean(keys.serper);
+  if (!paid && !proxy) {
+    openSettings(); $('contactBox').open = true;
+    return setStatus("Ajoute au moins une clé dans « Recherche d'e-mails et de téléphones » (Hunter est gratuit : 50 adresses par mois).", true);
+  }
+  const todo = visible().filter(l => { const f = follow[l.id] || {}; return !f.email && !l.anonymous && !['Gagné', 'Pas intéressé'].includes(f.status); })
+    .sort((a, b) => b.score - a.score).slice(0, 50);
+  if (!todo.length) return setStatus('Tous les leads affichés ont déjà un e-mail.');
+  if (paid && !confirm(`Chercher les e-mails et téléphones de ${todo.length} société(s), des mieux notées aux moins bien notées ?\n\nLe site de la société est lu en premier (gratuit) ; chaque adresse trouvée par un fournisseur consomme en général un crédit chez lui.`)) return;
+  contactBusy = true; stopAll = false; $('findEmails').textContent = 'Arrêter'; $('findEmails').classList.add('sec');
+  let ok = 0, tel = 0, noPerson = 0, done = 0;
+  try {
+    const toEnrich = todo.filter(needsAnnuaire);
+    if (toEnrich.length) { await enrichLeads(toEnrich, 'Étape 1 sur 2 · dirigeants'); render(); }
+    for (const l of todo) {
+      if (stopAll) break;
+      const before = follow[l.id] || {};
+      if ((keys.serper && !before.socialSearched) || canAnalyze(before)) await findSocial(l.id, true);
+      const f = follow[l.id] || {};
+      if (!f.email) { if (personOf(l)) { if (pending(l, f).length || canAnalyze(f)) await findContact(l.id, true); } else noPerson++; }
+      const after = follow[l.id] || {};
+      if (after.email) ok++; if (after.phone && !before.phone) tel++;
+      done++; setStatus(`Étape 2 sur 2 · e-mails : ${done} / ${todo.length} · ${ok} e-mail(s) et ${tel} téléphone(s) trouvé(s)`);
+      if (done % 3 === 0) render();
+    }
+    setStatus(`${stopAll ? 'Recherche arrêtée. ' : ''}${ok} e-mail(s) et ${tel} téléphone(s) trouvé(s) sur ${done} société(s).${noPerson ? ` ${noPerson} sans dirigeant identifié (souvent une holding dirigeante).` : ''}`);
+  } catch (e) { setStatus(e.message, true); }
+  finally { contactBusy = false; stopAll = false; $('findEmails').textContent = 'Trouver les e-mails'; $('findEmails').classList.remove('sec'); render(); }
 }
 function peopleCsv() {
   const list = visible().filter(l => !follow[l.id]?.email).map(l => [l, personOf(l)]).filter(([, p]) => p);
@@ -1389,6 +1430,7 @@ $('restoreFile').addEventListener('change', async e => {
 });
 $('keysSave').addEventListener('click', saveKeys);
 $('findAll').addEventListener('click', findAll);
+$('findEmails').addEventListener('click', findEverything);
 $('socialAll').addEventListener('click', socialAll);
 $('peopleCsv').addEventListener('click', peopleCsv);
 /* ---------- panneau des réglages, détail des leads ---------- */

@@ -93,6 +93,8 @@ Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé 
 
 Les clés restent dans le navigateur de chaque utilisateur. Le relais ne les conserve pas : il transmet la requête au fournisseur et renvoie la réponse, et refuse toute autre adresse.
 
+**« Trouver les e-mails »** (barre d'outils) fait tout en un clic pour les leads affichés, du meilleur score au moins bon (50 au plus) : annuaire pour le nom du dirigeant, site de la société et réseaux, puis fournisseurs. Les e-mails et téléphones trouvés s'affichent dans la colonne « Dirigeant et contact ». Un second clic arrête la recherche ; un fournisseur déjà interrogé n'est pas relancé.
+
 Pour augmenter les chances de trouver l'adresse : compléter les leads avec l'annuaire (nom du dirigeant) et renseigner le site web de la société dans le suivi (Google le trouve automatiquement si sa clé est renseignée).
 
 ## Suivi
@@ -101,4 +103,4 @@ Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà
 
 ## Test
 
-`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js` et `node test/filters.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).
+`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js`, `node test/filters.js` et `node test/oneclick.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).
