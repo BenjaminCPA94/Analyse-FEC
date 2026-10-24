@@ -71,6 +71,9 @@
   .links a{margin-right:8px;font-size:12px;white-space:nowrap;}
   td select{width:auto;padding:3px 5px;font-size:12px;}
   td textarea{min-width:160px;height:34px;font-size:12px;padding:4px 6px;}
+  td input.ct{display:block;min-width:160px;margin-top:4px;padding:3px 6px;font-size:12px;}
+  td a.ctl{font-size:11px;}
+  td textarea{margin-top:4px;}
   .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--text2);}
   .stats b{color:var(--text);font-size:16px;}
   details summary{cursor:pointer;font-weight:600;}
@@ -167,6 +170,7 @@
         <li><b>Prescripteurs</b> : banques (conseillers professionnels), avocats d'affaires, notaires, CCI et chambres de métiers (ateliers création), incubateurs, réseaux Initiative France et Réseau Entreprendre.</li>
         <li><b>Offres d'emploi</b> : une petite société qui recrute un comptable ou un aide-comptable peut préférer externaliser. Les sites d'emploi permettent de créer une alerte « comptable » sur ta zone.</li>
         <li><b>Plateformes de mise en relation</b> : des comparateurs et places de marché revendent des demandes de devis d'entrepreneurs. Elles sont payantes, à tester sur un ou deux mois avant de s'engager.</li>
+        <li><b>Coordonnées</b> : le BODACC et l’annuaire ne publient ni e-mail ni téléphone. Les liens Google Maps, PagesJaunes et « Chercher le site » de chaque lead aident à les retrouver ; saisis-les dans la colonne Suivi, ils sont repris dans l’export CSV. Pour les nouvelles sociétés, le courrier au siège reste le plus fiable.</li>
         <li><b>Rythme conseillé</b> : lancer la recherche chaque lundi sur 7 jours, contacter les leads à score ≥ 60 dans la semaine (courrier ou LinkedIn au dirigeant), relancer à J+15.</li>
       </ul>
     </details>
@@ -397,7 +401,7 @@ function render() {
     $('stats').innerHTML = `<span><b>${list.length}</b> lead(s)</span><span><b>${hi}</b> prioritaire(s) (score ≥ 60)</span>` +
       Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('');
   }
-  if (!list.length) { box.innerHTML = `<div class="empty">${tab === 'followed' ? 'Aucun lead suivi : choisis un statut sur un lead pour le retrouver ici.' : 'Aucun résultat pour l\'instant.'}</div>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="empty">${tab === 'followed' ? 'Aucun lead suivi : choisis un statut ou saisis un contact sur un lead pour le retrouver ici.' : 'Aucun résultat pour l\'instant.'}</div>`; return; }
   const th = (k, t) => `<th data-sort="${k}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
   box.innerHTML = `<table><thead><tr>${th('score', 'Score')}${th('date', 'Publié')}${th('nom', 'Société')}${th('signal', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeants</th><th>Liens</th><th>Suivi</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table>`;
 }
@@ -405,6 +409,7 @@ function row(l) {
   const f = follow[l.id] || {}, cls = l.score >= 60 ? 's-hi' : l.score >= 40 ? 's-mid' : 's-lo';
   const dir = l.dirigeantsAnnuaire || l.dirigeants;
   const q = encodeURIComponent(((dir || '').split(/[;,]/)[0].replace(/^[^:]*:\s*/, '') + ' ' + l.nom).trim());
+  const lieu = l.adresse || [l.cp, l.ville].filter(Boolean).join(' '), nom = encodeURIComponent(l.nom);
   return `<tr class="${f.status === 'Pas intéressé' || f.status === 'Gagné' ? 'done' : ''}">
     <td><span class="score ${cls}">${l.score}</span></td>
     <td>${datefr(l.date)}</td>
@@ -413,8 +418,11 @@ function row(l) {
     <td><div class="detail">${esc(l.activite || l.naf || '')}</div>${l.effectif ? `<div class="sub">Effectif : ${esc(EFFECTIF[l.effectif] || l.effectif)}</div>` : ''}</td>
     <td>${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
     <td><div class="detail">${esc(dir || '')}</div></td>
-    <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Annonce</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a></td>
+    <td class="links">${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Annonce</a>` : ''}${l.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Annuaire</a><a href="https://www.pappers.fr/entreprise/${l.siren}" target="_blank" rel="noopener">Pappers</a>` : ''}<a href="https://www.linkedin.com/search/results/all/?keywords=${q}" target="_blank" rel="noopener">LinkedIn</a>
+      <br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nom + ' ' + lieu)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${nom}&ou=${encodeURIComponent(l.ville || l.cp)}" target="_blank" rel="noopener">PagesJaunes</a><a href="https://www.google.com/search?q=${encodeURIComponent('"' + l.nom + '" ' + l.ville)}" target="_blank" rel="noopener">Chercher le site</a></td>
     <td><select data-id="${esc(l.id)}" class="st">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || '—'}</option>`).join('')}</select>
+      <input type="email" data-id="${esc(l.id)}" data-k="email" class="ct" placeholder="E-mail" value="${esc(f.email || '')}">${f.email ? `<a class="ctl" href="mailto:${esc(f.email)}">Écrire</a>` : ''}
+      <input type="tel" data-id="${esc(l.id)}" data-k="phone" class="ct" placeholder="Téléphone" value="${esc(f.phone || '')}">${f.phone ? `<a class="ctl" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">Appeler</a>` : ''}
       <textarea data-id="${esc(l.id)}" class="nt" placeholder="Note…">${esc(f.note || '')}</textarea></td>
   </tr>`;
 }
@@ -424,7 +432,7 @@ function setFollow(id, patch) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const { _texte, ...keep } = l;
   follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString() };
-  if (!follow[id].status && !follow[id].note) delete follow[id];
+  if (!follow[id].status && !follow[id].note && !follow[id].email && !follow[id].phone) delete follow[id];
   store.set('follow', follow);
 }
 
@@ -433,7 +441,7 @@ function exportCsv() {
   const list = visible();
   const cols = [['Score', 'score'], ['Publié le', l => datefr(l.date)], ['Société', 'nom'], ['SIREN', 'siren'], ['Forme', 'forme'], ['Capital', 'capital'], ['Événement', 'signal'], ['Détail', 'texte'],
     ['Activité', l => l.activite || l.naf], ['Adresse', 'adresse'], ['Ville', 'ville'], ['Département', 'dep'], ['Dirigeants', l => l.dirigeantsAnnuaire || l.dirigeants],
-    ['Statut', l => follow[l.id]?.status || ''], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
+    ['E-mail', l => follow[l.id]?.email || ''], ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
   const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [cols.map(c => c[0]).join(';'), ...list.map(l => cols.map(([, k]) => cell(typeof k === 'function' ? k(l) : l[k])).join(';'))];
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -470,6 +478,11 @@ $('results').addEventListener('click', e => {
 $('results').addEventListener('change', e => {
   if (e.target.classList.contains('st')) { setFollow(e.target.dataset.id, { status: e.target.value }); render(); }
   if (e.target.classList.contains('nt')) setFollow(e.target.dataset.id, { note: e.target.value });
+  if (e.target.classList.contains('ct')) {
+    const v = e.target.value.trim();
+    if (v && e.target.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return setStatus('Adresse e-mail invalide : ' + v, true);
+    setFollow(e.target.dataset.id, { [e.target.dataset.k]: v }); render();
+  }
 });
 </script>
 </body>
