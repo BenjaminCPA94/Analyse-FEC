@@ -29,7 +29,7 @@ function loadCore() {
   const block = html.match(/\/\* CORE:START[\s\S]*?\/\* CORE:END \*\//);
   if (!block) throw new Error('Bloc CORE introuvable dans la page');
   const ctx = vm.createContext({});
-  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme, jobsToLeads, passesFilters, FORMES_DEFAUT };', ctx);
+  vm.runInContext(block[0] + '\n;this.core = { BODACC_DATASET, ANNUAIRE, BODACC_FIELDS, whereClause, toLeads, applyAnnuaire, score, shortForme, jobsToLeads, passesFilters, FORMES_DEFAUT, migrateEntry, CLOSED };', ctx);
   return ctx.core;
 }
 
@@ -57,10 +57,12 @@ async function getJson(url) {
   }
 }
 
-const DONE = ['Contacté', 'Rendez-vous', 'Gagné', 'Pas intéressé'];
 async function collect(core, c, shared) {
   const out = {}, follow = shared.follow || {};
-  const treated = l => DONE.includes(follow[l.id]?.status) || (l.siren && DONE.includes(follow[l.siren]?.status));
+  // Anciens statuts repris ; toute étape au-delà de « À traiter » vaut lead déjà traité.
+  Object.values(follow).forEach(core.migrateEntry);
+  const DONE = s => Boolean(s) && s !== 'À traiter';
+  const treated = l => DONE(follow[l.id]?.status) || Boolean(l.siren && DONE(follow[l.siren]?.status));
   for (const kind of ['new', 'change']) {
     const q = `where=${encodeURIComponent(core.whereClause(c, kind))}&order_by=${encodeURIComponent('dateparution desc')}&select=${core.BODACC_FIELDS}&limit=-1`;
     const raw = await getJson(`${core.BODACC_DATASET}/exports/json?${q}`);
@@ -84,7 +86,7 @@ async function collect(core, c, shared) {
   }
   // Relances prévues d'ici dimanche.
   const end = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
-  out.relances = Object.entries(follow).filter(([, f]) => f.relance && f.relance <= end && !['Gagné', 'Pas intéressé'].includes(f.status))
+  out.relances = Object.entries(follow).filter(([, f]) => f.relance && f.relance <= end && !core.CLOSED.includes(f.status))
     .map(([id, f]) => ({ id, relance: f.relance, by: f.by, nom: f.lead?.nom || id, email: f.email || '', ville: f.lead?.ville || '' })).sort((a, b) => a.relance.localeCompare(b.relance));
   return out;
 }

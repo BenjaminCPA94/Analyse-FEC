@@ -10,7 +10,7 @@ const { createStore, meaningful } = require('../lib/store');
 const { teamAuth, sendJson, readJson } = require('../lib/auth');
 
 const ID = /^[\w.-]{1,80}$/;
-const SETTING_KEYS = ['clients', 'cabinet', 'templates'];
+const SETTING_KEYS = ['clients', 'cabinet', 'templates', 'seqTemplates', 'seqCfg'];
 
 module.exports = async function follow(req, res) {
   const auth = teamAuth(req);

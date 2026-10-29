@@ -67,7 +67,7 @@ globalThis.fetch = async (url, init = {}) => {
   await alice.fill('#teamKey', 'equipe-secrete'); await alice.click('#teamLogin');
   await alice.waitForFunction(() => /Alice/.test(document.getElementById('teamState').textContent));
   let saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'follow.json'), 'utf8'));
-  assert.strictEqual(saved['222222222'].status, 'Pas intéressé', 'suivi local importé');
+  assert.strictEqual(saved['222222222'].status, 'Perdu', 'suivi local importé, ancien statut « Pas intéressé » converti');
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).clients, ['999999999'], 'clients partagés');
 
   /* ---- Offres France Travail ---- */
@@ -85,44 +85,58 @@ globalThis.fetch = async (url, init = {}) => {
   await alice.click('#enrich'); await alice.waitForFunction(() => /complété/.test(document.getElementById('status').textContent));
   assert.match(await alice.textContent(dupain), /555 555 555/, 'société retrouvée dans l\'annuaire par son nom');
 
-  /* ---- Messages et relances ---- */
+  /* ---- Séquence, boîte d'envoi, pipeline ---- */
   await alice.evaluate(() => openSettings()); await alice.click('#msgBox summary');
-  await alice.fill('#cab_cabinet', 'RB Partners'); await alice.fill('#cab_signataire', 'Benjamin H.'); await alice.fill('#cab_tel', '01 02 03 04 05'); await alice.press('#cab_tel', 'Tab');
-  await alice.click(dupain + ' button.msg');
-  assert.strictEqual(await alice.inputValue('#m_to'), 'recrutement@dupain.fr', 'adresse du contact de l\'offre');
-  const body = await alice.inputValue('#m_body');
-  assert.match(body, /^Bonjour Jean DUPAIN,/); assert.match(body, /recrutait un profil comptable/); assert.match(body, /externaliser/); assert.match(body, /Benjamin H\.\nExpert-comptable – RB Partners\n01 02 03 04 05/);
-  await alice.click('[data-canal=LinkedIn]'); assert.match(await alice.textContent('#m_count'), /\/ 300/);
-  await alice.click('[data-canal=Courrier]'); assert.match(await alice.inputValue('#m_body'), /^Madame, Monsieur,/);
-  await alice.click('[data-canal=E-mail]'); await alice.click('[data-m=sent]');
+  await alice.fill('#cab_cabinet', 'RB Partners'); await alice.fill('#cab_signataire', 'Benjamin H.'); await alice.fill('#cab_tel', '01 02 03 04 05'); await alice.fill('#cab_adresse', '10 rue de la Paix, 75002 Paris'); await alice.press('#cab_adresse', 'Tab');
+  await alice.click(dupain + ' button.seq');
+  await alice.waitForSelector('article.draft');
+  assert.strictEqual(await alice.locator('article.draft').count(), 3, 'trois e-mails préparés');
+  const e1 = 'article.draft:has-text("E-mail 1")';
+  assert.strictEqual(await alice.inputValue(e1 + ' input[data-k="to"]'), 'recrutement@dupain.fr', 'adresse du contact de l\'offre');
+  const body = await alice.inputValue(e1 + ' textarea');
+  assert.match(body, /^Bonjour Jean Dupain,/); assert.match(body, /offre de poste comptable/); assert.match(body, /-- \nBenjamin H\.\nExpert-comptable – RB Partners\n01 02 03 04 05\n10 rue de la Paix/);
+  assert.match(await alice.textContent(e1 + ' .dchecks'), /Adresse générique/, 'avertissement sans blocage');
+  await alice.click(e1 + ' .d-sent');
   const fd = await alice.evaluate(() => JSON.parse(localStorage.getItem('leadsEC:follow'))['ft-boulangerie-dupain-75']);
   assert.strictEqual(fd.status, 'Contacté'); assert.strictEqual(fd.email, 'recrutement@dupain.fr');
-  assert.strictEqual(fd.relance, new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10));
+  assert.strictEqual(fd.relance, new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10), 'relance 1 à J+4');
+  // Courrier et LinkedIn restent dans la fenêtre de message.
+  await alice.click('[data-tab=followed]');
+  await alice.click('button.msg[data-id="ft-boulangerie-dupain-75"]');
+  assert.match(await alice.inputValue('#m_body'), /^Madame, Monsieur,/);
+  await alice.click('[data-canal=LinkedIn]'); assert.match(await alice.textContent('#m_count'), /\/ 300/);
+  await alice.click('[data-m=close]');
   await alice.waitForFunction(() => !JSON.parse(localStorage.getItem('leadsEC:outbox') || '[]').length);
   saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'follow.json'), 'utf8'));
   assert.strictEqual(saved['ft-boulangerie-dupain-75'].by, 'Alice', 'auteur enregistré sur le serveur');
 
-  /* ---- Bob voit le travail d'Alice et fait la relance ---- */
+  /* ---- Bob voit le travail d'Alice et fait les relances ---- */
   const bob = await open(); await login(bob, 'Bob');
   await bob.click('[data-tab=followed]');
   assert.match(await bob.textContent('#results'), /par Alice/i);
   assert.strictEqual(await bob.textContent('#clientsCount'), '1 client');
+  assert.strictEqual(await bob.evaluate(() => cabinet.cabinet), 'RB Partners', 'réglages du cabinet partagés');
   await bob.fill('input[data-id="ft-boulangerie-dupain-75"][data-k="relance"]', new Date().toISOString().slice(0, 10));
   await bob.dispatchEvent('input[data-id="ft-boulangerie-dupain-75"][data-k="relance"]', 'change');
   await bob.selectOption('#statusFilter', 'relance');
   assert.strictEqual(await bob.locator('tbody.lead').count(), 1);
   assert.match(await bob.textContent('#results'), /RELANCE/);
-  await bob.click('button.msg[data-id="ft-boulangerie-dupain-75"]');
-  assert.strictEqual(await bob.$eval('.mbox .tab.on', b => b.textContent), 'Relance', 'relance proposée par défaut');
-  assert.match(await bob.inputValue('#m_body'), new RegExp('suite à mon message du ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '\\/')));
-  await bob.click('[data-m=sent]');
-  await bob.click('button.msg[data-id="ft-boulangerie-dupain-75"]').catch(() => {});
-  await bob.selectOption('#statusFilter', '');
-  await bob.click('button.msg[data-id="ft-boulangerie-dupain-75"]'); await bob.click('[data-canal=Relance]'); await bob.click('[data-m=sent]');
+  assert.ok(await bob.isVisible('#todoBanner'));
+  await bob.click('button.seq[data-id="ft-boulangerie-dupain-75"]');
+  await bob.waitForSelector('article.draft');
+  assert.match(await bob.textContent('article.draft'), /Relance 1/);
+  await bob.click('article.draft .d-sent');
+  let fb = await bob.evaluate(() => JSON.parse(localStorage.getItem('leadsEC:follow'))['ft-boulangerie-dupain-75']);
+  assert.strictEqual(fb.status, 'Relance 1'); assert.strictEqual(fb.relance, new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10), 'relance 2 à J+10 après l\'e-mail 1');
+  await bob.click('[data-tab=followed]'); await bob.selectOption('#statusFilter', '');
+  await bob.click('button.seq[data-id="ft-boulangerie-dupain-75"]');
+  await bob.waitForSelector('article.draft:has-text("Relance 2")');
+  assert.match(await bob.textContent('article.draft:has-text("Relance 2") .dchecks'), /envoi anticipé/);
+  await bob.click('article.draft:has-text("Relance 2") .d-sent');
   await bob.waitForFunction(() => !JSON.parse(localStorage.getItem('leadsEC:outbox') || '[]').length);
   saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'follow.json'), 'utf8'))['ft-boulangerie-dupain-75'];
-  assert.deepStrictEqual(saved.contacts.map(x => x.canal + ':' + x.by), ['E-mail:Alice', 'Relance:Bob', 'Relance:Bob']);
-  assert.strictEqual(saved.relance, '', 'plus de relance après la deuxième');
+  assert.deepStrictEqual(saved.contacts.map(x => x.canal + ':' + x.by), ['E-mail 1:Alice', 'Relance 1:Bob', 'Relance 2:Bob']);
+  assert.strictEqual(saved.status, 'Relance 2'); assert.strictEqual(saved.relance, '', 'plus de relance après la deuxième');
 
   /* ---- Alice reçoit les changements de Bob ---- */
   await alice.evaluate(() => window.dispatchEvent(new Event('focus')));

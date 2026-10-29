@@ -12,15 +12,19 @@ Outil de détection de prospects : nouvelles sociétés et sociétés en changem
 
 ### Mise en ligne sur Vercel
 
-1. Sur [vercel.com](https://vercel.com) : **Add New… › Project**, importer le dépôt `Analyse-FEC`.
-2. **Root Directory** : choisir le dossier `leads`. Aucun autre réglage.
-3. **Deploy**. L'outil est disponible à l'adresse donnée par Vercel.
+L'outil est autonome : il ne dépend ni du CRM ni de l'analyse FEC. Tout ce qu'il lui faut est dans ce dossier (`Leads_Expert_Comptable.html`, `api/`, `lib/`, `vercel.json`).
+
+1. Sur [vercel.com](https://vercel.com) : **Add New… › Project**, puis importer le dépôt qui contient l'outil.
+2. **Root Directory** : le dossier qui contient `Leads_Expert_Comptable.html` et `vercel.json`.
+   - Si l'outil est publié dans son propre dépôt (ces fichiers à la racine), laisser la racine, sans rien choisir.
+   - Dans le dépôt `analyse-fec`, où l'outil se trouve dans le dossier `leads`, choisir `leads`.
+3. **Deploy**. L'outil est disponible à l'adresse donnée par Vercel ; chaque nouveau commit sur la branche publiée est remis en ligne automatiquement.
 
 Le plan gratuit de Vercel (Hobby) est réservé à un usage non commercial : pour le cabinet, utiliser le plan Pro (celui du CRM si le compte existe déjà).
 
 ## Suivi partagé de l'équipe
 
-Sur la version en ligne, le suivi (statuts, contacts, notes, relances), la liste des clients et les modèles de messages sont communs à toute l'équipe ; chaque fiche indique qui l'a modifiée en dernier.
+Sur la version en ligne, le suivi (étapes, contacts, notes, relances), la liste des clients et les réglages de prospection sont communs à toute l'équipe ; chaque fiche indique qui l'a modifiée en dernier.
 
 1. Dans Vercel › onglet **Storage**, connecte **Upstash for Redis** au projet (gratuit à ce volume). Vercel ajoute seul `KV_REST_API_URL` et `KV_REST_API_TOKEN`.
 2. Ajoute la variable `LEADS_TEAM_PASSWORD` (le mot de passe commun de l'équipe), puis redéploie.
@@ -37,11 +41,35 @@ L'onglet **Recrutent un comptable** liste les entreprises de ta zone qui publien
 
 « Compléter avec l'annuaire » retrouve la société (SIREN, dirigeants) à partir de son nom. Quand l'offre donne un contact (nom, e-mail, téléphone), il est affiché et repris dans le message.
 
-## Messages et relances
+## Séquences d'e-mails, boîte d'envoi et pipeline
 
-Le bouton **Message** de chaque lead prépare un e-mail, un courrier à imprimer, une invitation LinkedIn (300 caractères au plus) ou une relance, adaptés à l'événement (création, rachat, transfert, nouveau dirigeant, recrutement…). Les informations du cabinet et les modèles se règlent dans **Mes messages et relances**.
+Rien ne part sans votre accord : l'outil prépare les e-mails, les contrôle, ouvre votre messagerie avec le message prêt, et n'enregistre l'envoi que lorsque vous le confirmez. Aucune clé SMTP, aucun envoi automatique.
 
-« Marquer comme envoyé » passe le lead en « Contacté » et programme une relance à 15 jours (deux relances au plus). Les relances dues apparaissent avec le badge RELANCE et le filtre « Relances à faire » ; l'e-mail du lundi les liste aussi. Chaque e-mail se termine par une mention d'origine et la possibilité de répondre « STOP ».
+**Séquences.** Pour chaque type d'événement (création de société, transfert de siège, changement de dirigeant, modification de capital, autre modification), une séquence de trois e-mails :
+- **E-mail 1** (75 mots au plus) : accroche sur l'événement (société, date, ville, activité) ;
+- **Relance 1** (75 mots au plus) : un apport concret (régime de TVA, IS ou IR, CFE, aides à la création…) ;
+- **Relance 2** (40 mots au plus) : courte, la porte reste ouverte.
+
+Variables : `{prenom}`, `{nom}`, `{societe}`, `{ville}`, `{activite}`, `{date_evenement}`, `{evenement}`, `{cabinet}`, `{signataire}`, `{titre}`, `{telephone}`, `{adresse_cabinet}`, `{lien_rdv}`. La signature complète du cabinet (après une ligne `-- `) et la ligne de désinscription sont ajoutées à chaque e-mail. Les modèles par défaut sont sobres, au vouvoiement, sans promesse de prix ni comparaison avec d'autres cabinets.
+
+**Réglages › Réglages prospection** : nom du cabinet, signataire, titre, téléphone, adresse postale, lien de prise de rendez-vous (facultatif : sans lien, la ligne disparaît), ligne de désinscription, délais des relances, modèles de chaque séquence, et « Rétablir les modèles par défaut ». Les modèles du courrier et de l'invitation LinkedIn sont dans « Autres modèles ».
+
+**Boîte d'envoi.** « Préparer la séquence » sur un lead, ou en lot après avoir coché plusieurs leads, place les trois e-mails dans l'onglet **Boîte d'envoi**. Chaque brouillon (destinataire, objet, texte) se modifie avant l'envoi. Contrôles automatiques :
+
+| Bloque l'envoi | Avertit seulement |
+|---|---|
+| variable non remplie (`{…}` restant) ; texte trop long (hors signature) ; plus d'un lien ; destinataire absent ou invalide ; signature ou ligne de désinscription manquante ; lead « Perdu », « Ne plus contacter » ou séquence arrêtée (RDV pris, lettre de mission signée) ; étape précédente pas encore envoyée | adresse générique (contact@, info@…) ; relance envoyée avant sa date |
+
+« Envoyer » ouvre votre messagerie avec un lien pré-rempli ; « Copier » copie destinataire, objet et texte. Après l'envoi depuis votre messagerie, « Confirmer : envoyé » enregistre la date et fait avancer le lead.
+
+**Pipeline** (« Mon suivi ») : À traiter → Contacté → Relance 1 → Relance 2 → RDV pris → Lettre de mission signée / Perdu / Ne plus contacter.
+- Confirmer l'e-mail 1 passe le lead en « Contacté » et programme la relance 1 à **J+4** ; confirmer la relance 1 le passe en « Relance 1 » et programme la relance 2 à **J+10** après l'e-mail 1 ; après la relance 2, plus de relance. Les délais se règlent dans Réglages prospection ; la date de relance d'un lead reste modifiable à la main.
+- Passer un lead en « RDV pris », « Lettre de mission signée », « Perdu » ou « Ne plus contacter » annule les relances prévues et ses brouillons.
+- Le bandeau **À faire aujourd'hui** compte les relances dues et en retard ; « Ouvrir dans la boîte d'envoi » prépare les brouillons manquants et les affiche.
+- Filtre par étape dans la barre d'outils ; l'export CSV contient l'étape et les dates d'envoi des trois e-mails.
+- Les anciens statuts sont repris automatiquement : Rendez-vous → RDV pris, Gagné → Lettre de mission signée, Pas intéressé → Perdu ; les e-mails et relances déjà notés dans l'historique sont repris dans la séquence.
+
+Le courrier à imprimer et l'invitation LinkedIn restent disponibles dans le détail de chaque lead (« Courrier ou LinkedIn »).
 
 ## Site de la société et réseaux sociaux
 
@@ -98,10 +126,10 @@ Les clés restent dans le navigateur de chaque utilisateur. Le relais ne les con
 
 Pour augmenter les chances de trouver l'adresse : compléter les leads avec l'annuaire (nom du dirigeant) et renseigner le site web de la société dans le suivi (Google le trouve automatiquement si sa clé est renseignée).
 
-## Suivi
+## Suivi et sauvegarde
 
-Le suivi (statut, contacts, notes) est rattaché au SIREN : une société déjà contactée reste suivie quand elle réapparaît dans une autre annonce. Il est conservé dans le navigateur ; « Sauvegarder mon suivi » télécharge un fichier (sans les clés API) que « Restaurer une sauvegarde » fusionne sur un autre poste.
+Le suivi (étape, contacts, notes, relances) est rattaché au SIREN : une société déjà contactée reste suivie quand elle réapparaît dans une autre annonce. Il est conservé dans le navigateur, comme la boîte d'envoi et les réglages de prospection. **Réglages › Sauvegarde du suivi › Exporter tout le suivi (JSON)** télécharge un fichier complet (suivi, brouillons, clients, filtres, réglages de prospection, sans les clés API) ; « Importer une sauvegarde (JSON) » le fusionne sur un autre poste ou un autre navigateur (la fiche la plus récente l'emporte). Avec le suivi partagé de l'équipe, les étapes sont communes ; les brouillons restent propres à chaque poste.
 
 ## Test
 
-`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js`, `node test/filters.js` et `node test/oneclick.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, messages, relances, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).
+`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js`, `node test/filters.js` et `node test/oneclick.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, séquences, boîte d'envoi, pipeline, migration des anciens statuts, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).

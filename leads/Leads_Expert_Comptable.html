@@ -173,9 +173,23 @@
   select.st{font-weight:500;padding:6px 8px;}
   select.st[data-s="À traiter"]{background:var(--blue-l);color:var(--blue);border-color:transparent;}
   select.st[data-s="Contacté"]{background:var(--orange-l);color:var(--orange);border-color:transparent;}
-  select.st[data-s="Rendez-vous"]{background:var(--violet-l);color:var(--violet);border-color:transparent;}
-  select.st[data-s="Gagné"]{background:var(--green-l);color:var(--green);border-color:transparent;}
-  select.st[data-s="Pas intéressé"]{background:var(--surface3);color:var(--text2);border-color:transparent;}
+  select.st[data-s="Relance 1"],select.st[data-s="Relance 2"]{background:var(--orange-l);color:var(--orange);border-color:transparent;}
+  select.st[data-s="RDV pris"]{background:var(--violet-l);color:var(--violet);border-color:transparent;}
+  select.st[data-s="Lettre de mission signée"]{background:var(--green-l);color:var(--green);border-color:transparent;}
+  select.st[data-s="Perdu"],select.st[data-s="Ne plus contacter"]{background:var(--surface3);color:var(--text2);border-color:transparent;}
+  /* Boîte d'envoi */
+  .banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--orange-l);border-color:color-mix(in srgb,var(--orange) 30%,transparent);color:var(--text);}
+  .count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;}
+  .outbox{padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
+  .ob-head{gap:10px;} .ob-head #obFilter{width:auto;}
+  .draft{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--surface);}
+  .draft.sent{padding:10px 14px;background:var(--surface2);}
+  .dgrid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;align-items:center;} .dgrid label.f{margin:0;}
+  .draft textarea{font-size:13px;line-height:1.5;}
+  .dchecks{list-style:none;display:flex;flex-direction:column;gap:3px;font-size:12.5px;}
+  .dchecks .ko{color:var(--red);} .dchecks .ko::before{content:"✕ ";} .dchecks .warn{color:var(--orange);} .dchecks .warn::before{content:"! ";} .dchecks .ok{color:var(--green);} .dchecks .ok::before{content:"✓ ";}
+  .selbox{display:block;margin-bottom:6px;} .selbox input{accent-color:var(--accent);}
+  th .selall{accent-color:var(--accent);margin-right:6px;vertical-align:-2px;}
   .toggle{background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);width:32px;flex:none !important;cursor:pointer;color:var(--text2);font-size:12px;}
   .toggle:hover{background:var(--surface3);}
   tbody.lead.open .toggle{transform:rotate(180deg);}
@@ -225,6 +239,7 @@
     <button class="tab" data-tab="change">Sociétés en changement</button>
     <button class="tab" data-tab="jobs">Recrutent un comptable</button>
     <button class="tab" data-tab="followed">Mon suivi</button>
+    <button class="tab" data-tab="outbox">Boîte d'envoi<span class="count" id="outboxCount" hidden></span></button>
   </nav>
   <div class="top-right">
     <span class="chip" id="teamChip" hidden></span>
@@ -282,20 +297,16 @@
   </aside>
 
   <main class="main">
+    <section class="card banner" id="todoBanner" hidden><span id="todoText"></span><span class="grow"></span><button class="btn sm" id="todoOpen">Ouvrir dans la boîte d'envoi</button></section>
     <section class="card toolbar">
       <div class="bar">
         <button class="btn" id="run">Rechercher</button>
         <button class="btn sec" id="enrich" disabled title="Dirigeants, activité, effectif, date de création">Compléter avec l'annuaire</button>
+        <button class="btn" id="prepSel" hidden>Préparer la séquence</button>
         <button class="btn" id="findEmails" title="Annuaire, site de la société, réseaux et fournisseurs, pour tous les leads affichés">Trouver les e-mails</button>
         <span class="grow"></span>
         <div class="search"><input type="text" id="filter" placeholder="Filtrer les résultats…" aria-label="Filtrer les résultats"></div>
-        <select id="statusFilter" aria-label="Filtrer par statut">
-          <option value="">Tous les statuts</option>
-          <option value="open">À traiter</option>
-          <option value="hide">Masquer « Pas intéressé »</option>
-          <option value="new">Nouveaux uniquement</option>
-          <option value="relance">Relances à faire</option>
-        </select>
+        <select id="statusFilter" aria-label="Filtrer par étape"></select>
         <select id="contactFilter" aria-label="Filtrer par e-mail">
           <option value="">E-mail : tous</option>
           <option value="email">Avec e-mail</option>
@@ -357,20 +368,27 @@
     </details>
 
     <details id="msgBox">
-      <summary>Messages et relances</summary>
+      <summary>Réglages prospection</summary>
       <div class="body">
-        <p class="hint" style="margin:0">Modèles utilisés par le bouton « Message ». Variables : {salutation}, {prenom}, {nom}, {societe}, {ville}, {accroche}, {proposition}, {cabinet}, {signataire}, {fonction}, {telephone_cabinet}, {email_cabinet}, {date}, {date_contact}.</p>
+        <p class="hint" style="margin:0">Informations reprises dans la signature de chaque e-mail. Les modèles de séquence et les délais sont enregistrés dans ce navigateur.</p>
         <div class="grid" id="cabFields"></div>
-        <div class="grid" id="tplFields"></div>
-        <div class="bar"><span class="grow"></span><button class="btn sec sm" id="tplReset">Rétablir les modèles</button></div>
+        <div class="grid">
+          <div><label class="f" for="seq_d1">Relance 1 (jours après l'e-mail 1)</label><input type="number" id="seq_d1" min="1" max="60"></div>
+          <div><label class="f" for="seq_d2">Relance 2 (jours après l'e-mail 1)</label><input type="number" id="seq_d2" min="2" max="90"></div>
+        </div>
+        <div><label class="f" for="seq_type">Séquence à modifier</label><select id="seq_type"></select></div>
+        <div id="seqFields" style="display:flex;flex-direction:column;gap:10px"></div>
+        <p class="hint" style="margin:0">Variables : {prenom}, {nom}, {societe}, {ville}, {activite}, {date_evenement}, {evenement}, {cabinet}, {signataire}, {titre}, {telephone}, {adresse_cabinet}, {lien_rdv}. La signature et la ligne de désinscription sont ajoutées automatiquement. Pas de promesse de prix ni de comparaison avec d'autres cabinets.</p>
+        <details><summary class="sub" style="cursor:pointer">Autres modèles (courrier, LinkedIn)</summary><div class="grid" id="tplFields" style="margin-top:10px"></div></details>
+        <div class="bar"><span class="grow"></span><button class="btn sec sm" id="tplReset">Rétablir les modèles par défaut</button></div>
       </div>
     </details>
 
     <details id="backupBox">
       <summary>Sauvegarde du suivi</summary>
       <div class="body">
-        <p class="hint" style="margin:0">Le fichier contient le suivi, les clients et les filtres, sans les clés API.</p>
-        <div class="bar"><button class="btn sec sm" id="backup">Sauvegarder mon suivi</button><button class="btn sec sm" id="restore">Restaurer une sauvegarde</button><input type="file" id="restoreFile" accept=".json" hidden></div>
+        <p class="hint" style="margin:0">Le fichier contient le suivi, la boîte d'envoi, les clients, les filtres et les réglages de prospection, sans les clés API. À l'import, la fiche la plus récente l'emporte.</p>
+        <div class="bar"><button class="btn sec sm" id="backup">Exporter tout le suivi (JSON)</button><button class="btn sec sm" id="restore">Importer une sauvegarde (JSON)</button><input type="file" id="restoreFile" accept=".json" hidden></div>
       </div>
     </details>
 
@@ -597,6 +615,23 @@ function jobsToLeads(offers, c) {
   out.forEach(l => { l.score = score(l, c); });
   return out;
 }
+/* Pipeline de prospection, commun à la page et au résumé hebdomadaire. Les anciens statuts sont repris. */
+const STAGES = ['À traiter', 'Contacté', 'Relance 1', 'Relance 2', 'RDV pris', 'Lettre de mission signée', 'Perdu', 'Ne plus contacter'];
+const CLOSED = ['RDV pris', 'Lettre de mission signée', 'Perdu', 'Ne plus contacter'];
+const OLD_STATUS = { 'Rendez-vous': 'RDV pris', 'Gagné': 'Lettre de mission signée', 'Pas intéressé': 'Perdu' };
+function migrateEntry(e) {
+  if (!e || typeof e !== 'object') return e;
+  if (OLD_STATUS[e.status]) e.status = OLD_STATUS[e.status];
+  // Premières versions : e-mails et relances notés dans l'historique, sans séquence.
+  if (!e.seq && Array.isArray(e.contacts) && e.contacts.length) {
+    const em = e.contacts.filter(x => /^E-mail/.test(x.canal)), rel = e.contacts.filter(x => /^Relance/.test(x.canal)), seq = {};
+    if (em[0]) seq.e1 = em[0].date; if (rel[0]) seq.r1 = rel[0].date; if (rel[1]) seq.r2 = rel[1].date;
+    if (Object.keys(seq).length) e.seq = seq;
+    if (e.status === 'Contacté' && rel.length) e.status = rel.length > 1 ? 'Relance 2' : 'Relance 1';
+  }
+  if (CLOSED.includes(e.status) && e.relance) e.relance = '';
+  return e;
+}
 /* CORE:END */
 
 /* ---------- état ---------- */
@@ -606,6 +641,9 @@ const store = {
   set(k, v) { try { localStorage.setItem('leadsEC:' + k, JSON.stringify(v)); } catch { /* navigation privée : suivi non conservé */ } },
 };
 let follow = store.get('follow', {});
+if (!follow || typeof follow !== 'object' || Array.isArray(follow)) follow = {};
+// Anciens statuts (Rendez-vous, Gagné, Pas intéressé) et anciennes relances repris dans le pipeline.
+Object.values(follow).forEach(migrateEntry);
 // Suivi des premières versions rattaché à l'annonce : on le rattache désormais au SIREN.
 for (const [k, v] of Object.entries(follow)) { const sr = v.lead?.siren; if (sr && k !== sr) { follow[sr] = { ...(follow[sr] || {}), ...v, lead: { ...v.lead, id: sr } }; delete follow[k]; } }
 store.set('follow', follow);
@@ -768,8 +806,8 @@ function visible() {
   let list = tab === 'followed' ? Object.values(follow).map(x => x.lead) : leads;
   return list.filter(l => {
     const st = follow[l.id]?.status || '';
-    if (sf === 'open' && st && st !== 'À traiter') return false;
-    if (sf === 'hide' && st === 'Pas intéressé') return false;
+    if (sf.startsWith('st:') && (sf === 'st:À traiter' ? st && st !== 'À traiter' : st !== sf.slice(3))) return false;
+    if (sf === 'hide' && ['Perdu', 'Ne plus contacter'].includes(st)) return false;
     if ((sf === 'new' || (c.onlyNew && tab !== 'followed')) && !l.isNew) return false;
     if (sf === 'relance' && !relanceDue(follow[l.id] || {})) return false;
     const fu = follow[l.id] || {}, cf = $('contactFilter').value;
@@ -784,15 +822,17 @@ function visible() {
     return (typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'fr')) * sortDir;
   });
 }
-const STATUSES = ['', 'À traiter', 'Contacté', 'Rendez-vous', 'Gagné', 'Pas intéressé'];
+const STATUSES = ['', ...STAGES];
 function render() {
+  renderTodo(); renderSelBar();
+  if (tab === 'outbox') { $('statsBox').hidden = true; return renderOutbox(); }
   const list = visible(), box = $('results');
   $('statsBox').hidden = !list.length;
   if (list.length) {
     const hi = list.filter(l => l.score >= 60).length, nw = list.filter(l => l.isNew).length, due = list.filter(l => relanceDue(follow[l.id] || {})).length, cnt = {};
     list.forEach(l => { cnt[l.signal] = (cnt[l.signal] || 0) + 1; });
     const kpi = (cls, n, t) => `<div class="kpi ${cls}"><b>${n}</b><span>${t}</span></div>`;
-    $('stats').innerHTML = kpi('', list.length, 'lead(s) affiché(s)') + kpi('k-hi', hi, 'prioritaire(s), score ≥ 60') + (tab !== 'followed' ? kpi('k-new', nw, 'nouveau(x) depuis la dernière recherche') : kpi('', list.filter(l => follow[l.id]?.status === 'Gagné').length, 'gagné(s)')) + kpi('k-due', due, 'relance(s) à faire') +
+    $('stats').innerHTML = kpi('', list.length, 'lead(s) affiché(s)') + kpi('k-hi', hi, 'prioritaire(s), score ≥ 60') + (tab !== 'followed' ? kpi('k-new', nw, 'nouveau(x) depuis la dernière recherche') : kpi('', list.filter(l => follow[l.id]?.status === 'Lettre de mission signée').length, 'lettre(s) de mission signée(s)')) + kpi('k-due', due, 'relance(s) à faire') +
       `<div class="breakdown"><span><b>${list.filter(l => follow[l.id]?.email).length}</b> avec e-mail</span><span><b>${list.filter(l => follow[l.id]?.phone).length}</b> avec téléphone</span>${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span><b>${v}</b> ${esc(k)}</span>`).join('')}</div>`;
   }
   if (!list.length) {
@@ -801,7 +841,7 @@ function render() {
     return;
   }
   const th = (k, t, cls = '') => `<th data-sort="${k}" class="${cls}">${t}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
-  box.innerHTML = `<table class="leads"><thead><tr>${th('score', 'Score')}${th('nom', 'Société')}${th('date', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeant et contact</th><th class="c-follow">Suivi</th></tr></thead>${list.map(row).join('')}</table>`;
+  box.innerHTML = `<table class="leads"><thead><tr><th data-sort="score"><input type="checkbox" class="selall" aria-label="Tout sélectionner" ${list.length && list.every(l => selected.has(l.id)) ? 'checked' : ''}>Score${sortKey === 'score' ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>${th('nom', 'Société')}${th('date', 'Événement')}${th('activite', 'Activité')}${th('ville', 'Lieu')}<th>Dirigeant et contact</th><th class="c-follow">Suivi</th></tr></thead>${list.map(row).join('')}</table>`;
 }
 const TAG_CLASS = [[/Reprise|Rachat/, 't-reprise'], [/Transfert/, 't-move'], [/dirigeant|forme|capital|activité/, 't-dir'], [/Recrute/, 't-job'], [/établissement/, 't-etab']];
 let openRows = new Set(), expandAll = store.get('expandAll', false);
@@ -811,12 +851,12 @@ function row(l) {
   const q = encodeURIComponent(((dir || '').split(/[;,]/)[0].replace(/^[^:]*:\s*/, '') + ' ' + l.nom).trim());
   const lieu = l.adresse || [l.cp, l.ville].filter(Boolean).join(' '), nom = encodeURIComponent(l.nom);
   const tag = (TAG_CLASS.find(([re]) => re.test(l.signal)) || [])[1] || '';
-  const open = expandAll || openRows.has(l.id), done = f.status === 'Pas intéressé' || f.status === 'Gagné';
+  const open = expandAll || openRows.has(l.id), done = ['Lettre de mission signée', 'Perdu', 'Ne plus contacter'].includes(f.status);
   const nbSoc = Object.keys(f.socials || {}).length;
   const link = (href, t) => `<a href="${esc(href)}" target="_blank" rel="noopener">${t}</a>`;
   return `<tbody class="lead${open ? ' open' : ''}${done ? ' done' : ''}" data-id="${id}">
   <tr class="main">
-    <td class="c-score"><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
+    <td class="c-score"><label class="selbox" title="Sélectionner pour préparer plusieurs séquences"><input type="checkbox" class="sel" data-id="${id}" ${selected.has(l.id) ? 'checked' : ''} aria-label="Sélectionner ${esc(l.nom)}"></label><span class="score ${cls}" title="${esc((l.why || []).map(([t, n]) => (n >= 0 ? '+' : '') + n + ' ' + t).join('\n'))}">${l.score}</span></td>
     <td class="c-soc"><div class="name">${esc(l.nom)}${l.isNew && tab !== 'followed' ? '<span class="new">NOUVEAU</span>' : ''}${relanceDue(f) ? '<span class="due">RELANCE</span>' : ''}</div>
       <div class="sub">${esc([shortForme(l.forme), l.siren && l.siren.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'), l.capital != null && 'capital ' + money(l.capital)].filter(Boolean).join(' · '))}</div>
       ${nbSoc ? `<div class="meta"><span class="ok">● ${nbSoc} réseau${nbSoc > 1 ? 'x' : ''}</span></div>` : ''}</td>
@@ -825,7 +865,7 @@ function row(l) {
     <td class="c-lieu">${esc(l.ville)}${l.cp ? `<div class="sub">${esc(l.cp)}</div>` : ''}</td>
     <td class="c-dir"><div class="detail clamp" style="margin-top:0" title="Cliquer pour tout lire">${esc(dir || '')}</div>${f.email ? `<a class="contact-line" href="mailto:${esc(f.email)}" title="${esc(f.found?.by ? 'Trouvé par ' + f.found.by : '')}">✉ ${esc(f.email)}</a>` : ''}${f.phone ? `<a class="contact-line" href="tel:${esc(f.phone.replace(/[^\d+]/g, ''))}">☎ ${esc(f.phone)}</a>` : ''}${l.contact ? `<div class="sub">Contact de l'offre : ${esc(l.contact.nom || '')}${l.contact.courriel ? ` <a href="mailto:${esc(l.contact.courriel)}">${esc(l.contact.courriel)}</a>` : ''}${l.contact.telephone ? ' · ' + esc(l.contact.telephone) : ''}</div>` : ''}</td>
     <td class="c-follow"><select data-id="${id}" class="st" data-s="${esc(f.status || '')}" aria-label="Statut">${STATUSES.map(s => `<option ${s === (f.status || '') ? 'selected' : ''} value="${s}">${s || 'Statut…'}</option>`).join('')}</select>
-      <div class="actions"><button class="btn sm msg" data-id="${id}">${relanceDue(f) ? 'Relancer' : 'Message'}</button><button class="toggle" data-id="${id}" aria-expanded="${open}" title="Coordonnées, liens et notes">▾</button></div></td>
+      <div class="actions"><button class="btn sm seq" data-id="${id}">${relanceDue(f) ? 'Relancer' : drafts.some(d => d.leadId === l.id && d.status === 'draft') ? 'Boîte d\'envoi' : CLOSED.includes(f.status) ? 'Séquence arrêtée' : 'Préparer la séquence'}</button><button class="toggle" data-id="${id}" aria-expanded="${open}" title="Coordonnées, liens et notes">▾</button></div></td>
   </tr>
   <tr class="detail"><td colspan="7"><div class="panel">
     <section><h4>Coordonnées</h4>
@@ -837,6 +877,7 @@ function row(l) {
     <section><h4>Suivi</h4>
       <label class="sub">Relance prévue le <input type="date" data-id="${id}" data-k="relance" class="ct" value="${esc(f.relance || '')}"></label>
       <textarea data-id="${id}" class="nt" rows="3" placeholder="Note…">${esc(f.note || '')}</textarea>
+      <button class="btn sec sm msg" data-id="${id}">Courrier ou LinkedIn</button>
       ${(f.contacts || []).length ? `<div class="history">${f.contacts.map(x => `<span>${esc(x.canal)} le ${datefr(x.date)}${x.by ? ' · ' + esc(x.by) : ''}</span>`).join('')}</div>` : ''}
       ${f.by ? `<div class="sub">Modifié par ${esc(f.by)} le ${datefr(f.updated)}</div>` : ''}
     </section>
@@ -1061,7 +1102,7 @@ async function findEverything() {
     openSettings(); $('contactBox').open = true;
     return setStatus("Ajoute au moins une clé dans « Recherche d'e-mails et de téléphones » (Hunter est gratuit : 50 adresses par mois).", true);
   }
-  const todo = visible().filter(l => { const f = follow[l.id] || {}; return !f.email && !l.anonymous && !['Gagné', 'Pas intéressé'].includes(f.status); })
+  const todo = visible().filter(l => { const f = follow[l.id] || {}; return !f.email && !l.anonymous && !['Lettre de mission signée', 'Perdu', 'Ne plus contacter'].includes(f.status); })
     .sort((a, b) => b.score - a.score).slice(0, 50);
   if (!todo.length) return setStatus('Tous les leads affichés ont déjà un e-mail.');
   if (paid && !confirm(`Chercher les e-mails et téléphones de ${todo.length} société(s), des mieux notées aux moins bien notées ?\n\nLe site de la société est lu en premier (gratuit) ; chaque adresse trouvée par un fournisseur consomme en général un crédit chez lui.`)) return;
@@ -1114,7 +1155,7 @@ function setFollow(id, patch) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const { _texte, ...keep } = l;
   follow[id] = { ...(follow[id] || {}), ...patch, lead: keep, updated: new Date().toISOString(), ...(team && teamOn ? { by: team.user } : {}) };
-  if (!['status', 'note', 'email', 'phone', 'site', 'found', 'tried', 'relance', 'contacts', 'socials'].some(k => follow[id][k] && (typeof follow[id][k] !== 'object' || Object.keys(follow[id][k]).length))) delete follow[id];
+  if (!['status', 'note', 'email', 'phone', 'site', 'found', 'tried', 'relance', 'contacts', 'socials', 'seq'].some(k => follow[id][k] && (typeof follow[id][k] !== 'object' || Object.keys(follow[id][k]).length))) delete follow[id];
   store.set('follow', follow);
   pushPatch(id, patch, keep);
 }
@@ -1139,12 +1180,12 @@ const ACCROCHES = [
   [/Recrute/, 'J\'ai vu que {societe} recrutait un profil comptable.', 'Avant de recruter, externaliser tout ou partie de la comptabilité est souvent plus simple et moins coûteux. Nous pouvons vous proposer une solution complète, ou un appui le temps du recrutement.'],
   [/./, 'J\'ai vu passer l\'actualité récente de {societe}.', 'Nous accompagnons les dirigeants de TPE et PME en comptabilité, fiscalité, paie et conseil, avec un interlocuteur dédié.'],
 ];
-const CABINET_FIELDS = [['cabinet', 'Nom du cabinet'], ['signataire', 'Signataire (prénom nom)'], ['fonction', 'Fonction'], ['tel', 'Téléphone'], ['email', 'E-mail'], ['adresse', 'Adresse (courrier)'], ['ville', 'Ville']];
-let cabinet = { cabinet: '', signataire: '', fonction: 'Expert-comptable', tel: '', email: '', adresse: '', ville: '', ...store.get('cabinet', {}) };
+const CABINET_FIELDS = [['cabinet', 'Nom du cabinet'], ['signataire', 'Signataire (prénom nom)'], ['fonction', 'Titre'], ['tel', 'Téléphone'], ['email', 'E-mail du cabinet'], ['adresse', 'Adresse postale'], ['ville', 'Ville (courrier)'], ['rdv', 'Lien de prise de rendez-vous'], ['unsub', 'Ligne de désinscription']];
+let cabinet = { cabinet: '', signataire: '', fonction: 'Expert-comptable', tel: '', email: '', adresse: '', ville: '', rdv: '', unsub: 'Pour ne plus recevoir de message de notre part, répondez simplement « STOP » à cet e-mail.', ...store.get('cabinet', {}) };
 let templates = { ...DEFAULT_TEMPLATES, ...store.get('templates', {}) };
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (d, n) => new Date(new Date(d).getTime() + n * 864e5).toISOString().slice(0, 10);
-const relanceDue = f => f.relance && f.relance <= today() && !['Gagné', 'Pas intéressé'].includes(f.status);
+const relanceDue = f => Boolean(f && f.relance && f.relance <= today() && !CLOSED.includes(f.status));
 
 function messageVars(l, f) {
   const p = personOf(l), acc = ACCROCHES.find(([re]) => re.test(l.signal)) || ACCROCHES[ACCROCHES.length - 1];
@@ -1162,22 +1203,33 @@ function messageVars(l, f) {
   return { v, fill: t => fill(t) };
 }
 function renderMsgSettings() {
-  $('cabFields').innerHTML = CABINET_FIELDS.map(([k, t]) => `<div><label class="f" for="cab_${k}">${t}</label><input type="text" id="cab_${k}" value="${esc(cabinet[k] || '')}"></div>`).join('');
+  $('cabFields').innerHTML = CABINET_FIELDS.map(([k, t]) => `<div${k === 'unsub' || k === 'adresse' || k === 'rdv' ? ' style="grid-column:1/-1"' : ''}><label class="f" for="cab_${k}">${t}</label><input type="text" id="cab_${k}" value="${esc(cabinet[k] || '')}"${k === 'rdv' ? ' placeholder="https://… (facultatif)"' : ''}></div>`).join('');
+  $('seq_d1').value = seqCfg.d1; $('seq_d2').value = seqCfg.d2;
+  const cur = $('seq_type').value || 'creation';
+  $('seq_type').innerHTML = SEQ_TYPES.map(([k, t]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${t}</option>`).join('');
+  const T = seqTemplates[cur];
+  $('seqFields').innerHTML = ['e1', 'r1', 'r2'].map(st => `<div><label class="f" for="seq_${st}_s">${STEP_LABEL[st]} · objet</label><input type="text" id="seq_${st}_s" value="${esc(T[st].subject)}">
+    <label class="f" for="seq_${st}_b" style="margin-top:6px">${STEP_LABEL[st]} · texte (${STEP_LIMIT[st]} mots au plus)</label><textarea id="seq_${st}_b" rows="${st === 'r2' ? 4 : 7}">${esc(T[st].body)}</textarea></div>`).join('');
   const ta = (k, t, rows) => `<div style="grid-column:1/-1"><label class="f" for="tpl_${k}">${t}</label>${rows === 1 ? `<input type="text" id="tpl_${k}" value="${esc(templates[k])}">` : `<textarea id="tpl_${k}" rows="${rows}">${esc(templates[k])}</textarea>`}</div>`;
-  $('tplFields').innerHTML = ta('emailSubject', 'E-mail : objet', 1) + ta('email', 'E-mail : texte', 8) + ta('courrier', 'Courrier : texte', 8) + ta('linkedin', 'LinkedIn : invitation (300 caractères au plus)', 3) + ta('relanceSubject', 'Relance : objet', 1) + ta('relance', 'Relance : texte', 6);
+  $('tplFields').innerHTML = ta('courrier', 'Courrier : texte', 8) + ta('linkedin', 'LinkedIn : invitation (300 caractères au plus)', 3);
 }
 function saveMsgSettings() {
   for (const [k] of CABINET_FIELDS) cabinet[k] = $('cab_' + k).value.trim();
-  for (const k of Object.keys(DEFAULT_TEMPLATES)) templates[k] = $('tpl_' + k).value;
-  store.set('cabinet', cabinet); store.set('templates', templates); pushSettings({ cabinet, templates });
+  for (const k of ['courrier', 'linkedin']) templates[k] = $('tpl_' + k).value;
+  const d1 = Math.max(1, Math.round(Number($('seq_d1').value) || 4)), d2 = Math.max(d1 + 1, Math.round(Number($('seq_d2').value) || 10));
+  seqCfg = { d1, d2 };
+  const T = seqTemplates[$('seq_type').value || 'creation'];
+  for (const st of ['e1', 'r1', 'r2']) T[st] = { subject: $('seq_' + st + '_s').value, body: $('seq_' + st + '_b').value };
+  store.set('cabinet', cabinet); store.set('templates', templates); store.set('seqTemplates', seqTemplates); store.set('seqCfg', seqCfg);
+  pushSettings({ cabinet, templates, seqTemplates, seqCfg });
 }
 
 let msg = null; // { id, canal }
-const CANAUX = ['E-mail', 'Courrier', 'LinkedIn', 'Relance'];
+const CANAUX = ['Courrier', 'LinkedIn'];
 function openMessage(id, canal) {
   const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) return;
   const f = follow[id] || {};
-  canal = canal || (relanceDue(f) ? 'Relance' : (f.email || l.contact?.courriel) ? 'E-mail' : 'Courrier');
+  canal = CANAUX.includes(canal) ? canal : 'Courrier';
   msg = { id, canal };
   const { fill } = messageVars(l, f), email = f.email || l.contact?.courriel || '';
   const subject = canal === 'E-mail' ? fill(templates.emailSubject) : canal === 'Relance' ? fill(templates.relanceSubject) : '';
@@ -1190,7 +1242,7 @@ function openMessage(id, canal) {
     ${canal === 'E-mail' || canal === 'Relance' ? `<label class="f" for="m_to">À</label><input type="email" id="m_to" value="${esc(email)}" placeholder="Adresse du dirigeant"><label class="f" for="m_subject" style="margin-top:8px">Objet</label><input type="text" id="m_subject" value="${esc(subject)}">` : ''}
     <label class="f" for="m_body" style="margin-top:8px">Message ${canal === 'LinkedIn' ? '<span id="m_count"></span>' : ''}</label>
     <textarea id="m_body" rows="${canal === 'LinkedIn' ? 4 : 14}">${esc(body)}</textarea>
-    ${/\[(cabinet|signataire|téléphone|e-mail)\]/.test(body) ? '<div class="hint" style="color:var(--orange)">Renseigne les informations du cabinet dans « Mes messages et relances ».</div>' : ''}
+    ${/\[(cabinet|signataire|téléphone|e-mail)\]/.test(body) ? '<div class="hint" style="color:var(--orange)">Renseigne les informations du cabinet dans Réglages › Réglages prospection.</div>' : ''}
     <div class="bar" style="margin-top:12px">
       ${canal === 'E-mail' || canal === 'Relance' ? '<button class="btn" data-m="mail">Ouvrir dans ma messagerie</button>' : ''}
       ${canal === 'Courrier' ? '<button class="btn" data-m="print">Imprimer le courrier</button>' : ''}
@@ -1198,7 +1250,7 @@ function openMessage(id, canal) {
       <button class="btn sec" data-m="copy">Copier</button><span class="grow"></span>
       <button class="btn sec" data-m="sent">Marquer comme envoyé${canal === 'Relance' ? ` (relance n° ${nbRel + 1})` : ''}</button>
     </div>
-    <div class="hint">« Marquer comme envoyé » passe le lead en « Contacté » et programme une relance dans 15 jours (pas de nouvelle relance après la deuxième).</div>
+    <div class="hint">Les e-mails passent par « Préparer la séquence » et la boîte d'envoi. « Marquer comme envoyé » passe le lead en « Contacté » et programme la relance 1 (délai des réglages de prospection).</div>
   </div>`;
   $('modal').hidden = false;
   const count = () => { const n = $('m_body').value.length; if ($('m_count')) { $('m_count').textContent = `(${n} / 300)`; $('m_count').style.color = n > 300 ? 'var(--red)' : ''; } };
@@ -1218,8 +1270,7 @@ function printLetter(l) {
 }
 function markSent(id, canal) {
   const f = follow[id] || {}, contacts = [...(f.contacts || []), { date: today(), canal, by: team?.user || '' }];
-  const nbRel = contacts.filter(x => x.canal === 'Relance').length;
-  const patch = { contacts, relance: canal === 'Relance' && nbRel >= 2 ? '' : addDays(today(), 15), note: [f.note, `${canal} envoyé le ${datefr(today())}`].filter(Boolean).join('\n') };
+  const patch = { contacts, relance: CLOSED.includes(f.status) ? '' : f.relance || addDays(today(), seqCfg.d1), note: [f.note, `${canal} envoyé le ${datefr(today())}`].filter(Boolean).join('\n') };
   if (!f.status || f.status === 'À traiter') patch.status = 'Contacté';
   const to = $('m_to')?.value.trim(); if (to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) && !f.email) patch.email = to;
   setFollow(id, patch); closeMessage(); render();
@@ -1255,6 +1306,7 @@ function teamState(t, err) {
 /* Le serveur fait foi ; les modifications pas encore envoyées sont réappliquées par-dessus. */
 function adoptServer(server) {
   follow = server || {};
+  Object.values(follow).forEach(migrateEntry);
   for (const p of outbox) follow[p.id] = { ...(follow[p.id] || {}), ...p.patch, lead: p.lead };
   store.set('follow', follow);
 }
@@ -1306,6 +1358,8 @@ function applySettings(s, firstTime) {
   if (s.cabinet) { cabinet = { ...cabinet, ...s.cabinet }; store.set('cabinet', cabinet); renderMsgSettings(); }
   else if (firstTime && cabinet.cabinet) pushSettings({ cabinet });
   if (s.templates) { templates = { ...DEFAULT_TEMPLATES, ...s.templates }; store.set('templates', templates); renderMsgSettings(); }
+  if (s.seqTemplates) { store.set('seqTemplates', s.seqTemplates); seqTemplates = loadSeqTemplates(); renderMsgSettings(); }
+  if (s.seqCfg) { seqCfg = { ...seqCfg, ...s.seqCfg }; store.set('seqCfg', seqCfg); renderMsgSettings(); }
 }
 
 /* ---------- Site de la société et réseaux sociaux ---------- */
@@ -1394,12 +1448,251 @@ function socialLinks(f) {
   return Object.entries(f.socials || {}).map(([k, v]) => `<a class="found" href="${esc(v)}" target="_blank" rel="noopener">${esc(SOCIAL_LABELS[k] || k)} ✓</a>`).join('');
 }
 
+/* ---------- Séquences d'e-mails, boîte d'envoi, pipeline ---------- */
+const SEQ_TYPES = [['creation', 'Création de société'], ['transfert', 'Transfert de siège'], ['dirigeant', 'Changement de dirigeant'], ['capital', 'Modification de capital'], ['autre', 'Autre modification']];
+const STEP_LABEL = { e1: 'E-mail 1', r1: 'Relance 1', r2: 'Relance 2' };
+const STEP_LIMIT = { e1: 75, r1: 75, r2: 40 };
+const NEXT_STAGE = { e1: 'Contacté', r1: 'Relance 1', r2: 'Relance 2' };
+const DEFAULT_UNSUB = 'Pour ne plus recevoir de message de notre part, répondez simplement « STOP » à cet e-mail.';
+/* Modèles par défaut : vouvoiement, ton sobre, ni promesse de prix ni comparaison (déontologie de l'Ordre).
+ * La signature du cabinet et la ligne de désinscription sont ajoutées automatiquement à chaque e-mail. */
+const DEFAULT_SEQ = {
+  creation: {
+    e1: { subject: "{societe} : félicitations pour votre immatriculation", body: "Bonjour {prenom} {nom},\n\nJ'ai pris connaissance de l'immatriculation de {societe} à {ville}, publiée le {date_evenement}. Félicitations pour le lancement de votre activité ({activite}).\n\nLes premiers mois posent des choix structurants : régime de TVA, imposition des bénéfices, rémunération du dirigeant. Je serais heureux d'en échanger avec vous si cela vous est utile.\n\nPrendre rendez-vous : {lien_rdv}\n\nBien cordialement," },
+    r1: { subject: "Re : {societe} : vos premières échéances", body: "Bonjour {prenom} {nom},\n\nJe me permets de revenir vers vous. Après une création, plusieurs décisions arrivent vite : option pour le régime de TVA, choix entre IS et IR lorsque c'est possible, déclaration initiale de CFE, aides à la création. Un échange de vingt minutes suffit souvent à les clarifier.\n\nJe reste à votre disposition.\n\nBien cordialement," },
+    r2: { subject: "Re : {societe}", body: "Bonjour {prenom} {nom},\n\nJe ne souhaite pas vous importuner : si un échange sur la comptabilité de {societe} vous est utile plus tard, je reste joignable.\n\nBien cordialement," },
+  },
+  transfert: {
+    e1: { subject: "{societe} : votre installation à {ville}", body: "Bonjour {prenom} {nom},\n\nJ'ai pris connaissance du transfert du siège de {societe} à {ville}, publié le {date_evenement}. Bienvenue dans le secteur.\n\nUn changement de siège s'accompagne de quelques formalités : service des impôts de rattachement, CFE, information des partenaires. Si un accompagnement de proximité vous intéresse, je serais heureux d'en parler.\n\nPrendre rendez-vous : {lien_rdv}\n\nBien cordialement," },
+    r1: { subject: "Re : votre installation à {ville}", body: "Bonjour {prenom} {nom},\n\nJe me permets de revenir vers vous. Après un transfert, il est utile de vérifier le nouveau service des impôts des entreprises, la CFE de la commune d'arrivée et le calendrier des déclarations de l'année. C'est souvent le bon moment pour faire le point sur la tenue comptable.\n\nJe reste à votre disposition.\n\nBien cordialement," },
+    r2: { subject: "Re : {societe}", body: "Bonjour {prenom} {nom},\n\nJe ne souhaite pas vous importuner : si un échange sur la comptabilité de {societe} vous est utile plus tard, je reste joignable.\n\nBien cordialement," },
+  },
+  dirigeant: {
+    e1: { subject: "{societe} : votre prise de fonctions", body: "Bonjour {prenom} {nom},\n\nJ'ai pris connaissance du changement de dirigeant de {societe}, publié le {date_evenement}. Félicitations pour cette prise de fonctions.\n\nUn changement de direction est souvent l'occasion de faire le point sur la comptabilité, la fiscalité et les tableaux de bord de la société. Je serais heureux d'en échanger avec vous.\n\nPrendre rendez-vous : {lien_rdv}\n\nBien cordialement," },
+    r1: { subject: "Re : {societe} : votre prise de fonctions", body: "Bonjour {prenom} {nom},\n\nJe me permets de revenir vers vous. Lors d'une prise de fonctions, trois points méritent l'attention : les comptes du dernier exercice, les prochaines échéances fiscales et sociales, et votre statut de dirigeant (rémunération, régime social).\n\nJe reste à votre disposition pour en parler.\n\nBien cordialement," },
+    r2: { subject: "Re : {societe}", body: "Bonjour {prenom} {nom},\n\nJe ne souhaite pas vous importuner : si un échange sur la comptabilité de {societe} vous est utile plus tard, je reste joignable.\n\nBien cordialement," },
+  },
+  capital: {
+    e1: { subject: "{societe} : évolution de votre capital", body: "Bonjour {prenom} {nom},\n\nJ'ai pris connaissance de la modification du capital de {societe}, publiée le {date_evenement}.\n\nUne opération sur le capital a des incidences comptables et fiscales : écritures, formalités, mise à jour des statuts. Si vous souhaitez un regard extérieur sur ces sujets, je serais heureux d'en échanger avec vous.\n\nPrendre rendez-vous : {lien_rdv}\n\nBien cordialement," },
+    r1: { subject: "Re : {societe} : évolution de votre capital", body: "Bonjour {prenom} {nom},\n\nJe me permets de revenir vers vous. Après une opération sur le capital, il est utile de vérifier le traitement comptable des apports, les conditions du taux réduit d'impôt sur les sociétés (capital entièrement libéré, détention) et les formalités restantes.\n\nJe reste à votre disposition.\n\nBien cordialement," },
+    r2: { subject: "Re : {societe}", body: "Bonjour {prenom} {nom},\n\nJe ne souhaite pas vous importuner : si un échange sur la comptabilité de {societe} vous est utile plus tard, je reste joignable.\n\nBien cordialement," },
+  },
+  autre: {
+    e1: { subject: "{societe} : votre actualité", body: "Bonjour {prenom} {nom},\n\nJ'ai pris connaissance de {evenement} concernant {societe} à {ville}, publié le {date_evenement}.\n\nCes évolutions ont souvent des conséquences comptables et fiscales qu'il est utile d'anticiper. Je serais heureux d'en échanger avec vous si cela vous est utile.\n\nPrendre rendez-vous : {lien_rdv}\n\nBien cordialement," },
+    r1: { subject: "Re : {societe} : votre actualité", body: "Bonjour {prenom} {nom},\n\nJe me permets de revenir vers vous. Selon votre situation, quelques points méritent d'être vérifiés : régime de TVA, prochaines échéances fiscales, organisation de la tenue comptable. Un échange de vingt minutes suffit souvent à les clarifier.\n\nJe reste à votre disposition.\n\nBien cordialement," },
+    r2: { subject: "Re : {societe}", body: "Bonjour {prenom} {nom},\n\nJe ne souhaite pas vous importuner : si un échange sur la comptabilité de {societe} vous est utile plus tard, je reste joignable.\n\nBien cordialement," },
+  },
+};
+const EVENT_PHRASES = [[/Création/, "l'immatriculation"], [/Reprise/, "la reprise d'un fonds"], [/Rachat/, "le rachat d'un fonds de commerce"], [/Transfert/, 'le transfert du siège'], [/dirigeant/, "la nomination d'un nouveau dirigeant"],
+  [/forme/, 'le changement de forme juridique'], [/capital/, 'la modification du capital'], [/activité/, "le changement d'activité"], [/établissement/, "l'ouverture d'un nouvel établissement"], [/Recrute/, "la publication d'une offre de poste comptable"]];
+const GENERIC_EMAIL = /^(contact|info|infos|hello|bonjour|accueil|admin|administration|secretariat|office|commercial|direction|support|service|compta|comptabilite|rh|recrutement|jobs|noreply|no-reply)@/i;
+const ACTIVE_STOP = ['Perdu', 'Ne plus contacter'];
+const clone = o => JSON.parse(JSON.stringify(o));
+function loadSeqTemplates() {
+  const saved = store.get('seqTemplates', {}), t = clone(DEFAULT_SEQ);
+  for (const [type] of SEQ_TYPES) for (const s of ['e1', 'r1', 'r2']) if (saved?.[type]?.[s]) t[type][s] = { ...t[type][s], ...saved[type][s] };
+  return t;
+}
+let seqTemplates = loadSeqTemplates();
+let seqCfg = { d1: 4, d2: 10, ...store.get('seqCfg', {}) };
+let drafts = (() => { const d = store.get('drafts', []); return Array.isArray(d) ? d : []; })();
+let obFilter = 'ready', obLead = '', selected = new Set();
+const saveDrafts = () => store.set('drafts', drafts);
+const titleCase = s => String(s || '').toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+const dateLong = d => { try { return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return datefr(d); } };
+
+function seqType(l) {
+  if (l.sig === 'transfert') return 'transfert';
+  if (l.sig === 'dirigeant') return 'dirigeant';
+  if (l.sig === 'capital') return 'capital';
+  if ((l.famille === 'creation' || l.famille === 'immatriculation') && !l.etablissement) return 'creation';
+  return 'autre';
+}
+/* Activité en quelques mots : libellé NAF, sinon début de l'objet social. */
+function activityShort(l) {
+  let a = l.naf ? String(l.naf).split(' — ').slice(1).join(' — ') : '';
+  if (!a) a = String(l.activite || '').replace(/^(la soci[ée]t[ée] a pour objet|objet)\s*[:,]?\s*/i, '').replace(/^,?\s*en france (et|comme) (à|a) l['’]?[ée]tranger\s*[:,]?\s*/i, '').replace(/^[-–\s:]+/, '');
+  a = a.split(/[.;:(]|\s-\s/)[0].trim();
+  if (a.length > 70) a = a.slice(0, 70).replace(/\s+\S*$/, '');
+  return a ? a.charAt(0).toLowerCase() + a.slice(1) : '';
+}
+function seqVars(l) {
+  const p = personOf(l), d = (l.famille === 'creation' || l.famille === 'immatriculation') && l.dateImmat ? l.dateImmat : l.date;
+  return {
+    prenom: p ? titleCase(p.prenom) : '', nom: p ? titleCase(p.nom) : '', societe: l.nom || '', ville: l.ville || '', activite: activityShort(l),
+    date_evenement: d ? dateLong(String(d).slice(0, 10)) : '', evenement: ((EVENT_PHRASES.find(([re]) => re.test(l.signal || '')) || [])[1]) || String(l.signal || '').toLowerCase(),
+    cabinet: cabinet.cabinet, signataire: cabinet.signataire, titre: cabinet.fonction, telephone: cabinet.tel, adresse_cabinet: cabinet.adresse, lien_rdv: cabinet.rdv,
+  };
+}
+/* Remplace les variables connues ; une variable vide reste visible pour que le contrôle la signale.
+ * Exceptions : sans lien de rendez-vous, la ligne qui le contient est retirée ; une activité inconnue
+ * entre parenthèses disparaît avec ses parenthèses. */
+function fillSeq(text, v) {
+  let t = String(text);
+  if (!v.activite) t = t.replace(/\s*\(\{activite\}\)/g, ''); // activité inconnue : la parenthèse est retirée
+  if (!v.lien_rdv) t = t.split('\n').filter(line => !line.includes('{lien_rdv}')).join('\n').replace(/\n{3,}/g, '\n\n');
+  return t.replace(/\{(\w+)\}/g, (m, k) => (v[k] ?? '') !== '' ? v[k] : m);
+}
+function signatureBlock() {
+  const c = cabinet, line = (v, ph) => v || ph;
+  return ['-- ', line(c.signataire, '{signataire}'), [line(c.fonction, '{titre}'), line(c.cabinet, '{cabinet}')].join(' – '), line(c.tel, '{telephone}'), line(c.adresse, '{adresse_cabinet}')].join('\n')
+    + '\n\n' + (c.unsub || DEFAULT_UNSUB);
+}
+function makeDraft(l, f, step) {
+  const type = seqType(l), tpl = seqTemplates[type][step], v = seqVars(l);
+  return { id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), leadId: l.id, lead: l.nom, step, type, to: f.email || l.contact?.courriel || '',
+    subject: fillSeq(tpl.subject, v), body: fillSeq(tpl.body, v) + '\n\n' + signatureBlock(), created: new Date().toISOString(), status: 'draft' };
+}
+/* Date à laquelle l'étape est due : J+4 et J+10 après l'e-mail 1 (réglables). */
+function dueDate(d) {
+  const f = follow[d.leadId] || {}, e1 = f.seq?.e1;
+  if (d.step === 'e1') return '';
+  // La date de relance du suivi fait foi pour l'étape suivante (modifiable à la main).
+  const next = !f.seq?.r1 ? 'r1' : !f.seq?.r2 ? 'r2' : '';
+  if (d.step === next && f.relance) return f.relance;
+  if (d.step === 'r1') return e1 ? addDays(e1, seqCfg.d1) : f.relance || '';
+  const due = e1 ? addDays(e1, seqCfg.d2) : f.relance || '';
+  return f.seq?.r1 && due && due <= f.seq.r1 ? addDays(f.seq.r1, 1) : due;
+}
+function checkDraft(d) {
+  const errors = [], warnings = [], f = follow[d.leadId] || {}, st = f.status || '';
+  const left = [...new Set(`${d.subject}\n${d.body}`.match(/\{[a-z_]+\}/gi) || [])];
+  if (left.length) errors.push(`Variable non remplie : ${left.join(', ')}. ${left.some(x => /prenom|nom\}/.test(x)) ? 'Dirigeant inconnu : complétez avec l\'annuaire ou écrivez « Madame, Monsieur ». ' : ''}${left.some(x => /cabinet|signataire|titre|telephone|adresse_cabinet/.test(x)) ? 'Renseignez le cabinet dans Réglages › Réglages prospection.' : ''}`.trim());
+  const parts = d.body.split(/\n-- ?\n/), message = parts[0], sig = parts.slice(1).join('\n');
+  if (parts.length < 2) errors.push('Signature manquante : terminez le message par une ligne « -- » suivie de la signature du cabinet.');
+  else if (cabinet.cabinet && !sig.includes(cabinet.cabinet)) errors.push('Signature incomplète : le nom du cabinet n\'y figure pas.');
+  const unsub = (cabinet.unsub || DEFAULT_UNSUB).trim();
+  if (!d.body.includes(unsub)) errors.push('Ligne de désinscription manquante.');
+  const words = message.trim().split(/\s+/).filter(Boolean).length;
+  if (words > STEP_LIMIT[d.step]) errors.push(`Trop long : ${words} mots pour ${STEP_LIMIT[d.step]} au plus (hors signature).`);
+  const links = (`${d.subject} ${d.body}`.match(/https?:\/\/|www\./gi) || []).length;
+  if (links > 1) errors.push(`${links} liens : un seul lien est autorisé.`);
+  if (!d.subject.trim()) errors.push('Objet vide.');
+  const to = (d.to || '').trim();
+  if (!to) errors.push('Adresse du destinataire absente.');
+  else if (!EMAIL_RE.test(to)) errors.push('Adresse du destinataire invalide.');
+  else if (GENERIC_EMAIL.test(to)) warnings.push('Adresse générique (contact@, info@…) : le message risque de ne pas parvenir au dirigeant.');
+  if (ACTIVE_STOP.includes(st)) errors.push(`Lead marqué « ${st} » : envoi bloqué.`);
+  else if (CLOSED.includes(st)) errors.push(`Lead en « ${st} » : la séquence est arrêtée.`);
+  if (f.seq?.[d.step]) errors.push(`${STEP_LABEL[d.step]} déjà envoyé le ${datefr(f.seq[d.step])}.`);
+  if (d.step === 'r1' && !f.seq?.e1 && !(f.contacts || []).length) errors.push('Envoyez d\'abord l\'e-mail 1.');
+  if (d.step === 'r2' && !f.seq?.r1) errors.push('Envoyez d\'abord la relance 1.');
+  const due = dueDate(d);
+  if (due && due > today() && !errors.length) warnings.push(`Prévue le ${datefr(due)} : envoi anticipé.`);
+  return { errors, warnings, words };
+}
+const mailtoHref = d => `mailto:${encodeURIComponent(d.to.trim()).replace('%40', '@')}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`;
+function cancelDrafts(id) { const n = drafts.length; drafts = drafts.filter(d => !(d.leadId === id && d.status === 'draft')); if (drafts.length !== n) saveDrafts(); }
+function prepareSequence(ids) {
+  let made = 0; const skipped = [];
+  for (const id of ids) {
+    const l = leads.find(x => x.id === id) || follow[id]?.lead; if (!l) continue;
+    const f = follow[id] || {};
+    if (CLOSED.includes(f.status)) { skipped.push(`${l.nom} (${f.status})`); continue; }
+    const steps = ['e1', 'r1', 'r2'].filter(s => !f.seq?.[s] && !drafts.some(d => d.leadId === id && d.step === s && d.status === 'draft'));
+    if (!steps.length) { skipped.push(`${l.nom} (séquence déjà préparée)`); continue; }
+    if (!f.status) setFollow(id, { status: 'À traiter' });
+    for (const s of steps) drafts.push(makeDraft(l, follow[id] || f, s));
+    made++;
+  }
+  saveDrafts();
+  return { made, skipped };
+}
+/* Relances dues : crée le brouillon de l'étape suivante quand il manque. */
+function prepareDue(ids) {
+  for (const id of ids) {
+    const f = follow[id], l = f?.lead; if (!l || !relanceDue(f)) continue;
+    const step = !f.seq?.r1 ? 'r1' : !f.seq?.r2 ? 'r2' : '';
+    if (step && !drafts.some(d => d.leadId === id && d.step === step && d.status === 'draft')) drafts.push(makeDraft(l, f, step));
+  }
+  saveDrafts();
+}
+function confirmSent(did) {
+  const d = drafts.find(x => x.id === did); if (!d) return;
+  const chk = checkDraft(d);
+  if (chk.errors.length) return setStatus('Envoi bloqué : ' + chk.errors[0], true);
+  const f = follow[d.leadId] || {}, t = today(), seq = { ...(f.seq || {}), type: d.type, [d.step]: t };
+  const patch = { seq, status: NEXT_STAGE[d.step], contacts: [...(f.contacts || []), { date: t, canal: STEP_LABEL[d.step], by: team?.user || '' }],
+    note: [f.note, `${STEP_LABEL[d.step]} envoyé le ${datefr(t)}`].filter(Boolean).join('\n') };
+  if (d.step === 'e1') patch.relance = addDays(t, seqCfg.d1);
+  else if (d.step === 'r1') { const due2 = seq.e1 ? addDays(seq.e1, seqCfg.d2) : addDays(t, Math.max(1, seqCfg.d2 - seqCfg.d1)); patch.relance = due2 > t ? due2 : addDays(t, 1); }
+  else patch.relance = '';
+  if (!f.email && d.to) patch.email = d.to.trim();
+  setFollow(d.leadId, patch);
+  d.status = 'sent'; d.sentAt = t; saveDrafts(); render();
+  setStatus(`${STEP_LABEL[d.step]} à ${d.lead} enregistré comme envoyé. Étape : ${patch.status}.${patch.relance ? ` Prochaine relance le ${datefr(patch.relance)}.` : ' Séquence terminée.'}`);
+}
+function obState(d) {
+  if (d.status === 'sent') return 'sent';
+  const due = dueDate(d), f = follow[d.leadId] || {};
+  if (d.step === 'e1' || (due && due <= today() && (d.step === 'r1' ? f.seq?.e1 || (f.contacts || []).length : f.seq?.r1))) return 'ready';
+  return 'scheduled';
+}
+function renderOutbox() {
+  const box = $('results');
+  for (const d of drafts) if (d.status === 'draft' && !d.to && follow[d.leadId]?.email) d.to = follow[d.leadId].email;
+  const pendingList = drafts.filter(d => d.status === 'draft'), byState = { ready: [], scheduled: [], sent: [] };
+  for (const d of drafts) byState[obState(d)].push(d);
+  let list = obFilter === 'all' ? pendingList : obFilter === 'due' ? byState.ready.filter(d => d.step !== 'e1') : byState[obFilter] || [];
+  if (obLead) list = list.filter(d => d.leadId === obLead);
+  list.sort((a, b) => (dueDate(a) || a.created).localeCompare(dueDate(b) || b.created) || a.lead.localeCompare(b.lead, 'fr') || a.step.localeCompare(b.step));
+  if (obFilter === 'sent') list.reverse();
+  const opt = (v, t, n) => `<option value="${v}" ${obFilter === v ? 'selected' : ''}>${t} (${n})</option>`;
+  const lead = obLead && (follow[obLead]?.lead?.nom || drafts.find(d => d.leadId === obLead)?.lead);
+  box.innerHTML = `<div class="outbox">
+    <div class="bar ob-head"><b>Boîte d'envoi</b><span class="sub">Rien ne part sans votre confirmation.</span>${lead ? `<span class="chip">${esc(lead)} · <button class="linkbtn" data-ob="all-leads">tout afficher</button></span>` : ''}<span class="grow"></span>
+      <select id="obFilter" aria-label="Brouillons à afficher">${opt('ready', 'À envoyer maintenant', byState.ready.length)}${opt('due', 'Relances dues', byState.ready.filter(d => d.step !== 'e1').length)}${opt('scheduled', 'Programmées', byState.scheduled.length)}${opt('all', 'Tous les brouillons', pendingList.length)}${opt('sent', 'Envoyés', byState.sent.length)}</select></div>
+    ${list.length ? list.map(draftCard).join('') : `<div class="empty"><b>${obFilter === 'sent' ? 'Aucun e-mail envoyé' : 'Rien à envoyer pour l\'instant'}</b>Cliquez sur « Préparer la séquence » sur un lead, ou sélectionnez plusieurs leads puis « Préparer la séquence » dans la barre d'outils.</div>`}
+  </div>`;
+}
+function checksHtml(d) {
+  const c = checkDraft(d);
+  return `${c.errors.map(e => `<li class="ko">${esc(e)}</li>`).join('')}${c.warnings.map(w => `<li class="warn">${esc(w)}</li>`).join('')}${!c.errors.length && !c.warnings.length ? '<li class="ok">Contrôles validés.</li>' : ''}<li class="sub">${c.words} mot(s) sur ${STEP_LIMIT[d.step]} au plus, hors signature.</li>`;
+}
+function draftCard(d) {
+  const f = follow[d.leadId] || {}, due = dueDate(d), c = checkDraft(d), id = esc(d.id);
+  if (d.status === 'sent') return `<article class="draft sent" data-d="${id}"><div class="bar"><b>${esc(d.lead)}</b><span class="tag t-job">${STEP_LABEL[d.step]}</span><span class="sub">envoyé le ${datefr(d.sentAt)} à ${esc(d.to)}</span><span class="grow"></span><span class="sub">${esc(d.subject)}</span></div></article>`;
+  return `<article class="draft" data-d="${id}">
+    <div class="bar"><b>${esc(d.lead)}</b><span class="tag ${d.step === 'e1' ? '' : 't-dir'}">${STEP_LABEL[d.step]}</span><span class="sub">${d.step === 'e1' ? 'premier contact' : due ? (due <= today() ? `due le ${datefr(due)}${due < today() ? ' · en retard' : ''}` : `prévue le ${datefr(due)}`) : 'après l\'étape précédente'}</span>
+      <span class="grow"></span><span class="sub">Étape actuelle : ${esc(f.status || 'À traiter')}</span></div>
+    <div class="dgrid"><label class="f" for="to_${id}">À</label><input type="email" id="to_${id}" class="d-in" data-k="to" data-d="${id}" value="${esc(d.to)}" placeholder="Adresse du dirigeant">
+      <label class="f" for="su_${id}">Objet</label><input type="text" id="su_${id}" class="d-in" data-k="subject" data-d="${id}" value="${esc(d.subject)}"></div>
+    <textarea id="bo_${id}" class="d-in" data-k="body" data-d="${id}" rows="${d.step === 'r2' ? 11 : 17}" aria-label="Texte de l'e-mail">${esc(d.body)}</textarea>
+    <ul class="dchecks" id="ck_${id}">${checksHtml(d)}</ul>
+    <div class="bar"><button class="btn d-send" data-d="${id}" ${c.errors.length ? 'disabled' : ''}>Envoyer</button><button class="btn sec d-copy" data-d="${id}">Copier</button><button class="btn sec d-sent" data-d="${id}" ${c.errors.length ? 'disabled' : ''}>Confirmer : envoyé</button>
+      <span class="grow"></span><button class="btn ghost sm d-regen" data-d="${id}">Régénérer</button><button class="btn ghost sm d-del" data-d="${id}">Supprimer</button></div>
+    <div class="hint">« Envoyer » ouvre votre messagerie avec le message prêt ; envoyez-le depuis votre messagerie, puis cliquez sur « Confirmer : envoyé ».</div>
+  </article>`;
+}
+function refreshChecks(d) {
+  const ck = $('ck_' + d.id); if (!ck) return;
+  ck.innerHTML = checksHtml(d);
+  const blocked = checkDraft(d).errors.length > 0;
+  document.querySelectorAll(`article.draft[data-d="${d.id}"] .d-send, article.draft[data-d="${d.id}"] .d-sent`).forEach(b => { b.disabled = blocked; });
+}
+/* Bandeau « À faire aujourd'hui » : relances dues et en retard. */
+function renderTodo() {
+  const due = Object.entries(follow).filter(([, f]) => relanceDue(f)), late = due.filter(([, f]) => f.relance < today()).length;
+  const n = drafts.filter(d => d.status === 'draft').length;
+  $('outboxCount').textContent = n ? String(n) : ''; $('outboxCount').hidden = !n;
+  $('todoBanner').hidden = !due.length;
+  if (due.length) $('todoText').innerHTML = `<b>À faire aujourd'hui :</b> ${due.length} relance${due.length > 1 ? 's' : ''} due${due.length > 1 ? 's' : ''}${late ? `, dont <b>${late} en retard</b>` : ''}.`;
+}
+function openDue(ids) {
+  prepareDue(ids || Object.keys(follow).filter(id => relanceDue(follow[id])));
+  obFilter = 'due'; obLead = ids && ids.length === 1 ? ids[0] : ''; switchTab('outbox');
+}
+function renderSelBar() {
+  $('prepSel').hidden = !selected.size || tab === 'outbox';
+  $('prepSel').textContent = `Préparer la séquence (${selected.size})`;
+}
+
 /* ---------- export ---------- */
 function exportCsv() {
   const list = visible();
   const cols = [['Score', 'score'], ['Publié le', l => datefr(l.date)], ['Société', 'nom'], ['SIREN', 'siren'], ['Forme', 'forme'], ['Capital', 'capital'], ['Événement', 'signal'], ['Détail', 'texte'],
     ['Activité', l => l.activite || l.naf], ['Adresse', 'adresse'], ['Ville', 'ville'], ['Département', 'dep'], ['Dirigeants', l => l.dirigeantsAnnuaire || l.dirigeants],
-    ['E-mail', l => follow[l.id]?.email || ''], ['Trouvé par', l => follow[l.id]?.found?.by || ''], ['Site web', l => follow[l.id]?.site || ''], ...Object.entries(SOCIAL_LABELS).map(([k, t]) => [t, l => follow[l.id]?.socials?.[k] || '']), ['Téléphone', l => follow[l.id]?.phone || ''], ['Statut', l => follow[l.id]?.status || ''], ['Relance', l => datefr(follow[l.id]?.relance || '')], ['Contacts', l => (follow[l.id]?.contacts || []).map(x => x.canal + ' ' + datefr(x.date)).join(', ')], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
+    ['E-mail', l => follow[l.id]?.email || ''], ['Trouvé par', l => follow[l.id]?.found?.by || ''], ['Site web', l => follow[l.id]?.site || ''], ...Object.entries(SOCIAL_LABELS).map(([k, t]) => [t, l => follow[l.id]?.socials?.[k] || '']), ['Téléphone', l => follow[l.id]?.phone || ''], ['Étape', l => follow[l.id]?.status || ''], ['E-mail 1 envoyé', l => datefr(follow[l.id]?.seq?.e1 || '')], ['Relance 1 envoyée', l => datefr(follow[l.id]?.seq?.r1 || '')], ['Relance 2 envoyée', l => datefr(follow[l.id]?.seq?.r2 || '')], ['Prochaine relance', l => datefr(follow[l.id]?.relance || '')], ['Contacts', l => (follow[l.id]?.contacts || []).map(x => x.canal + ' ' + datefr(x.date)).join(', ')], ['Note', l => follow[l.id]?.note || ''], ['Annonce BODACC', 'url']];
   const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [cols.map(c => c[0]).join(';'), ...list.map(l => cols.map(([, k]) => cell(typeof k === 'function' ? k(l) : l[k])).join(';'))];
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -1412,15 +1705,29 @@ function exportCsv() {
 $('signals').innerHTML = SIGNALS.map(s => `<label><input type="checkbox" value="${s.id}" ${s.id !== 'capital' && s.id !== 'activite' ? 'checked' : ''}> ${esc(s.label)}</label>`).join('');
 loadCriteria();
 { const c = store.get('criteria', null); if (c?.signals) document.querySelectorAll('#signals input').forEach(x => { x.checked = c.signals.includes(x.value); }); }
-$('tabs').addEventListener('click', e => {
-  const b = e.target.closest('.tab'); if (!b || busy) return;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === b));
-  const prev = tab; tab = b.dataset.tab;
+function switchTab(name) {
+  if (busy) return;
+  const b = document.querySelector(`#tabs .tab[data-tab="${name}"]`); if (!b) return;
+  document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', t === b));
+  const prev = tab, side = x => x === 'followed' || x === 'outbox'; tab = name;
   $('signalsBox').hidden = tab !== 'change';
-  $('run').disabled = tab === 'followed'; $('enrich').disabled = tab === 'followed' || !leads.length;
-  if (prev !== tab && tab !== 'followed' && prev !== 'followed') { leads = []; $('csv').disabled = true; setStatus('Clique sur « Rechercher ».'); }
+  $('run').disabled = side(tab); $('enrich').disabled = side(tab) || !leads.length; $('findEmails').disabled = tab === 'outbox';
+  if (prev !== tab && !side(tab) && !side(prev)) { leads = []; $('csv').disabled = true; setStatus('Clique sur « Rechercher ».'); }
   if (tab === 'followed') $('csv').disabled = !Object.keys(follow).length;
+  if (tab === 'outbox') $('csv').disabled = true;
   render();
+}
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab'); if (!b) return;
+  if (b.dataset.tab === 'outbox') { obLead = ''; if (obFilter === 'due' && !Object.values(follow).some(relanceDue)) obFilter = 'ready'; }
+  switchTab(b.dataset.tab);
+});
+$('statusFilter').innerHTML = `<option value="">Toutes les étapes</option>${STAGES.map(s => `<option value="st:${s}">${s}</option>`).join('')}<option value="hide">Masquer Perdu et Ne plus contacter</option><option value="new">Nouveaux uniquement</option><option value="relance">Relances à faire</option>`;
+$('todoOpen').addEventListener('click', () => openDue());
+$('prepSel').addEventListener('click', () => {
+  const r = prepareSequence([...selected]); selected.clear();
+  setStatus(`${r.made} séquence(s) préparée(s) dans la boîte d'envoi.${r.skipped.length ? ' Non préparées : ' + r.skipped.join(', ') + '.' : ''}`, !r.made);
+  obFilter = 'ready'; obLead = ''; switchTab('outbox');
 });
 $('run').addEventListener('click', run);
 $('enrich').addEventListener('click', enrich);
@@ -1446,7 +1753,7 @@ $('clients').addEventListener('change', e => setClients(e.target.value));
 $('clientsImport').addEventListener('click', e => { e.preventDefault(); $('clientsFile').click(); });
 $('clientsFile').addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; setClients((await f.text()) + ' ' + $('clients').value); setStatus(`${clients.size} SIREN de clients exclus des résultats.`); e.target.value = ''; });
 $('backup').addEventListener('click', () => {
-  const data = { app: 'leads-expert-comptable', version: 1, date: new Date().toISOString(), follow, clients: [...clients], criteria: store.get('criteria', null) };
+  const data = { app: 'leads-expert-comptable', version: 2, date: new Date().toISOString(), follow, drafts, clients: [...clients], criteria: store.get('criteria', null), cabinet, templates, seqTemplates, seqCfg };
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
   a.download = `leads_suivi_${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   setStatus(`Sauvegarde téléchargée : ${Object.keys(follow).length} lead(s) suivi(s). Les clés API n'y figurent pas.`);
@@ -1458,8 +1765,14 @@ $('restoreFile').addEventListener('change', async e => {
     const d = JSON.parse(await f.text());
     if (d.app !== 'leads-expert-comptable' || typeof d.follow !== 'object') throw new Error();
     // Fusion : la fiche la plus récemment modifiée l'emporte.
-    for (const [k, v] of Object.entries(d.follow)) if (!follow[k] || String(v.updated || '') > String(follow[k].updated || '')) follow[k] = v;
+    for (const [k, v] of Object.entries(d.follow)) if (!follow[k] || String(v.updated || '') > String(follow[k].updated || '')) follow[k] = migrateEntry(v);
     store.set('follow', follow);
+    if (Array.isArray(d.drafts)) { const ids = new Set(drafts.map(x => x.id)); drafts.push(...d.drafts.filter(x => x && x.id && !ids.has(x.id))); saveDrafts(); }
+    if (d.cabinet) { cabinet = { ...cabinet, ...d.cabinet }; store.set('cabinet', cabinet); }
+    if (d.templates) { templates = { ...templates, ...d.templates }; store.set('templates', templates); }
+    if (d.seqTemplates) { store.set('seqTemplates', d.seqTemplates); seqTemplates = loadSeqTemplates(); }
+    if (d.seqCfg) { seqCfg = { ...seqCfg, ...d.seqCfg }; store.set('seqCfg', seqCfg); }
+    renderMsgSettings();
     if (Array.isArray(d.clients)) setClients([...clients, ...d.clients].join(' '));
     setStatus(`Sauvegarde restaurée : ${Object.keys(d.follow).length} lead(s) fusionné(s) avec ton suivi.`); render();
   } catch { setStatus('Fichier de sauvegarde illisible.', true); }
@@ -1489,6 +1802,35 @@ $('results').addEventListener('click', e => {
   const cl = e.target.closest('.clamp'); if (cl) return cl.classList.toggle('open');
   const h = e.target.closest('button.hf'); if (h) return findOne(h.dataset.id);
   const m = e.target.closest('button.msg'); if (m) return openMessage(m.dataset.id);
+  const sq = e.target.closest('button.seq');
+  if (sq) {
+    const id = sq.dataset.id, f = follow[id] || {};
+    if (relanceDue(f)) return openDue([id]);
+    if (CLOSED.includes(f.status)) return setStatus(`Lead en « ${f.status} » : pas de séquence.`, true);
+    const r = drafts.some(d => d.leadId === id && d.status === 'draft') ? { made: 1, skipped: [] } : prepareSequence([id]);
+    if (!r.made) return setStatus(r.skipped.join(', ') || 'Rien à préparer.', true);
+    obFilter = 'all'; obLead = id; return switchTab('outbox');
+  }
+  if (e.target.matches('input.sel, input.selall')) return;
+  /* Boîte d'envoi */
+  const ob = e.target.closest('[data-ob="all-leads"]'); if (ob) { obLead = ''; return render(); }
+  const db = e.target.closest('button[data-d]');
+  if (db) {
+    const d = drafts.find(x => x.id === db.dataset.d); if (!d) return;
+    if (db.classList.contains('d-send')) {
+      const c = checkDraft(d); if (c.errors.length) return setStatus('Envoi bloqué : ' + c.errors[0], true);
+      location.href = mailtoHref(d);
+      return setStatus('Votre messagerie s\'ouvre avec le message prêt. Envoyez-le, puis cliquez sur « Confirmer : envoyé ».');
+    }
+    if (db.classList.contains('d-copy')) return copyText(`À : ${d.to}\nObjet : ${d.subject}\n\n${d.body}`);
+    if (db.classList.contains('d-sent')) return confirmSent(d.id);
+    if (db.classList.contains('d-regen')) {
+      const l = leads.find(x => x.id === d.leadId) || follow[d.leadId]?.lead; if (!l) return;
+      const n = makeDraft(l, follow[d.leadId] || {}, d.step); Object.assign(d, { subject: n.subject, body: n.body, to: d.to || n.to, type: n.type }); saveDrafts(); render();
+      return setStatus('Brouillon régénéré à partir des modèles et des réglages actuels.');
+    }
+    if (db.classList.contains('d-del')) { drafts = drafts.filter(x => x.id !== d.id); saveDrafts(); render(); return setStatus('Brouillon supprimé.'); }
+  }
   const so = e.target.closest('button.sf'); if (so) return socialOne(so.dataset.id);
   const t = e.target.closest('th[data-sort]'); if (!t) return;
   if (sortKey === t.dataset.sort) sortDir = -sortDir; else { sortKey = t.dataset.sort; sortDir = sortKey === 'score' || sortKey === 'date' ? -1 : 1; }
@@ -1496,8 +1838,14 @@ $('results').addEventListener('click', e => {
 });
 /* ---------- équipe, messages, relances ---------- */
 renderMsgSettings();
-$('msgBox').addEventListener('change', e => { if (e.target.matches('input, textarea')) saveMsgSettings(); });
-$('tplReset').addEventListener('click', () => { if (!confirm('Remplacer tes modèles par ceux d\'origine ?')) return; templates = { ...DEFAULT_TEMPLATES }; renderMsgSettings(); saveMsgSettings(); });
+$('msgBox').addEventListener('change', e => {
+  if (e.target.id === 'seq_type') return renderMsgSettings();
+  if (e.target.matches('input, textarea')) { saveMsgSettings(); if (e.target.id === 'seq_d1' || e.target.id === 'seq_d2') renderMsgSettings(); }
+});
+$('tplReset').addEventListener('click', () => {
+  if (!confirm('Remplacer vos modèles (séquences, courrier, LinkedIn) par ceux d\'origine ?')) return;
+  templates = { ...DEFAULT_TEMPLATES }; seqTemplates = clone(DEFAULT_SEQ); renderMsgSettings(); saveMsgSettings(); setStatus('Modèles par défaut rétablis.');
+});
 if (team) { $('teamUser').value = team.user; $('teamKey').value = team.key; }
 $('teamLogin').addEventListener('click', () => {
   if (!proxy) return setStatus('Le suivi partagé n\'est disponible que sur la version en ligne de l\'outil.', true);
@@ -1513,8 +1861,25 @@ window.addEventListener('focus', teamRefresh);
 $('auto').addEventListener('change', saveCriteria);
 $('onlyNew').addEventListener('change', () => { saveCriteria(); render(); });
 if ($('auto').checked) setTimeout(async () => { await run(); if (leads.length) await enrich(); }, 300);
+let draftTimer = null;
+$('results').addEventListener('input', e => {
+  if (!e.target.classList.contains('d-in')) return;
+  const d = drafts.find(x => x.id === e.target.dataset.d); if (!d) return;
+  d[e.target.dataset.k] = e.target.value; refreshChecks(d);
+  clearTimeout(draftTimer); draftTimer = setTimeout(saveDrafts, 300);
+});
 $('results').addEventListener('change', e => {
-  if (e.target.classList.contains('st')) { e.target.dataset.s = e.target.value; setFollow(e.target.dataset.id, { status: e.target.value }); render(); }
+  if (e.target.id === 'obFilter') { obFilter = e.target.value; return render(); }
+  if (e.target.classList.contains('d-in')) { saveDrafts(); return; }
+  if (e.target.classList.contains('sel')) { if (e.target.checked) selected.add(e.target.dataset.id); else selected.delete(e.target.dataset.id); return renderSelBar(); }
+  if (e.target.classList.contains('selall')) { visible().forEach(l => { if (e.target.checked) selected.add(l.id); else selected.delete(l.id); }); return render(); }
+  if (e.target.classList.contains('st')) {
+    const v = e.target.value, id = e.target.dataset.id; e.target.dataset.s = v;
+    // RDV pris, lettre signée, perdu, ne plus contacter : relances prévues annulées.
+    if (CLOSED.includes(v)) { cancelDrafts(id); setFollow(id, { status: v, relance: '' }); setStatus(`« ${v} » : relances prévues annulées.`); }
+    else setFollow(id, { status: v });
+    render();
+  }
   if (e.target.classList.contains('nt')) setFollow(e.target.dataset.id, { note: e.target.value });
   if (e.target.classList.contains('ct')) {
     const v = e.target.value.trim();
@@ -1522,6 +1887,8 @@ $('results').addEventListener('change', e => {
     setFollow(e.target.dataset.id, { [e.target.dataset.k]: v }); render();
   }
 });
+// Bandeau « À faire aujourd'hui » et compteur de la boîte d'envoi dès l'ouverture.
+renderTodo();
 </script>
 </body>
 </html>
