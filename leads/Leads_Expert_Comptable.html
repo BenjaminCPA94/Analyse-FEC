@@ -339,8 +339,10 @@
       <div class="body">
         <p class="hint" style="margin:0">Les fournisseurs sont interrogés dans cet ordre, jusqu'à trouver l'e-mail du dirigeant. Seuls ceux dont la clé est renseignée sont utilisés. Les clés restent dans ce navigateur.</p>
         <div class="grid" id="providers"></div>
+        <ul class="dchecks" id="keysReport" hidden></ul>
         <div class="bar">
           <button class="btn sm" id="keysSave">Enregistrer et tester</button>
+          <button class="btn sec sm" id="keysTest">Tester toutes les clés</button>
           <button class="btn sec sm" id="findAll">E-mails des leads affichés</button>
           <button class="btn sec sm" id="socialAll">Sites et réseaux des leads affichés</button>
           <button class="btn sec sm" id="peopleCsv">Export dirigeants (CSV)</button>
@@ -1019,6 +1021,44 @@ async function saveKeys() {
     const c = d.requests?.credits || d.credits || d.requests?.searches;
     setStatus(`Clés enregistrées. Hunter : ${c && c.available != null ? Math.max(0, c.available - (c.used || 0)) + ' crédit(s) restant(s) sur ' + c.available : 'clé valide'}.`);
   } catch (e) { setStatus('Clés enregistrées. Hunter : ' + e.message + '.', true); }
+}
+/* Diagnostic des clés depuis ce navigateur : un appel gratuit par fournisseur quand il existe,
+ * sinon une recherche d'essai (une recherche Serper, une fiche Google), sinon « non testé ». */
+const KEY_TESTS = {
+  hunter: { free: true, run: async k => { const d = (await api('https://api.hunter.io/v2/account?api_key=' + encodeURIComponent(k))).data || {}; const c = d.requests?.credits || d.credits || d.requests?.searches;
+    return c && c.available != null ? `${Math.max(0, c.available - (c.used || 0))} crédit(s) restant(s) sur ${c.available}` : 'clé valide'; } },
+  scrapegraph: { free: true, run: async k => {
+    let j;
+    try { j = await api('https://api.scrapegraphai.com/v1/credits', { headers: { 'SGAI-APIKEY': k } }); }
+    catch (e) { if (![404, 405, 410].includes(e.status)) throw e; j = await api('https://v2-api.scrapegraphai.com/api/credits', { headers: { 'SGAI-APIKEY': k } }); }
+    const n = j.remaining_credits ?? j.data?.remaining_credits ?? j.credits ?? j.data?.credits;
+    return n != null ? `${n} crédit(s) restant(s)` : 'clé valide'; } },
+  apollo: { free: true, run: async k => { const j = await api('https://api.apollo.io/v1/auth/health', { headers: { 'x-api-key': k } }); if (j.is_logged_in === false) throw Object.assign(new Error('clé refusée'), { status: 401 }); return 'clé valide'; } },
+  serper: { free: false, note: 'une recherche d\'essai', run: async k => { await api('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': k }, body: { q: 'expert-comptable Paris', gl: 'fr', hl: 'fr', num: 1 } }); return 'clé valide (1 recherche utilisée)'; } },
+  google: { free: false, note: 'une fiche d\'essai', run: async k => { await api('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'X-Goog-Api-Key': k, 'X-Goog-FieldMask': 'places.displayName' }, body: { textQuery: 'mairie de Paris', pageSize: 1 } }); return 'clé valide (1 appel utilisé)'; } },
+};
+async function testKeys() {
+  for (const p of PROVIDERS) { const v = $('key_' + p.id).value.trim(); if (v) keys[p.id] = v; else delete keys[p.id]; }
+  store.set('keys', keys);
+  const list = PROVIDERS.filter(p => keys[p.id]), out = $('keysReport');
+  if (!list.length) { out.hidden = true; return setStatus('Aucune clé renseignée.', true); }
+  out.hidden = false;
+  const line = (cls, t) => `<li class="${cls}">${t}</li>`, rows = {};
+  const show = () => { out.innerHTML = (proxy ? '' : line('warn', 'Fichier ouvert directement : les services qui refusent les appels depuis une page web apparaîtront « bloqués ». Ils marcheront sur la version en ligne.')) + list.map(p => rows[p.id] || line('sub', `${esc(p.name)} : test en cours…`)).join(''); };
+  show(); let ok = 0;
+  for (const p of list) {
+    const t = KEY_TESTS[p.id];
+    if (!t) { rows[p.id] = line('sub', `${esc(p.name)} : pas de test sans dépense de crédit ; la clé sera vérifiée à la première recherche.`); show(); continue; }
+    try { rows[p.id] = line('ok', `${esc(p.name)} : ${esc(await t.run(keys[p.id]))}`); ok++; }
+    catch (e) {
+      rows[p.id] = e.blocked ? line('warn', `${esc(p.name)} : appel bloqué par le navigateur${proxy ? ' ou service injoignable' : ' (normal en fichier ouvert directement : utilisez la version en ligne)'}.`)
+        : e.status === 401 || e.status === 403 ? line('ko', `${esc(p.name)} : clé refusée ou offre sans accès à l'API (${esc(e.message)}).`)
+        : e.status === 404 ? line('warn', `${esc(p.name)} : adresse de test inconnue du service ; la clé sera vérifiée à la première recherche.`)
+        : line('ko', `${esc(p.name)} : ${esc(e.message)}`);
+    }
+    show();
+  }
+  setStatus(`Test des clés : ${ok} sur ${list.length} confirmée(s). Détail dans Réglages › Recherche d'e-mails et de téléphones.`, ok < list.filter(p => KEY_TESTS[p.id]).length);
 }
 /* Fournisseurs encore à essayer pour ce lead (un fournisseur déjà interrogé avec le même site est sauté). */
 /* forRun : pendant une recherche, ScrapeGraphAI reste dans la liste car Google peut trouver le site en route. */
@@ -1778,6 +1818,7 @@ $('restoreFile').addEventListener('change', async e => {
   } catch { setStatus('Fichier de sauvegarde illisible.', true); }
 });
 $('keysSave').addEventListener('click', saveKeys);
+$('keysTest').addEventListener('click', testKeys);
 $('findAll').addEventListener('click', findAll);
 $('findEmails').addEventListener('click', findEverything);
 $('socialAll').addEventListener('click', socialAll);

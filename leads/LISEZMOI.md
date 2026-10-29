@@ -120,6 +120,8 @@ Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé 
 | Dropcontact | Essai, puis abonnement ; seules les adresses trouvées sont débitées | dropcontact.com › tableau de bord › API |
 | Lusha | API réservée aux offres payantes ; donne aussi des téléphones | lusha.com › tableau de bord › API |
 
+**Tester toutes les clés** (Réglages › Recherche d'e-mails et de téléphones) vérifie chaque clé depuis le navigateur : appel gratuit pour Hunter, ScrapeGraphAI et Apollo (crédits restants quand le service les donne), une recherche d'essai pour Serper et une fiche d'essai pour Google ; Icypeas, Dropcontact et Lusha n'ont pas de test sans dépense et sont vérifiés à la première recherche. En fichier ouvert directement, un service qui refuse les appels depuis une page web apparaît « bloqué » : il marchera sur la version en ligne.
+
 Les clés restent dans le navigateur de chaque utilisateur. Le relais ne les conserve pas : il transmet la requête au fournisseur et renvoie la réponse, et refuse toute autre adresse.
 
 **« Trouver les e-mails »** (barre d'outils) fait tout en un clic pour les leads affichés, du meilleur score au moins bon (50 au plus) : annuaire pour le nom du dirigeant, site de la société et réseaux, puis fournisseurs. Les e-mails et téléphones trouvés s'affichent dans la colonne « Dirigeant et contact ». Un second clic arrête la recherche ; un fournisseur déjà interrogé n'est pas relancé.
@@ -132,4 +134,4 @@ Le suivi (étape, contacts, notes, relances) est rattaché au SIREN : une socié
 
 ## Test
 
-`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js`, `node test/filters.js` et `node test/oneclick.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, séquences, boîte d'envoi, pipeline, migration des anciens statuts, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).
+`node test/e2e.js`, `node test/features.js`, `node test/team.js`, `node test/social.js`, `node test/filters.js`, `node test/oneclick.js` et `node test/keys.js` (Playwright) : relais, cascade de fournisseurs simulés, site web, suivi, export, résumé hebdomadaire, clients exclus, cache de l'annuaire, sauvegarde, lancement automatique, offres France Travail, suivi partagé, séquences, boîte d'envoi, pipeline, migration des anciens statuts, analyse des sites, réseaux sociaux et filtres (formes, capital, zone).
