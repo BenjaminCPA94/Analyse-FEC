@@ -5,8 +5,8 @@
  * la réponse. Il ne garde rien et ne joint que les adresses autorisées ci-dessous.
  */
 'use strict';
-const ALLOWED = new Set(['google.serper.dev', 'places.googleapis.com', 'api.hunter.io', 'api.apollo.io', 'app.icypeas.com', 'api.dropcontact.com', 'api.lusha.com']);
-const PASS = ['accept', 'content-type', 'authorization', 'x-goog-api-key', 'x-goog-fieldmask', 'x-api-key', 'x-access-token', 'api_key', 'cache-control'];
+const ALLOWED = new Set(['api.scrapegraphai.com', 'v2-api.scrapegraphai.com', 'google.serper.dev', 'places.googleapis.com', 'api.hunter.io', 'api.apollo.io', 'app.icypeas.com', 'api.dropcontact.com', 'api.lusha.com']);
+const PASS = ['accept', 'content-type', 'authorization', 'sgai-apikey', 'x-goog-api-key', 'x-goog-fieldmask', 'x-api-key', 'x-access-token', 'api_key', 'cache-control'];
 const MAX_BODY = 100 * 1024;
 
 function readBody(req) {

@@ -851,6 +851,7 @@ const EFFECTIF = { NN: 'non renseigné', '00': '0 salarié', '01': '1-2', '02': 
 /* ---------- Recherche de contacts : plusieurs fournisseurs à la suite ---------- */
 const PROVIDERS = [
   { id: 'google', name: 'Google (site et téléphone)', site: 'https://console.cloud.google.com/google/maps-apis', offer: 'Places API : quota mensuel gratuit, puis payant', label: 'Clé API Google Maps Platform', contactOnly: true },
+  { id: 'scrapegraph', name: 'ScrapeGraphAI (lecture du site par IA)', site: 'https://scrapegraphai.com', offer: 'crédits offerts à l\'inscription, puis environ 20 $ les 10 000 crédits (5 à 10 par site) ; utilisé seulement si le site est connu', label: 'Clé API', needsSite: true },
   { id: 'hunter', name: 'Hunter', site: 'https://hunter.io', offer: 'gratuit : 50 crédits par mois', label: 'Clé API (API keys)' },
   { id: 'apollo', name: 'Apollo', site: 'https://www.apollo.io', offer: 'offre gratuite, compte ouvert avec un e-mail professionnel', label: 'Clé API (Settings › API)' },
   { id: 'icypeas', name: 'Icypeas', site: 'https://www.icypeas.com', offer: 'essai, puis environ 19 $ les 1 000 crédits', label: 'Clé API' },
@@ -893,7 +894,29 @@ const phonesIn = j => deepFind(j, (s, k) => /phone|mobile|number|tel/i.test(k) &
 const domainOf = site => String(site || '').trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0];
 
 /* Chaque fournisseur reçoit le dirigeant, le lead et le site, et renvoie { email, phone, score, domain }. */
+const SGAI_PROMPT = "Extract the contact details published on this company website: every e-mail address, every phone number, the name of the manager or director (gérant, président, dirigeant) if shown, and the URLs of the company's Instagram, Facebook, LinkedIn and TikTok pages. Answer as JSON with keys emails (array), phones (array), manager, instagram, facebook, linkedin, tiktok. Use null when absent; never invent.";
+const SOCIAL_HOSTS = [['instagram', /instagram\.com\/[^/?#\s"]+/i], ['facebook', /facebook\.com\/[^?#\s"]+/i], ['linkedin', /linkedin\.com\/company\/[^?#\s"]+/i], ['tiktok', /tiktok\.com\/@[^/?#\s"]+/i]];
 const FIND = {
+  /* ScrapeGraphAI : une IA lit le site de la société (y compris les sites affichés en JavaScript). */
+  async scrapegraph(k, p, l, dom, site) {
+    const h = { 'SGAI-APIKEY': k };
+    let j;
+    try { j = await api('https://api.scrapegraphai.com/v1/smartscraper', { method: 'POST', headers: h, body: { website_url: site, user_prompt: SGAI_PROMPT } }); }
+    catch (e) {
+      // Ancienne interface fermée : nouvelle interface (v2).
+      if (![404, 405, 410].includes(e.status)) throw e;
+      j = await api('https://v2-api.scrapegraphai.com/api/extract', { method: 'POST', headers: h, body: { url: site, prompt: SGAI_PROMPT } });
+    }
+    // Traitement différé : on interroge le résultat pendant une minute au plus.
+    for (let i = 0; i < 12 && j.request_id && /queued|pending|processing|running/i.test(j.status || ''); i++) {
+      await sleep(5000); setStatus(`ScrapeGraphAI : lecture du site de ${l.nom}…`);
+      j = await api('https://api.scrapegraphai.com/v1/smartscraper/' + encodeURIComponent(j.request_id), { headers: h });
+    }
+    if (/fail|error/i.test(j.status || '') || j.error) throw new Error(String(j.error || 'lecture du site impossible'));
+    const res = j.result ?? j.data?.result ?? j.data ?? j, socials = {};
+    for (const u of deepFind(res, x => /^https?:\/\//i.test(x))) for (const [k2, re] of SOCIAL_HOSTS) if (!socials[k2] && re.test(u)) socials[k2] = u.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    return { email: pickEmail(emailsIn(res), dom, p), phone: deepFind(res, x => /^\+?[\d\s().-]{9,}$/.test(x) && x.replace(/\D/g, '').length >= 9)[0], socials };
+  },
   /* Fiche Google de l'établissement : site web et téléphone (pas d'e-mail). Le site trouvé sert ensuite aux autres fournisseurs. */
   async google(k, p, l) {
     const j = await api('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'X-Goog-Api-Key': k, 'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber' }, body: { textQuery: [l.nom, l.adresse || [l.cp, l.ville].filter(Boolean).join(' ')].filter(Boolean).join(' '), languageCode: 'fr', regionCode: 'FR', pageSize: 1 } });
@@ -957,7 +980,8 @@ async function saveKeys() {
   } catch (e) { setStatus('Clés enregistrées. Hunter : ' + e.message + '.', true); }
 }
 /* Fournisseurs encore à essayer pour ce lead (un fournisseur déjà interrogé avec le même site est sauté). */
-function pending(l, f) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && !p.socialOnly && !(p.contactOnly && f.site) && (f.tried || {})[p.id] !== dom && (p.contactOnly ? !(f.tried || {})[p.id] : true)); }
+/* forRun : pendant une recherche, ScrapeGraphAI reste dans la liste car Google peut trouver le site en route. */
+function pending(l, f, forRun) { const dom = domainOf(f.site) || '-'; return PROVIDERS.filter(p => keys[p.id] && !p.socialOnly && !(p.contactOnly && f.site) && (forRun || !p.needsSite || f.site) && (f.tried || {})[p.id] !== dom && (p.contactOnly ? !(f.tried || {})[p.id] : true)); }
 function contactCell(l, f) {
   const found = f.found ? `<div class="sub">${f.found.email ? 'E-mail' : 'Téléphone'} : ${esc(f.found.by)}${f.found.score != null ? ' · fiabilité ' + esc(f.found.score) + ' %' : ''}</div>` : '';
   const socBtn = (keys.serper && !f.socialSearched) || canAnalyze(f) ? `<button class="btn sec sm sf" data-id="${esc(l.id)}">Site et réseaux</button>` : '';
@@ -984,12 +1008,14 @@ async function findContact(id, quiet) {
     } catch (e) { notes.push('Site : ' + e.message); }
   };
   await trySite();
-  for (const pr of email ? [] : pending(l, f)) {
+  for (const pr of email ? [] : pending(l, f, true)) {
     if (pr.contactOnly && dom) continue;
+    if (pr.needsSite && !dom) continue; // sans site connu, ScrapeGraphAI n'a rien à lire (non compté comme essayé)
     setStatus(`${pr.name} : recherche de ${p.prenom} ${p.nom} (${l.nom})…`);
     try {
-      const r = await FIND[pr.id](keys[pr.id], p, l, dom) || {};
+      const r = await FIND[pr.id](keys[pr.id], p, l, dom, site || f.site || 'https://' + dom) || {};
       tried[pr.id] = dom || '-';
+      if (r.socials && Object.keys(r.socials).length) socials = { ...(f.socials || {}), ...(socials || {}), ...r.socials };
       if (r.site && !dom) { site = r.site; dom = domainOf(r.site); await trySite(); if (email) break; }
       if (r.phone && !phone && !f.phone) { phone = String(r.phone); found = found || { by: pr.name }; }
       if (r.email) { email = r.email; found = { by: pr.name, score: r.score ?? null, domain: r.domain || '' }; break; }

@@ -83,6 +83,7 @@ Interrogés dans cet ordre, jusqu'à trouver l'e-mail ; seuls ceux dont la clé 
 
 | Fournisseur | Offre | Où trouver la clé |
 |---|---|---|
+| ScrapeGraphAI (une IA lit le site de la société, y compris les sites en JavaScript ; seulement si le site est connu) | Crédits offerts à l'inscription, puis environ 20 $ les 10 000 crédits (5 à 10 crédits par site) | scrapegraphai.com › Dashboard › API Key |
 | Serper (site et réseaux sociaux, pas d'e-mail direct) | Crédits offerts à l'inscription, puis environ 1 $ les 1 000 recherches | serper.dev › API Key |
 | Google (site et téléphone, pas d'e-mail) | Places API : quota mensuel gratuit, puis payant | console.cloud.google.com › Google Maps Platform › Clés (activer « Places API (New) ») |
 | Hunter | Gratuit : 50 crédits par mois | hunter.io › API keys |

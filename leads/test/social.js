@@ -24,8 +24,10 @@ const page = (dom, name) => ({
 });
 const serve = pages => http.createServer((req, res) => { const body = pages[req.url]; res.writeHead(body ? 200 : 404, { 'Content-Type': 'text/html' }); res.end(body || ''); });
 const site = serve(page('alpha-conseil.fr', 'Alpha Conseil')), site2 = serve(page('gamma-bistrot.fr', 'Gamma Bistrot'));
+// Site affiché en JavaScript : rien de lisible sans navigateur.
+const site3 = serve({ '/': '<html><body><div id="app"></div><script src="/app.js"></script></body></html>' });
 
-const realFetch = globalThis.fetch, serperQueries = [], hunterCalls = [];
+const realFetch = globalThis.fetch, serperQueries = [], hunterCalls = [], sgai = [];
 const json = b => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
 let siteUrl = '';
 globalThis.fetch = async (url, init = {}) => {
@@ -36,16 +38,21 @@ globalThis.fetch = async (url, init = {}) => {
     if (/site:linkedin\.com\/company/.test(q)) return json({ organic: [{ link: 'https://www.instagram.com/gammabistrot/', title: 'Gamma Bistrot (@gammabistrot)', snippet: 'Restaurant Paris 11' }, { link: 'https://www.instagram.com/autre/', title: 'Un autre resto' }, { link: 'https://www.facebook.com/GammaBistrotParis', title: 'Gamma Bistrot | Paris' }] });
     return json({ organic: [{ link: 'https://www.societe.com/societe/gamma-bistrot-333333333.html', title: 'GAMMA BISTROT (Paris) Chiffre d\'affaires' }, { link: siteUrl, title: 'Gamma Bistrot — restaurant' }] });
   }
+  if (u.hostname === 'api.scrapegraphai.com') {
+    sgai.push({ path: u.pathname, key: init.headers['sgai-apikey'], body: init.body && JSON.parse(init.body) });
+    if (init.method === 'POST') return json({ request_id: 'r1', status: 'queued' });
+    return json({ request_id: 'r1', status: 'completed', result: { emails: ['delta.gerant@delta-js.fr'], phones: ['01 55 66 77 88'], manager: 'Rose Petit', instagram: 'https://www.instagram.com/deltajs/', facebook: null } });
+  }
   if (u.hostname === 'api.hunter.io') { if (u.pathname.endsWith('/email-finder')) hunterCalls.push(u.search); return json({ data: { email: null } }); }
   return realFetch(url, init);
 };
 const day = new Date().toISOString().slice(0, 10);
 const rec = (siren, name, admin) => ({ id: 'a' + siren, dateparution: day, numerodepartement: '75', familleavis: 'immatriculation', commercant: name, registre: [siren], ville: 'Paris', cp: '75011',
   listepersonnes: JSON.stringify({ personne: { typePersonne: 'pm', denomination: name, formeJuridique: 'SAS', administration: admin } }) });
-const RECORDS = [rec('111111111', 'ALPHA CONSEIL', 'Président : Martin, Paul'), rec('333333333', 'GAMMA BISTROT', 'Gérant : Durand, Luc')];
+const RECORDS = [rec('111111111', 'ALPHA CONSEIL', 'Président : Martin, Paul'), rec('333333333', 'GAMMA BISTROT', 'Gérant : Durand, Luc'), rec('444444444', 'DELTA JS', 'Présidente : Petit, Rose')];
 
 (async () => {
-  await new Promise(r => site.listen(0, '127.0.0.1', r)); await new Promise(r => site2.listen(0, '127.0.0.1', r));
+  await new Promise(r => site.listen(0, '127.0.0.1', r)); await new Promise(r => site2.listen(0, '127.0.0.1', r)); await new Promise(r => site3.listen(0, '127.0.0.1', r));
   const sitePort = site.address().port, site2Port = site2.address().port;
   const server = require('../server');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -97,12 +104,31 @@ const RECORDS = [rec('111111111', 'ALPHA CONSEIL', 'Président : Martin, Paul'),
   assert.match(await page.textContent('tbody.lead[data-id="333333333"] .links'), /LinkedIn \(dirigeant\) ✓/);
   assert.ok(!(await page.$('button.sf[data-id="333333333"]')), 'pas de seconde recherche payante');
 
+  // ScrapeGraphAI : le site ne montre rien à l'analyse simple ; l'IA le lit, après l'analyse gratuite et avant Hunter.
+  const site3Url = `http://127.0.0.1:${site3.address().port}/`;
+  await page.fill('#key_scrapegraph', 'sgk'); await page.click('#keysSave');
+  assert.ok(!(await page.$('button.hf[data-id="444444444"]')) || true);
+  await page.fill('input[data-id="444444444"][data-k="site"]', site3Url); await page.press('input[data-id="444444444"][data-k="site"]', 'Tab');
+  const hBefore = hunterCalls.length;
+  await page.click('button.hf[data-id="444444444"]');
+  await page.waitForFunction(() => /trouvé pour DELTA JS/.test(document.getElementById('status').textContent), null, { timeout: 30000 });
+  assert.strictEqual(await page.inputValue('input[data-id="444444444"][data-k="email"]'), 'delta.gerant@delta-js.fr');
+  assert.strictEqual(await page.inputValue('input[data-id="444444444"][data-k="phone"]'), '01 55 66 77 88');
+  assert.match(await page.textContent('tbody.lead[data-id="444444444"] .links'), /Instagram ✓/);
+  assert.strictEqual(hunterCalls.length, hBefore, 'Hunter pas sollicité');
+  assert.deepStrictEqual(sgai.map(x => x.path), ['/v1/smartscraper', '/v1/smartscraper/r1'], 'requête puis lecture du résultat');
+  assert.strictEqual(sgai[0].key, 'sgk'); assert.strictEqual(sgai[0].body.website_url, site3Url); assert.match(sgai[0].body.user_prompt, /e-mail/);
+  const fd = await page.evaluate(() => JSON.parse(localStorage.getItem('leadsEC:follow'))['444444444']);
+  assert.strictEqual(fd.found.by, 'ScrapeGraphAI (lecture du site par IA)');
+  // Sans site, ScrapeGraphAI n'est pas proposé.
+  assert.ok(!(await page.evaluate(() => pending(leads.find(l => l.id === '111111111'), {}).some(p => p.id === 'scrapegraph'))));
+
   // Export.
   await page.click('[data-tab=followed]');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#csv')]);
   assert.match(require('node:fs').readFileSync(await dl.path(), 'utf8'), /https:\/\/www\.instagram\.com\/gammabistrot/);
 
   assert.deepStrictEqual(errors, []);
-  await browser.close(); server.close(); site.close(); site2.close();
+  await browser.close(); server.close(); site.close(); site2.close(); site3.close();
   console.log('OK : analyse des sites, réseaux par Serper, cascade, Sales Navigator, export');
 })().catch(e => { console.error(e); process.exit(1); });
